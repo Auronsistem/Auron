@@ -11,39 +11,24 @@ const authTitle = document.querySelector("#auth-title");
 const authMessage = document.querySelector("#auth-message");
 const toggleAuth = document.querySelector("#toggle-auth");
 const authForm = document.querySelector("#demo-auth");
-
 const emailInput = document.querySelector("#email");
 const passwordInput = document.querySelector("#password");
+const passwordLabel = document.querySelector('label[for="password"]');
+const submitButton = authForm.querySelector('button[type="submit"]');
 
 let isSignUp = false;
 let awaitingOtp = false;
 
-const passwordLabel = document.querySelector('label[for="password"]');
-
 function showPassword(show) {
   passwordLabel.hidden = !show;
   passwordInput.hidden = !show;
-}
-let submitButton = authForm.querySelector(
-  'button[type="submit"], input[type="submit"]'
-);
-
-if (!submitButton) {
-  submitButton = document.createElement("button");
-  submitButton.type = "submit";
-  submitButton.textContent = "Continuar";
-  authForm.appendChild(submitButton);
+  passwordInput.required = show;
 }
 
 function setButtonText(value) {
-  if (submitButton.tagName === "INPUT") {
-    submitButton.value = value;
-  } else {
-    submitButton.textContent = value;
-  }
+  submitButton.textContent = value;
 }
 
-// Crear la sección para introducir el código
 const otpContainer = document.createElement("div");
 otpContainer.hidden = true;
 
@@ -54,8 +39,10 @@ const otpInput = document.createElement("input");
 otpInput.type = "text";
 otpInput.inputMode = "numeric";
 otpInput.maxLength = 6;
+otpInput.pattern = "[0-9]{6}";
 otpInput.placeholder = "123456";
 otpInput.autocomplete = "one-time-code";
+otpInput.setAttribute("aria-label", "Código de verificación");
 
 otpInput.addEventListener("input", () => {
   otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
@@ -68,26 +55,21 @@ function openAuth(signUp = false) {
   isSignUp = signUp;
   awaitingOtp = false;
 
-  authTitle.textContent = isSignUp
-    ? "Crear cuenta"
-    : "Iniciar sesión";
-
+  authTitle.textContent = isSignUp ? "Crear cuenta" : "Iniciar sesión";
   toggleAuth.textContent = isSignUp
     ? "¿Ya tienes cuenta? Iniciar sesión"
     : "¿No tienes cuenta? Crear cuenta";
 
   toggleAuth.hidden = false;
-
   authMessage.textContent = "";
   emailInput.readOnly = false;
   showPassword(true);
   otpContainer.hidden = true;
   otpInput.value = "";
-
   submitButton.disabled = false;
   setButtonText("Continuar");
 
-  authDialog.showModal();
+  if (!authDialog.open) authDialog.showModal();
 }
 
 document.querySelector("#open-auth").addEventListener("click", () => {
@@ -102,6 +84,64 @@ toggleAuth.addEventListener("click", () => {
   openAuth(!isSignUp);
 });
 
+function showAccount(user) {
+  const main = document.querySelector("main");
+  const header = document.querySelector(".topbar");
+  const footer = document.querySelector("footer");
+
+  main.replaceChildren();
+
+  const section = document.createElement("section");
+  section.className = "account-panel";
+  section.style.margin = "48px auto";
+  section.style.maxWidth = "900px";
+  section.style.padding = "32px";
+  section.style.display = "block";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "eyebrow";
+  eyebrow.textContent = "TU ESPACIO PERSONAL";
+
+  const title = document.createElement("h2");
+  title.textContent = "¡Bienvenido a SOCORA PLAY!";
+
+  const description = document.createElement("p");
+  description.className = "muted";
+  description.textContent = "Has iniciado sesión con:";
+
+  const email = document.createElement("p");
+  email.textContent = user.email || "Correo no disponible";
+  email.style.overflowWrap = "anywhere";
+
+  const status = document.createElement("p");
+  status.className = "notice";
+  status.textContent = "Tu sesión está activa.";
+
+  const logoutButton = document.createElement("button");
+  logoutButton.className = "button";
+  logoutButton.textContent = "Cerrar sesión";
+
+  logoutButton.addEventListener("click", async () => {
+    logoutButton.disabled = true;
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      status.textContent = "No se pudo cerrar sesión: " + error.message;
+      logoutButton.disabled = false;
+      return;
+    }
+
+    window.location.reload();
+  });
+
+  section.append(eyebrow, title, description, email, status, logoutButton);
+  main.append(section);
+
+  header.querySelector("#open-auth").hidden = true;
+  footer.hidden = true;
+  authDialog.close();
+}
+
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -109,10 +149,9 @@ authForm.addEventListener("submit", async (event) => {
   const password = passwordInput.value;
 
   submitButton.disabled = true;
-  authMessage.textContent = "Conectando con AUREON...";
+  authMessage.textContent = "Conectando con SOCORA PLAY...";
 
   try {
-    // PASO 1: VERIFICAR EL CÓDIGO
     if (awaitingOtp) {
       const token = otpInput.value.trim();
 
@@ -121,92 +160,97 @@ authForm.addEventListener("submit", async (event) => {
         return;
       }
 
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token,
         type: "signup"
       });
 
       if (error) {
-        authMessage.textContent = "Código incorrecto: " + error.message;
+        authMessage.textContent = "No se pudo verificar el código: " + error.message;
         return;
       }
 
-    authMessage.textContent =
-  "¡Correo verificado! Tu cuenta está lista. Iniciando sesión...";
+      if (data.user && data.session) {
+        showAccount(data.user);
+        return;
+      }
 
-setButtonText("Correo verificado");
-toggleAuth.hidden = true;
+      awaitingOtp = false;
+      showPassword(true);
+      emailInput.readOnly = false;
+      otpContainer.hidden = true;
+      toggleAuth.hidden = false;
+      authTitle.textContent = "Iniciar sesión";
+      authMessage.textContent =
+        "Correo verificado. Ahora inicia sesión con tu contraseña.";
+      setButtonText("Iniciar sesión");
+      return;
+    }
 
-const { error: loginError } =
-  await supabase.auth.signInWithPassword({
-    email,
-    password: passwordInput.value
-  });
-
-if (loginError) {
-  authMessage.textContent =
-    "Correo verificado. Ahora inicia sesión con tu contraseña.";
-  awaitingOtp = false;
-  showPassword(true);
-  emailInput.readOnly = false;
-  otpContainer.hidden = true;
-  setButtonText("Iniciar sesión");
-  return;
-}
-
-authMessage.textContent =
-  "¡Bienvenido a SOCORA PLAY!";
-
-return;
-
-    // PASO 2: CREAR CUENTA
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password
       });
 
       if (error) {
-        authMessage.textContent = "Error: " + error.message;
+        authMessage.textContent = "No se pudo crear la cuenta: " + error.message;
+        return;
+      }
+
+      if (data.session && data.user) {
+        showAccount(data.user);
         return;
       }
 
       awaitingOtp = true;
-
       authTitle.textContent = "Verifica tu correo";
       authMessage.textContent =
-        "Te enviamos un código de 6 dígitos. Revisa tu Gmail.";
+        "Si el registro se completó, revisa tu correo e introduce el código de 6 dígitos.";
 
-     showPassword(false);
+      showPassword(false);
       emailInput.readOnly = true;
       otpContainer.hidden = false;
       toggleAuth.hidden = true;
-
       setButtonText("Verificar código");
       otpInput.focus();
-
       return;
     }
 
-    // PASO 3: INICIAR SESIÓN
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
     if (error) {
-      authMessage.textContent = "Error: " + error.message;
+      authMessage.textContent = "No se pudo iniciar sesión: " + error.message;
       return;
     }
 
-    authMessage.textContent = "¡Has iniciado sesión correctamente!";
-
+    if (data.user) {
+      showAccount(data.user);
+    } else {
+      authMessage.textContent =
+        "La sesión no devolvió un usuario. Inténtalo de nuevo.";
+    }
   } catch (error) {
-    authMessage.textContent =
-      "No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.";
     console.error(error);
+    authMessage.textContent =
+      "Ocurrió un error de conexión. Inténtalo de nuevo.";
   } finally {
     submitButton.disabled = false;
   }
 });
+
+// Recuperar la sesión si el usuario vuelve a cargar la página.
+const { data: sessionData, error: sessionError } =
+  await supabase.auth.getSession();
+
+if (sessionError) {
+  console.error("No se pudo recuperar la sesión:", sessionError);
+}
+
+if (sessionData.session?.user) {
+  showAccount(sessionData.session.user);
+}
