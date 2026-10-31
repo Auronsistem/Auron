@@ -2,317 +2,399 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
+const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ELEMENTOS
-const authDialog = document.querySelector("#auth-dialog");
-const authTitle = document.querySelector("#auth-title");
-const authMessage = document.querySelector("#auth-message");
-const toggleAuth = document.querySelector("#toggle-auth");
-const authForm = document.querySelector("#demo-auth");
+const dialog = document.querySelector("#auth-dialog");
+const form = document.querySelector("#demo-auth");
+const title = document.querySelector("#auth-title");
+const message = document.querySelector("#auth-message");
 const emailInput = document.querySelector("#email");
 const passwordInput = document.querySelector("#password");
 const passwordLabel = document.querySelector('label[for="password"]');
-const submitButton = authForm.querySelector('button[type="submit"]');
+const submitButton = form.querySelector('button[type="submit"]');
+const toggleButton = document.querySelector("#toggle-auth");
 
-let isSignUp = false;
-let awaitingOtp = false;
+let mode = "login";
+let step = "credentials";
+let temporaryPassword = null;
+let otpInput = null;
+let confirmInput = null;
+let lockScreen = null;
 
-// MOSTRAR U OCULTAR CONTRASEÑA
+// PANTALLA DE BLOQUEO
+function showLockScreen() {
+  if (lockScreen) return;
+
+  lockScreen = document.createElement("div");
+  lockScreen.id = "socora-lock-screen";
+
+  Object.assign(lockScreen.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "99999",
+    background: "#080d1b",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px",
+    textAlign: "center",
+    fontFamily: "Arial, sans-serif"
+  });
+
+  const panel = document.createElement("div");
+  Object.assign(panel.style, {
+    width: "100%",
+    maxWidth: "430px",
+    padding: "35px 25px",
+    borderRadius: "20px",
+    background: "#111b31",
+    border: "1px solid #293958"
+  });
+
+  const logo = document.createElement("h1");
+  logo.textContent = "SOCORA PLAY";
+  logo.style.fontSize = "32px";
+
+  const heading = document.createElement("h2");
+  heading.textContent = "Acceso restringido";
+
+  const description = document.createElement("p");
+  description.textContent =
+    "Para entrar necesitas iniciar sesión o crear una cuenta.";
+
+  const loginButton = document.createElement("button");
+  loginButton.textContent = "Iniciar sesión";
+
+  const registerButton = document.createElement("button");
+  registerButton.textContent = "Crear cuenta";
+
+  [loginButton, registerButton].forEach(button => {
+    Object.assign(button.style, {
+      display: "block",
+      width: "100%",
+      padding: "14px",
+      marginTop: "14px",
+      border: "0",
+      borderRadius: "10px",
+      cursor: "pointer",
+      fontSize: "16px",
+      fontWeight: "bold"
+    });
+  });
+
+  loginButton.style.background = "#4388ff";
+  loginButton.style.color = "white";
+  registerButton.style.background = "#263957";
+  registerButton.style.color = "white";
+
+  loginButton.addEventListener("click", () => openAuth("login"));
+  registerButton.addEventListener("click", () => openAuth("signup"));
+
+  panel.append(logo, heading, description, loginButton, registerButton);
+  lockScreen.append(panel);
+  document.body.append(lockScreen);
+}
+
+function unlockSite(user) {
+  if (lockScreen) {
+    lockScreen.remove();
+    lockScreen = null;
+  }
+
+  document.body.style.overflow = "";
+
+  const loginButton = document.querySelector("#open-auth");
+  if (loginButton) loginButton.hidden = true;
+
+  let logoutButton = document.querySelector("#socora-logout");
+
+  if (!logoutButton) {
+    logoutButton = document.createElement("button");
+    logoutButton.id = "socora-logout";
+    logoutButton.textContent = "Cerrar sesión";
+
+    Object.assign(logoutButton.style, {
+      padding: "10px 15px",
+      margin: "10px",
+      cursor: "pointer"
+    });
+
+    document.querySelector("header")?.append(logoutButton);
+  }
+
+  logoutButton.hidden = false;
+
+  logoutButton.onclick = async () => {
+    logoutButton.disabled = true;
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      alert("No se pudo cerrar sesión: " + error.message);
+      logoutButton.disabled = false;
+      return;
+    }
+
+    window.location.reload();
+  };
+
+  dialog.close();
+}
+
+// CAMPOS DINÁMICOS
+function createOtpField() {
+  if (otpInput) return;
+
+  const container = document.createElement("div");
+  container.id = "socora-otp-container";
+
+  const label = document.createElement("label");
+  label.textContent = "Código de 6 dígitos";
+  label.style.display = "block";
+
+  otpInput = document.createElement("input");
+  otpInput.type = "text";
+  otpInput.inputMode = "numeric";
+  otpInput.maxLength = 6;
+  otpInput.placeholder = "123456";
+  otpInput.autocomplete = "one-time-code";
+  otpInput.required = true;
+
+  otpInput.addEventListener("input", () => {
+    otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
+  });
+
+  container.append(label, otpInput);
+  form.insertBefore(container, submitButton);
+}
+
+function createConfirmPasswordField() {
+  if (confirmInput) return;
+
+  const label = document.createElement("label");
+  label.textContent = "Confirmar contraseña";
+  label.htmlFor = "socora-confirm-password";
+  label.id = "socora-confirm-label";
+
+  confirmInput = document.createElement("input");
+  confirmInput.id = "socora-confirm-password";
+  confirmInput.type = "password";
+  confirmInput.placeholder = "Repite tu contraseña";
+  confirmInput.autocomplete = "new-password";
+  confirmInput.required = true;
+
+  form.insertBefore(label, submitButton);
+  form.insertBefore(confirmInput, submitButton);
+}
+
+function removeExtraFields() {
+  document.querySelector("#socora-otp-container")?.remove();
+  document.querySelector("#socora-confirm-label")?.remove();
+  confirmInput?.remove();
+
+  otpInput = null;
+  confirmInput = null;
+}
+
 function showPassword(show) {
   passwordLabel.hidden = !show;
   passwordInput.hidden = !show;
   passwordInput.required = show;
 }
 
-// TEXTO DEL BOTÓN
-function setButtonText(value) {
-  submitButton.textContent = value;
-}
+// ABRIR FORMULARIO
+function openAuth(selectedMode) {
+  mode = selectedMode;
+  step = "credentials";
 
-// CAMPO DEL CÓDIGO DE VERIFICACIÓN
-const otpContainer = document.createElement("div");
-otpContainer.hidden = true;
+  removeExtraFields();
 
-const otpLabel = document.createElement("label");
-otpLabel.textContent = "Código de 6 dígitos";
-
-const otpInput = document.createElement("input");
-otpInput.type = "text";
-otpInput.inputMode = "numeric";
-otpInput.maxLength = 6;
-otpInput.pattern = "[0-9]{6}";
-otpInput.placeholder = "123456";
-otpInput.autocomplete = "one-time-code";
-
-otpInput.addEventListener("input", () => {
-  otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
-});
-
-otpContainer.append(otpLabel, otpInput);
-authForm.insertBefore(otpContainer, submitButton);
-
-// ABRIR VENTANA DE ACCESO
-function openAuth(signUp = false) {
-  isSignUp = signUp;
-  awaitingOtp = false;
-
-  authTitle.textContent = isSignUp ? "Crear cuenta" : "Iniciar sesión";
-
-  toggleAuth.textContent = isSignUp
-    ? "¿Ya tienes cuenta? Iniciar sesión"
-    : "¿No tienes cuenta? Crear cuenta";
-
-  toggleAuth.hidden = false;
-  authMessage.textContent = "";
+  emailInput.value = "";
   emailInput.readOnly = false;
+  passwordInput.value = "";
+  showPassword(mode === "login");
 
-  showPassword(true);
-  otpContainer.hidden = true;
-  otpInput.value = "";
+  title.textContent =
+    mode === "login" ? "Iniciar sesión" : "Crear cuenta";
 
-  submitButton.disabled = false;
-  setButtonText("Continuar");
+  message.textContent = "";
 
-  if (!authDialog.open) {
-    authDialog.showModal();
-  }
+  toggleButton.hidden = mode === "signup";
+  toggleButton.textContent = "¿No tienes cuenta? Crear cuenta";
+
+  submitButton.textContent =
+    mode === "login" ? "Entrar" : "Enviar código";
+
+  dialog.showModal();
 }
 
-// BOTONES DE ACCESO
-document.querySelector("#open-auth").addEventListener("click", () => {
-  openAuth(false);
+// CAMBIAR A REGISTRO DESDE EL FORMULARIO
+toggleButton.addEventListener("click", () => {
+  openAuth("signup");
 });
 
-document.querySelector("#create-account").addEventListener("click", () => {
-  openAuth(true);
-});
-
-toggleAuth.addEventListener("click", () => {
-  openAuth(!isSignUp);
-});
-
-// PANTALLA DE CUENTA
-function showAccount(user) {
-  const main = document.querySelector("main");
-  const header = document.querySelector(".topbar");
-  const footer = document.querySelector("footer");
-
-  main.replaceChildren();
-
-  const section = document.createElement("section");
-  section.className = "account-panel";
-  section.style.margin = "48px auto";
-  section.style.maxWidth = "900px";
-  section.style.padding = "32px";
-  section.style.display = "block";
-
-  const eyebrow = document.createElement("p");
-  eyebrow.className = "eyebrow";
-  eyebrow.textContent = "TU ESPACIO PERSONAL";
-
-  const title = document.createElement("h2");
-  title.textContent = "¡Bienvenido a SOCORA PLAY!";
-
-  const description = document.createElement("p");
-  description.className = "muted";
-  description.textContent = "Has iniciado sesión con:";
-
-  const email = document.createElement("p");
-  email.textContent = user.email || "Correo no disponible";
-  email.style.overflowWrap = "anywhere";
-
-  const status = document.createElement("p");
-  status.className = "notice";
-  status.textContent = "Tu sesión está activa.";
-
-  const logoutButton = document.createElement("button");
-  logoutButton.className = "button";
-  logoutButton.textContent = "Cerrar sesión";
-
-  logoutButton.addEventListener("click", async () => {
-    logoutButton.disabled = true;
-    status.textContent = "Cerrando sesión...";
-
-    try {
-      const { error: logoutError } = await supabase.auth.signOut();
-
-      if (logoutError) {
-        status.textContent = "Error: " + logoutError.message;
-        logoutButton.disabled = false;
-        return;
-      }
-
-      window.location.reload();
-    } catch (logoutError) {
-      status.textContent = "No se pudo cerrar sesión.";
-      logoutButton.disabled = false;
-    }
-  });
-
-  section.append(
-    eyebrow,
-    title,
-    description,
-    email,
-    status,
-    logoutButton
-  );
-
-  main.append(section);
-
-  header.querySelector("#open-auth").hidden = true;
-  footer.hidden = true;
-
-  authDialog.close();
-}
-
-// REGISTRO, VERIFICACIÓN E INICIO DE SESIÓN
-authForm.addEventListener("submit", async (event) => {
+// ENVIAR FORMULARIO
+form.addEventListener("submit", async event => {
   event.preventDefault();
 
   const email = emailInput.value.trim();
   const password = passwordInput.value;
 
   submitButton.disabled = true;
-  authMessage.textContent = "Conectando con SOCORA PLAY...";
+  message.textContent = "Procesando...";
 
   try {
-    // PASO 1: VERIFICAR CÓDIGO
-    if (awaitingOtp) {
-      const token = otpInput.value.trim();
+    // REGISTRO: ENVIAR CÓDIGO
+    if (mode === "signup" && step === "credentials") {
+      temporaryPassword = Array.from(
+        crypto.getRandomValues(new Uint8Array(32))
+      ).map(value => value.toString(16).padStart(2, "0")).join("");
 
-      if (!/^\d{6}$/.test(token)) {
-        authMessage.textContent = "Introduce los 6 dígitos del correo.";
+      const { error } = await supabase.auth.signUp({
+        email,
+        password: temporaryPassword
+      });
+
+      if (error) {
+        message.textContent = "Error al registrarte: " + error.message;
         return;
       }
 
-      const {
-        data: otpData,
-        error: otpError
-      } = await supabase.auth.verifyOtp({
+      step = "otp";
+      createOtpField();
+
+      showPassword(false);
+      emailInput.readOnly = true;
+      toggleButton.hidden = true;
+
+      title.textContent = "Verifica tu correo";
+      message.textContent =
+        "Te enviamos un código de 6 dígitos. Revisa tu correo.";
+
+      submitButton.textContent = "Verificar código";
+      otpInput.focus();
+      return;
+    }
+
+    // REGISTRO: VERIFICAR CÓDIGO
+    if (mode === "signup" && step === "otp") {
+      const token = otpInput.value.trim();
+
+      if (!/^\d{6}$/.test(token)) {
+        message.textContent = "Escribe el código completo de 6 dígitos.";
+        return;
+      }
+
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token,
         type: "signup"
       });
 
-      if (otpError) {
-        authMessage.textContent =
-          "Código incorrecto: " + otpError.message;
+      if (error) {
+        message.textContent = "Código incorrecto: " + error.message;
         return;
       }
 
-      if (otpData.user && otpData.session) {
-        showAccount(otpData.user);
+      if (!data.session) {
+        message.textContent =
+          "El correo fue verificado, pero no se inició sesión. Intenta iniciar sesión.";
         return;
       }
 
-      awaitingOtp = false;
+      step = "password";
+
+      document.querySelector("#socora-otp-container").hidden = true;
       showPassword(true);
-      emailInput.readOnly = false;
-      otpContainer.hidden = true;
-      toggleAuth.hidden = false;
+      createConfirmPasswordField();
 
-      authTitle.textContent = "Iniciar sesión";
-      authMessage.textContent =
-        "Correo verificado. Ahora inicia sesión con tu contraseña.";
+      title.textContent = "Crea tus credenciales";
+      message.textContent =
+        "Ahora elige tu contraseña para tu cuenta de SOCORA PLAY.";
 
-      setButtonText("Iniciar sesión");
+      passwordInput.value = "";
+      passwordInput.autocomplete = "new-password";
+      submitButton.textContent = "Crear mi cuenta";
+      passwordInput.focus();
       return;
     }
 
-    // PASO 2: CREAR CUENTA
-    if (isSignUp) {
-      const {
-        data: signupData,
-        error: signupError
-      } = await supabase.auth.signUp({
+    // REGISTRO: CREAR CONTRASEÑA
+    if (mode === "signup" && step === "password") {
+      if (password.length < 8) {
+        message.textContent =
+          "La contraseña debe tener al menos 8 caracteres.";
+        return;
+      }
+
+      if (password !== confirmInput.value) {
+        message.textContent = "Las contraseñas no coinciden.";
+        return;
+      }
+
+      const { data, error } = await supabase.auth.updateUser({
+        password
+      });
+
+      if (error) {
+        message.textContent =
+          "No se pudo guardar la contraseña: " + error.message;
+        return;
+      }
+
+      if (data.user) {
+        unlockSite(data.user);
+      }
+
+      return;
+    }
+
+    // INICIAR SESIÓN
+    if (mode === "login") {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
-      if (signupError) {
-        authMessage.textContent =
-          "No se pudo crear la cuenta: " + signupError.message;
+      if (error) {
+        message.textContent =
+          "No se pudo iniciar sesión: " + error.message;
         return;
       }
 
-      if (signupData.session && signupData.user) {
-        showAccount(signupData.user);
-        return;
+      if (data.user) {
+        unlockSite(data.user);
       }
-
-      awaitingOtp = true;
-
-      authTitle.textContent = "Verifica tu correo";
-      authMessage.textContent =
-        "Revisa tu correo e introduce el código de 6 dígitos.";
-
-      showPassword(false);
-      emailInput.readOnly = true;
-      otpContainer.hidden = false;
-      toggleAuth.hidden = true;
-
-      setButtonText("Verificar código");
-      otpInput.focus();
-
-      return;
     }
 
-    // PASO 3: INICIAR SESIÓN
-    const {
-      data: loginData,
-      error: loginError
-    } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (loginError) {
-      authMessage.textContent =
-        "No se pudo iniciar sesión: " + loginError.message;
-      return;
-    }
-
-    if (loginData.user) {
-      showAccount(loginData.user);
-    } else {
-      authMessage.textContent =
-        "No se encontró la información de tu cuenta.";
-    }
-
-  } catch (unexpectedError) {
-    console.error(unexpectedError);
-
-    authMessage.textContent =
-      "Ocurrió un error de conexión. Inténtalo de nuevo.";
-
+  } catch (error) {
+    console.error(error);
+    message.textContent =
+      "Ocurrió un error. Inténtalo nuevamente.";
   } finally {
     submitButton.disabled = false;
   }
 });
 
-// RECUPERAR SESIÓN AL RECARGAR LA PÁGINA
-async function restoreSession() {
-  try {
-    const {
-      data: sessionData,
-      error: sessionError
-    } = await supabase.auth.getSession();
+// INICIAR PÁGINA BLOQUEADA
+async function initializeSocora() {
+  showLockScreen();
+  document.body.style.overflow = "hidden";
 
-    if (sessionError) {
-      console.error(sessionError);
-      return;
-    }
+  const { data, error } = await supabase.auth.getSession();
 
-    if (sessionData.session?.user) {
-      showAccount(sessionData.session.user);
-    }
-  } catch (error) {
-    console.error("Error al recuperar sesión:", error);
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  if (data.session?.user) {
+    unlockSite(data.session.user);
   }
 }
 
-restoreSession();
+initializeSocora();
