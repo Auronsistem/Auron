@@ -132,14 +132,33 @@ authForm.addEventListener("submit", async (event) => {
         return;
       }
 
-      authMessage.textContent =
-        "¡Correo verificado! Tu cuenta de AUREON está lista.";
+    authMessage.textContent =
+  "¡Correo verificado! Tu cuenta está lista. Iniciando sesión...";
 
-      setButtonText("Cuenta verificada");
-      toggleAuth.hidden = true;
+setButtonText("Correo verificado");
+toggleAuth.hidden = true;
 
-      return;
-    }
+const { error: loginError } =
+  await supabase.auth.signInWithPassword({
+    email,
+    password: passwordInput.value
+  });
+
+if (loginError) {
+  authMessage.textContent =
+    "Correo verificado. Ahora inicia sesión con tu contraseña.";
+  awaitingOtp = false;
+  showPassword(true);
+  emailInput.readOnly = false;
+  otpContainer.hidden = true;
+  setButtonText("Iniciar sesión");
+  return;
+}
+
+authMessage.textContent =
+  "¡Bienvenido a SOCORA PLAY!";
+
+return;
 
     // PASO 2: CREAR CUENTA
     if (isSignUp) {
