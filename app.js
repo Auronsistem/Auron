@@ -18,8 +18,12 @@ const passwordInput = document.querySelector("#password");
 let isSignUp = false;
 let awaitingOtp = false;
 
-const passwordContainer = passwordInput.parentElement;
+const passwordLabel = document.querySelector('label[for="password"]');
 
+function showPassword(show) {
+  passwordLabel.hidden = !show;
+  passwordInput.hidden = !show;
+}
 let submitButton = authForm.querySelector(
   'button[type="submit"], input[type="submit"]'
 );
@@ -76,7 +80,7 @@ function openAuth(signUp = false) {
 
   authMessage.textContent = "";
   emailInput.readOnly = false;
-  passwordContainer.hidden = false;
+  showPassword(true);
   otpContainer.hidden = true;
   otpInput.value = "";
 
@@ -155,7 +159,7 @@ authForm.addEventListener("submit", async (event) => {
       authMessage.textContent =
         "Te enviamos un código de 6 dígitos. Revisa tu Gmail.";
 
-      passwordContainer.hidden = true;
+     showPassword(false);
       emailInput.readOnly = true;
       otpContainer.hidden = false;
       toggleAuth.hidden = true;
