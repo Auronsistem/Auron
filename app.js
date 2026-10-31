@@ -6,6 +6,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+// ELEMENTOS
 const authDialog = document.querySelector("#auth-dialog");
 const authTitle = document.querySelector("#auth-title");
 const authMessage = document.querySelector("#auth-message");
@@ -19,16 +20,19 @@ const submitButton = authForm.querySelector('button[type="submit"]');
 let isSignUp = false;
 let awaitingOtp = false;
 
+// MOSTRAR U OCULTAR CONTRASEÑA
 function showPassword(show) {
   passwordLabel.hidden = !show;
   passwordInput.hidden = !show;
   passwordInput.required = show;
 }
 
+// TEXTO DEL BOTÓN
 function setButtonText(value) {
   submitButton.textContent = value;
 }
 
+// CAMPO DEL CÓDIGO DE VERIFICACIÓN
 const otpContainer = document.createElement("div");
 otpContainer.hidden = true;
 
@@ -42,7 +46,6 @@ otpInput.maxLength = 6;
 otpInput.pattern = "[0-9]{6}";
 otpInput.placeholder = "123456";
 otpInput.autocomplete = "one-time-code";
-otpInput.setAttribute("aria-label", "Código de verificación");
 
 otpInput.addEventListener("input", () => {
   otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
@@ -51,11 +54,13 @@ otpInput.addEventListener("input", () => {
 otpContainer.append(otpLabel, otpInput);
 authForm.insertBefore(otpContainer, submitButton);
 
+// ABRIR VENTANA DE ACCESO
 function openAuth(signUp = false) {
   isSignUp = signUp;
   awaitingOtp = false;
 
   authTitle.textContent = isSignUp ? "Crear cuenta" : "Iniciar sesión";
+
   toggleAuth.textContent = isSignUp
     ? "¿Ya tienes cuenta? Iniciar sesión"
     : "¿No tienes cuenta? Crear cuenta";
@@ -63,15 +68,20 @@ function openAuth(signUp = false) {
   toggleAuth.hidden = false;
   authMessage.textContent = "";
   emailInput.readOnly = false;
+
   showPassword(true);
   otpContainer.hidden = true;
   otpInput.value = "";
+
   submitButton.disabled = false;
   setButtonText("Continuar");
 
-  if (!authDialog.open) authDialog.showModal();
+  if (!authDialog.open) {
+    authDialog.showModal();
+  }
 }
 
+// BOTONES DE ACCESO
 document.querySelector("#open-auth").addEventListener("click", () => {
   openAuth(false);
 });
@@ -84,6 +94,7 @@ toggleAuth.addEventListener("click", () => {
   openAuth(!isSignUp);
 });
 
+// PANTALLA DE CUENTA
 function showAccount(user) {
   const main = document.querySelector("main");
   const header = document.querySelector(".topbar");
@@ -123,25 +134,42 @@ function showAccount(user) {
 
   logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;
-    const { error } = await supabase.auth.signOut();
+    status.textContent = "Cerrando sesión...";
 
-    if (error) {
-      status.textContent = "No se pudo cerrar sesión: " + error.message;
+    try {
+      const { error: logoutError } = await supabase.auth.signOut();
+
+      if (logoutError) {
+        status.textContent = "Error: " + logoutError.message;
+        logoutButton.disabled = false;
+        return;
+      }
+
+      window.location.reload();
+    } catch (logoutError) {
+      status.textContent = "No se pudo cerrar sesión.";
       logoutButton.disabled = false;
-      return;
     }
-
-    window.location.reload();
   });
 
-  section.append(eyebrow, title, description, email, status, logoutButton);
+  section.append(
+    eyebrow,
+    title,
+    description,
+    email,
+    status,
+    logoutButton
+  );
+
   main.append(section);
 
   header.querySelector("#open-auth").hidden = true;
   footer.hidden = true;
+
   authDialog.close();
 }
 
+// REGISTRO, VERIFICACIÓN E INICIO DE SESIÓN
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -152,6 +180,7 @@ authForm.addEventListener("submit", async (event) => {
   authMessage.textContent = "Conectando con SOCORA PLAY...";
 
   try {
+    // PASO 1: VERIFICAR CÓDIGO
     if (awaitingOtp) {
       const token = otpInput.value.trim();
 
@@ -160,19 +189,23 @@ authForm.addEventListener("submit", async (event) => {
         return;
       }
 
-      const { data, error } = await supabase.auth.verifyOtp({
+      const {
+        data: otpData,
+        error: otpError
+      } = await supabase.auth.verifyOtp({
         email,
         token,
         type: "signup"
       });
 
-      if (error) {
-        authMessage.textContent = "No se pudo verificar el código: " + error.message;
+      if (otpError) {
+        authMessage.textContent =
+          "Código incorrecto: " + otpError.message;
         return;
       }
 
-      if (data.user && data.session) {
-        showAccount(data.user);
+      if (otpData.user && otpData.session) {
+        showAccount(otpData.user);
         return;
       }
 
@@ -181,76 +214,105 @@ authForm.addEventListener("submit", async (event) => {
       emailInput.readOnly = false;
       otpContainer.hidden = true;
       toggleAuth.hidden = false;
+
       authTitle.textContent = "Iniciar sesión";
       authMessage.textContent =
         "Correo verificado. Ahora inicia sesión con tu contraseña.";
+
       setButtonText("Iniciar sesión");
       return;
     }
 
+    // PASO 2: CREAR CUENTA
     if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({
+      const {
+        data: signupData,
+        error: signupError
+      } = await supabase.auth.signUp({
         email,
         password
       });
 
-      if (error) {
-        authMessage.textContent = "No se pudo crear la cuenta: " + error.message;
+      if (signupError) {
+        authMessage.textContent =
+          "No se pudo crear la cuenta: " + signupError.message;
         return;
       }
 
-      if (data.session && data.user) {
-        showAccount(data.user);
+      if (signupData.session && signupData.user) {
+        showAccount(signupData.user);
         return;
       }
 
       awaitingOtp = true;
+
       authTitle.textContent = "Verifica tu correo";
       authMessage.textContent =
-        "Si el registro se completó, revisa tu correo e introduce el código de 6 dígitos.";
+        "Revisa tu correo e introduce el código de 6 dígitos.";
 
       showPassword(false);
       emailInput.readOnly = true;
       otpContainer.hidden = false;
       toggleAuth.hidden = true;
+
       setButtonText("Verificar código");
       otpInput.focus();
+
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // PASO 3: INICIAR SESIÓN
+    const {
+      data: loginData,
+      error: loginError
+    } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
-    if (error) {
-      authMessage.textContent = "No se pudo iniciar sesión: " + error.message;
+    if (loginError) {
+      authMessage.textContent =
+        "No se pudo iniciar sesión: " + loginError.message;
       return;
     }
 
-    if (data.user) {
-      showAccount(data.user);
+    if (loginData.user) {
+      showAccount(loginData.user);
     } else {
       authMessage.textContent =
-        "La sesión no devolvió un usuario. Inténtalo de nuevo.";
+        "No se encontró la información de tu cuenta.";
     }
-  } catch (error) {
-    console.error(error);
+
+  } catch (unexpectedError) {
+    console.error(unexpectedError);
+
     authMessage.textContent =
       "Ocurrió un error de conexión. Inténtalo de nuevo.";
+
   } finally {
     submitButton.disabled = false;
   }
 });
 
-// Recuperar la sesión si el usuario vuelve a cargar la página.
-const { data: sessionData, error: sessionError } =
-  await supabase.auth.getSession();
+// RECUPERAR SESIÓN AL RECARGAR LA PÁGINA
+async function restoreSession() {
+  try {
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await supabase.auth.getSession();
 
-if (sessionError) {
-  console.error("No se pudo recuperar la sesión:", sessionError);
+    if (sessionError) {
+      console.error(sessionError);
+      return;
+    }
+
+    if (sessionData.session?.user) {
+      showAccount(sessionData.session.user);
+    }
+  } catch (error) {
+    console.error("Error al recuperar sesión:", error);
+  }
 }
 
-if (sessionData.session?.user) {
-  showAccount(sessionData.session.user);
-}
+restoreSession();
