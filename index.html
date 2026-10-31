@@ -1,70 +1,249 @@
+
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090d18">
-  <title>Socora Play</title>
+  <title>SOCORA PLAY</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <!-- CABECERA -->
   <header class="topbar">
-    <a class="brand" href="#"><span class="brand-icon">▶</span> SOCORA <b>PLAY</b></a>
-    <nav><a href="#inicio">Inicio</a><a href="#videos">Videos</a><a href="#cuenta">Mi cuenta</a></nav>
-    <button id="open-auth" class="button button-outline">Iniciar sesión</button>
+    <a class="brand" href="#inicio">
+      <span class="brand-icon">▶</span>
+      SOCORA <b>PLAY</b>
+    </a>
+
+    <div class="header-actions">
+      <button id="open-auth" class="button button-outline">
+        Iniciar sesión
+      </button>
+    </div>
   </header>
 
-  <main>
+  <!-- MENÚ LATERAL -->
+  <aside class="sidebar">
+    <a href="#inicio" class="side-link active">
+      <span>⌂</span> Inicio
+    </a>
+    <a href="#videos" class="side-link">
+      <span>▶</span> Videos
+    </a>
+    <a href="#mensajes" class="side-link">
+      <span>☁</span> Mensajes
+    </a>
+    <button id="open-upload" class="side-link">
+      <span>＋</span> Publicar
+    </button>
+    <a href="#shorts" class="side-link">
+      <span>▣</span> Shorts
+    </a>
+    <a href="#cuenta" class="side-link">
+      <span>◉</span> Mi canal
+    </a>
+  </aside>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main id="main-content">
+
     <section class="hero" id="inicio">
       <div class="hero-copy">
-        <p class="eyebrow">TU PRÓXIMO NIVEL COMIENZA AQUÍ</p>
+        <p class="eyebrow">BIENVENIDO A SOCORA PLAY</p>
         <h1>El gaming<br><span>se vive aquí.</span></h1>
-        <p class="muted">Descubre videos, creadores y momentos épicos en Socora Play.</p>
-        <a class="button" href="#videos">Explorar videos <span>↗</span></a>
-      </div>
-      <div class="hero-art" aria-label="Arte abstracto gaming">
-        <div class="orb orb-one"></div><div class="orb orb-two"></div>
-        <div class="play-card"><span>▶</span><small>SOCOРА PLAY</small></div>
-        <div class="floating-tag tag-one">LEVEL UP +1</div>
-        <div class="floating-tag tag-two">● ONLINE</div>
+        <p class="muted">
+          Descubre videos, Shorts y creadores de nuestra comunidad.
+        </p>
       </div>
     </section>
 
+    <!-- VIDEOS -->
     <section class="section" id="videos">
-      <div class="section-head"><div><p class="eyebrow">SELECCIÓN SOCORA</p><h2>Videos destacados</h2></div><span class="pill">DEMO</span></div>
-      <div class="video-grid" id="video-grid">
-        <article class="video-card"><div class="thumb thumb-purple"><span>▶</span><label>GAMING</label></div><div class="video-meta"><h3>Momentos épicos</h3><p>Socora Creator · Video de ejemplo</p></div></article>
-        <article class="video-card"><div class="thumb thumb-blue"><span>▶</span><label>CLIPS</label></div><div class="video-meta"><h3>La jugada inesperada</h3><p>Socora Creator · Video de ejemplo</p></div></article>
-        <article class="video-card"><div class="thumb thumb-pink"><span>▶</span><label>TENDENCIA</label></div><div class="video-meta"><h3>¿Puedes superar este reto?</h3><p>Socora Creator · Video de ejemplo</p></div></article>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">DESCUBRE CONTENIDO</p>
+          <h2>Videos</h2>
+        </div>
       </div>
-      <p class="notice">Los videos de esta pantalla son ejemplos visuales. La carga real desde Supabase se configura después de crear el proyecto.</p>
+
+      <div class="video-grid" id="video-grid">
+        <p class="muted">Los videos aparecerán aquí cuando se conecte el catálogo.</p>
+      </div>
     </section>
 
-    <section class="account-panel" id="cuenta">
-      <div><p class="eyebrow">ÚNETE A LA COMUNIDAD</p><h2>Tu espacio. Tu contenido.</h2><p class="muted">Crea una cuenta para preparar la siguiente versión de Socora Play.</p></div>
-      <button id="create-account" class="button">Crear cuenta gratis</button>
+    <!-- YOUTUBE -->
+    <section class="section" id="youtube">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">CONTENIDO DE YOUTUBE</p>
+          <h2>Explorar YouTube</h2>
+        </div>
+      </div>
+
+      <form id="youtube-search-form" class="search-form">
+        <input
+          id="youtube-search"
+          type="search"
+          placeholder="Buscar videos de YouTube..."
+          aria-label="Buscar videos de YouTube"
+        >
+        <button class="button" type="submit">Buscar</button>
+      </form>
+
+      <div id="youtube-results" class="video-grid">
+        <p class="muted">Busca videos para descubrir contenido.</p>
+      </div>
     </section>
 
-    <section class="admin-note">
-      <span class="admin-symbol">⌘</span>
-      <div><h3>Panel de administración</h3><p>En la siguiente fase conectaremos el panel a Supabase y protegeremos las acciones con permisos de administrador en la base de datos.</p></div>
+    <!-- SHORTS -->
+    <section class="section" id="shorts">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">VIDEOS CORTOS</p>
+          <h2>Shorts</h2>
+        </div>
+      </div>
+
+      <div id="shorts-grid" class="shorts-grid">
+        <p class="muted">Los Shorts de la comunidad aparecerán aquí.</p>
+      </div>
     </section>
+
+    <!-- MENSAJES -->
+    <section class="section" id="mensajes">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">COMUNIDAD</p>
+          <h2>Mensajes</h2>
+        </div>
+      </div>
+      <div class="content-panel">
+        <span class="large-icon">☁</span>
+        <h3>Mensajes de SOCORA</h3>
+        <p class="muted">
+          Aquí podrás conversar con otros usuarios.
+        </p>
+        <p class="notice">El sistema de mensajería se conectará en una siguiente fase.</p>
+      </div>
+    </section>
+
+    <!-- MI CANAL -->
+    <section class="section" id="cuenta">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">TU ESPACIO</p>
+          <h2>Mi canal</h2>
+        </div>
+      </div>
+      <div class="content-panel">
+        <span class="large-icon">◉</span>
+        <h3>Tu canal de SOCORA PLAY</h3>
+        <p class="muted">
+          Aquí aparecerán tu perfil y tus publicaciones.
+        </p>
+      </div>
+    </section>
+
   </main>
 
-  <footer><a class="brand" href="#"><span class="brand-icon">▶</span> SOCORA <b>PLAY</b></a><span>Hecho para la comunidad gaming.</span></footer>
+  <!-- BARRA INFERIOR PARA CELULAR -->
+  <nav class="mobile-nav">
+    <a href="#inicio"><span>⌂</span><small>Inicio</small></a>
+    <a href="#mensajes"><span>☁</span><small>Mensajes</small></a>
+    <button id="mobile-upload"><span>＋</span><small>Publicar</small></button>
+    <a href="#shorts"><span>▣</span><small>Shorts</small></a>
+    <a href="#cuenta"><span>◉</span><small>Canal</small></a>
+  </nav>
 
+  <!-- VENTANA DE PUBLICACIÓN -->
+  <dialog id="upload-dialog">
+    <form method="dialog" class="dialog-close">
+      <button aria-label="Cerrar">×</button>
+    </form>
+
+    <p class="eyebrow">SOCORA PLAY</p>
+    <h2>Publicar contenido</h2>
+
+    <form id="upload-form">
+      <label for="upload-title">Título</label>
+      <input id="upload-title" type="text" maxlength="100" required>
+
+      <label for="upload-description">Descripción</label>
+      <textarea id="upload-description" maxlength="2000"></textarea>
+
+      <label for="upload-type">Tipo de publicación</label>
+      <select id="upload-type" required>
+        <option value="video">Video normal</option>
+        <option value="short">Short</option>
+      </select>
+
+      <label for="upload-file">Archivo de video</label>
+      <input
+        id="upload-file"
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        required
+      >
+
+      <p class="notice">
+        Tu publicación será revisada antes de aparecer públicamente.
+      </p>
+
+      <button class="button full" type="submit">
+        Enviar a revisión
+      </button>
+
+      <p id="upload-message" class="notice" aria-live="polite"></p>
+    </form>
+  </dialog>
+
+  <!-- VENTANA DE REPRODUCTOR -->
+  <dialog id="player-dialog">
+    <form method="dialog" class="dialog-close">
+      <button aria-label="Cerrar">×</button>
+    </form>
+    <div id="player-container"></div>
+  </dialog>
+
+  <!-- INICIO DE SESIÓN Y REGISTRO -->
   <dialog id="auth-dialog">
-    <form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form>
-    <p class="eyebrow">SOCORA PLAY</p><h2 id="auth-title">Iniciar sesión</h2>
-    <p class="muted">Regístrate o inicia sesión en AUREON.</p>
+    <form method="dialog" class="dialog-close">
+      <button aria-label="Cerrar">×</button>
+    </form>
+
+    <p class="eyebrow">SOCORA PLAY</p>
+    <h2 id="auth-title">Iniciar sesión</h2>
+    <p class="muted">Entra a tu cuenta o crea una nueva.</p>
+
     <form id="demo-auth">
-      <label for="email">Correo electrónico</label><input id="email" type="email" placeholder="tu@correo.com" required>
-      <label for="password">Contraseña</label><input id="password" type="password" placeholder="Mínimo 8 caracteres" minlength="8" required>
+      <label for="email">Correo electrónico</label>
+      <input
+        id="email"
+        type="email"
+        placeholder="tu@correo.com"
+        required
+      >
+
+      <label for="password">Contraseña</label>
+      <input
+        id="password"
+        type="password"
+        placeholder="Mínimo 8 caracteres"
+        minlength="8"
+        required
+      >
+
       <button class="button full" type="submit">Continuar</button>
       <p id="auth-message" class="notice" aria-live="polite"></p>
     </form>
-    <button id="toggle-auth" class="text-button">¿No tienes cuenta? Crear cuenta</button>
+
+    <button id="toggle-auth" class="text-button">
+      ¿No tienes cuenta? Crear cuenta
+    </button>
   </dialog>
- <script type="module" src="app.js?v=2"></script>
+
+  <script type="module" src="app.js?v=3"></script>
 </body>
 </html>
