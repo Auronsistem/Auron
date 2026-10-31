@@ -3,9 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // CONEXIÓN CON SUPABASE
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
-const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
+const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5H5Sw_LQ8_r4p5";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// FUNCIÓN DE SUPABASE PARA BUSCAR EN YOUTUBE
+const YOUTUBE_FUNCTION = "smooth-action";
 
 // ELEMENTOS
 const authDialog = document.querySelector("#auth-dialog");
@@ -197,7 +200,6 @@ authForm?.addEventListener("submit", async (event) => {
   showMessage(message, "Procesando...");
 
   try {
-    // VERIFICAR CÓDIGO
     if (waitingForCode) {
       const code = document.querySelector("#verification-code").value.trim();
 
@@ -213,13 +215,13 @@ authForm?.addEventListener("submit", async (event) => {
 
       if (error) throw error;
 
-      // Establecer la contraseña elegida durante el registro
       const { error: passwordError } = await supabase.auth.updateUser({
         password: pendingPassword
       });
 
       if (passwordError) throw passwordError;
 
+      pendingPassword = "";
       authDialog.close();
       showMessage(uploadMessage, "");
       return;
@@ -232,7 +234,6 @@ authForm?.addEventListener("submit", async (event) => {
       throw new Error("La contraseña debe tener al menos 8 caracteres.");
     }
 
-    // INICIAR SESIÓN
     if (authMode === "login") {
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -245,7 +246,6 @@ authForm?.addEventListener("submit", async (event) => {
       return;
     }
 
-    // REGISTRAR CUENTA
     pendingEmail = email;
     pendingPassword = password;
 
@@ -317,8 +317,8 @@ async function updateSession(session) {
     createLockScreen();
     updateHeader();
 
-    document.querySelector("#video-grid").replaceChildren();
-    document.querySelector("#shorts-grid").replaceChildren();
+    document.querySelector("#video-grid")?.replaceChildren();
+    document.querySelector("#shorts-grid")?.replaceChildren();
   }
 }
 
@@ -364,7 +364,6 @@ uploadForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  // Límite inicial de 100 MB
   if (file.size > 100 * 1024 * 1024) {
     showMessage(uploadMessage, "El video no puede superar 100 MB.", true);
     return;
@@ -379,7 +378,6 @@ uploadForm?.addEventListener("submit", async (event) => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     storagePath = `${currentUser.id}/${crypto.randomUUID()}-${safeName}`;
 
-    // SUBIR ARCHIVO A STORAGE
     const { error: storageError } = await supabase.storage
       .from("videos")
       .upload(storagePath, file, {
@@ -389,7 +387,6 @@ uploadForm?.addEventListener("submit", async (event) => {
 
     if (storageError) throw storageError;
 
-    // GUARDAR INFORMACIÓN EN LA TABLA
     const { error: databaseError } = await supabase
       .from("videos")
       .insert({
@@ -482,6 +479,8 @@ async function loadVideos() {
 }
 
 function showEmpty(container, message) {
+  if (!container) return;
+
   const paragraph = document.createElement("p");
   paragraph.className = "muted";
   paragraph.textContent = message;
@@ -533,6 +532,8 @@ async function createVideoCard(video, isShort) {
 // REPRODUCTOR DE VIDEOS SUBIDOS
 function openUploadedVideo(url, title) {
   const container = document.querySelector("#player-container");
+  if (!container || !playerDialog) return;
+
   container.replaceChildren();
 
   const heading = document.createElement("h2");
@@ -552,6 +553,7 @@ function openUploadedVideo(url, title) {
 
 playerDialog?.addEventListener("close", () => {
   const player = document.querySelector("#player-container video");
+
   if (player) {
     player.pause();
     player.removeAttribute("src");
@@ -560,17 +562,173 @@ playerDialog?.addEventListener("close", () => {
 });
 
 // BÚSQUEDA DE YOUTUBE
-document.querySelector("#youtube-search-form")?.addEventListener("submit", (event) => {
+const youtubeForm = document.querySelector("#youtube-search-form");
+const youtubeInput = document.querySelector("#youtube-search");
+const youtubeResults = document.querySelector("#youtube-results");
+
+youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const results = document.querySelector("#youtube-results");
-  results.replaceChildren();
+  if (!youtubeResults || !youtubeInput) return;
 
-  showEmpty(
-    results,
-    "La búsqueda de YouTube se conectará cuando configuremos la API oficial."
-  );
+  const query = youtubeInput.value.trim();
+
+  if (query.length < 2) {
+    youtubeResults.replaceChildren();
+    showEmpty(youtubeResults, "Escribe al menos 2 caracteres para buscar.");
+    return;
+  }
+
+  if (!currentUser) {
+    showEmpty(youtubeResults, "Inicia sesión para buscar en YouTube.");
+    openAuth();
+    return;
+  }
+
+  const button = youtubeForm.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+
+  youtubeResults.replaceChildren();
+  showEmpty(youtubeResults, "Buscando videos y canales...");
+
+  try {
+    // invoke utiliza la sesión iniciada del usuario.
+    // No es necesario copiar ni mostrar el token.
+    const { data, error } = await supabase.functions.invoke(
+      YOUTUBE_FUNCTION,
+      {
+        body: { query }
+      }
+    );
+
+    if (error) {
+      throw new Error(
+        "No se pudo conectar con el buscador. Comprueba la función de Supabase."
+      );
+    }
+
+    if (!data?.success) {
+      throw new Error(data?.error || "YouTube no pudo completar la búsqueda.");
+    }
+
+    youtubeResults.replaceChildren();
+
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    const channels = Array.isArray(data.channels) ? data.channels : [];
+
+    if (!videos.length && !channels.length) {
+      showEmpty(youtubeResults, "No encontramos resultados para esa búsqueda.");
+      return;
+    }
+
+    if (videos.length) {
+      const heading = document.createElement("h2");
+      heading.textContent = "Videos";
+      heading.className = "section-title";
+      youtubeResults.append(heading);
+
+      for (const video of videos) {
+        youtubeResults.append(createYouTubeVideoCard(video));
+      }
+    }
+
+    if (channels.length) {
+      const heading = document.createElement("h2");
+      heading.textContent = "Canales";
+      heading.className = "section-title";
+      youtubeResults.append(heading);
+
+      for (const channel of channels) {
+        youtubeResults.append(createYouTubeChannelCard(channel));
+      }
+    }
+
+  } catch (error) {
+    console.error("Error en búsqueda de YouTube:", error);
+    youtubeResults.replaceChildren();
+    showEmpty(
+      youtubeResults,
+      error.message || "Ocurrió un error al buscar en YouTube."
+    );
+  } finally {
+    if (button) button.disabled = false;
+  }
 });
+
+// TARJETA DE VIDEO DE YOUTUBE
+function createYouTubeVideoCard(video) {
+  const card = document.createElement("article");
+  card.className = "video-card";
+
+  if (video.thumbnail) {
+    const image = document.createElement("img");
+    image.src = video.thumbnail;
+    image.alt = `Miniatura de ${video.title || "video"}`;
+    image.loading = "lazy";
+    image.className = "video-thumbnail";
+    card.append(image);
+  }
+
+  const info = document.createElement("div");
+  info.className = "video-info";
+
+  const title = document.createElement("h3");
+  title.textContent = video.title || "Video sin título";
+
+  const channel = document.createElement("p");
+  channel.className = "muted";
+  channel.textContent = video.channelTitle || "Canal de YouTube";
+
+  const link = document.createElement("a");
+  link.className = "button full";
+  link.textContent = "Ver en YouTube";
+  link.href = video.url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+
+  info.append(title, channel, link);
+  card.append(info);
+
+  return card;
+}
+
+// TARJETA DE CANAL DE YOUTUBE
+function createYouTubeChannelCard(channel) {
+  const card = document.createElement("article");
+  card.className = "video-card";
+
+  if (channel.thumbnail) {
+    const image = document.createElement("img");
+    image.src = channel.thumbnail;
+    image.alt = `Imagen de ${channel.title || "canal"}`;
+    image.loading = "lazy";
+    image.className = "video-thumbnail";
+    image.style.objectFit = "cover";
+    card.append(image);
+  }
+
+  const info = document.createElement("div");
+  info.className = "video-info";
+
+  const title = document.createElement("h3");
+  title.textContent = channel.title || "Canal sin nombre";
+
+  const description = document.createElement("p");
+  description.className = "muted";
+  description.textContent = channel.description || "Canal de YouTube";
+
+  const link = document.createElement("a");
+  link.className = "button full";
+  link.textContent = "Visitar canal";
+  link.href = channel.url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+
+  info.append(title, description, link);
+  card.append(info);
+
+  return card;
+}
 
 // MENSAJES
 // La mensajería todavía necesita tablas, políticas y funciones en tiempo real.
