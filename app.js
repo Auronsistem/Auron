@@ -332,6 +332,8 @@ async function updateSession(session) {
     removeLockScreen();
     await loadVideos();
     await loadConversations();
+    await loadRecommendedYouTube();
+    await loadRecommendedShorts();
   } else {
     cleanupCall();
     if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; }
@@ -1579,8 +1581,6 @@ document.addEventListener("visibilitychange", () => {
 
 // INICIAR
 async function initialize() {
-  loadRecommendedYouTube();
-  loadRecommendedShorts();
   try {
     const { data, error } = await supabase.auth.getSession();
 
