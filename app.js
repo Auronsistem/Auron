@@ -173,8 +173,8 @@ function showCodeForm() {
   input.id = "verification-code";
   input.type = "text";
   input.inputMode = "numeric";
-  input.maxLength = 8;
-  input.pattern = "[0-9]{8}";
+  input.maxLength = 6;
+  input.pattern = "[0-9]{6}";
   input.required = true;
 
   const button = document.createElement("button");
@@ -205,7 +205,7 @@ authForm?.addEventListener("submit", async (event) => {
       const token = $("#verification-code")?.value.trim() || "";
 
       if (!/^\d{8}$/.test(token)) {
-        throw new Error("Escribe el código de 8 dígitos.");
+        throw new Error("Escribe el código de 6 dígitos que llegó a tu correo.");
       }
 
       const { error } = await supabase.auth.verifyOtp({
@@ -243,7 +243,8 @@ authForm?.addEventListener("submit", async (event) => {
 
     const { data, error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: { emailRedirectTo: window.location.origin }
     });
 
     if (error) throw error;
@@ -252,7 +253,7 @@ authForm?.addEventListener("submit", async (event) => {
       showCodeForm();
       showMessage(
         $("#auth-message"),
-        "Revisa tu correo e introduce el código recibido."
+        "Te enviamos un código de 6 dígitos. Revisa Recibidos y Spam."
       );
     } else if (authDialog?.open) {
       authDialog.close();
