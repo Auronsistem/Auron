@@ -929,30 +929,77 @@ const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
 const YOUTUBE_RECOMMENDATION_QUERY = "gaming Clash Royale Roblox español Perú";
+const YOUTUBE_SHORTS_QUERY = "Shorts gaming Clash Royale Roblox español";
 
+async function requestYouTubeRecommendations(query) {
+  const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, { body: { query } });
+  if (error) throw new Error("No se pudo conectar con las recomendaciones.");
+  if (!data?.success) throw new Error(data?.error || "No se pudieron cargar las recomendaciones.");
+  return Array.isArray(data.videos) ? data.videos : [];
+}
 async function loadRecommendedYouTube() {
   if (!youtubeResults) return;
   showEmpty(youtubeResults, "Cargando recomendaciones de gaming...");
   try {
-    const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, {
-      body: { query: YOUTUBE_RECOMMENDATION_QUERY }
-    });
-    if (error) throw new Error("No se pudo conectar con las recomendaciones.");
-    if (!data?.success) throw new Error(data?.error || "No se pudieron cargar las recomendaciones.");
+    const videos = await requestYouTubeRecommendations(YOUTUBE_RECOMMENDATION_QUERY);
     youtubeResults.replaceChildren();
-    const videos = Array.isArray(data.videos) ? data.videos : [];
-    if (!videos.length) {
-      showEmpty(youtubeResults, "Todavía no hay recomendaciones disponibles. Intenta más tarde.");
-      return;
+    if (!videos.length) showEmpty(youtubeResults, "Todavía no hay recomendaciones disponibles.");
+    else {
+      const heading = document.createElement("p");
+      heading.className = "muted";
+      heading.textContent = "Recomendaciones de gaming · Clash Royale, Roblox y más";
+      youtubeResults.append(heading);
+      videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
     }
-    const heading = document.createElement("p");
-    heading.className = "muted";
-    heading.textContent = "Recomendaciones de gaming · Clash Royale, Roblox y más";
-    youtubeResults.append(heading);
-    videos.forEach((video) => youtubeResults.append(createYouTubeVideoCard(video)));
+    const videoGrid = $("#video-grid");
+    if (videoGrid) {
+      videoGrid.replaceChildren();
+      if (!videos.length) showEmpty(videoGrid, "Todavía no hay recomendaciones disponibles.");
+      else videos.slice(0, 8).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
+    }
   } catch (error) {
     console.error("Error en recomendaciones:", error);
     showEmpty(youtubeResults, "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
+    showEmpty($("#video-grid"), "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
+  }
+}
+async function loadRecommendedShorts() {
+  const shortsGrid = $("#shorts-grid");
+  if (!shortsGrid) return;
+  showEmpty(shortsGrid, "Cargando clips cortos recomendados...");
+  try {
+    const videos = await requestYouTubeRecommendations(YOUTUBE_SHORTS_QUERY);
+    shortsGrid.replaceChildren();
+    if (!videos.length) {
+      showEmpty(shortsGrid, "No hay clips cortos recomendados disponibles por ahora.");
+      return;
+    }
+    videos.slice(0, 8).forEach(video => {
+      const card = document.createElement("article");
+      card.className = "short-card";
+      const image = document.createElement("img");
+      image.src = video.thumbnail || "";
+      image.alt = video.title || "Clip recomendado";
+      image.loading = "lazy";
+      const info = document.createElement("div");
+      info.className = "short-info";
+      const heading = document.createElement("h3");
+      heading.textContent = video.title || "Clip recomendado";
+      const channel = document.createElement("p");
+      channel.className = "muted";
+      channel.textContent = video.channelTitle || "YouTube";
+      const play = document.createElement("button");
+      play.className = "button full";
+      play.type = "button";
+      play.textContent = "▶ Ver clip";
+      play.addEventListener("click", () => openYouTubeVideo(video.id, video.title || "Clip de gaming"));
+      info.append(heading, channel);
+      card.append(image, info, play);
+      shortsGrid.append(card);
+    });
+  } catch (error) {
+    console.error("Error en recomendaciones de Shorts:", error);
+    showEmpty(shortsGrid, "No se pudieron cargar clips. Comprueba la configuración de YouTube en Supabase.");
   }
 }
 
@@ -1533,6 +1580,7 @@ document.addEventListener("visibilitychange", () => {
 // INICIAR
 async function initialize() {
   loadRecommendedYouTube();
+  loadRecommendedShorts();
   try {
     const { data, error } = await supabase.auth.getSession();
 
