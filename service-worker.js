@@ -15,17 +15,26 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = payload.title || "AUREON";
-  const options = {
-    body: payload.body || "Tienes una notificación nueva.",
-    icon: "./icons/aureon.svg",
-    badge: "./icons/aureon.svg",
-    tag: payload.tag || "aureon-notification",
-    renotify: Boolean(payload.renotify),
-    data: { url: payload.url || "./", type: payload.type || "general" },
-    vibrate: payload.type === "call" ? [250, 120, 250, 120, 400] : [120, 60, 120]
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const visibleClient = windows.find((client) => client.visibilityState === "visible");
+    if (visibleClient && payload.type === "message") {
+      visibleClient.postMessage({ type: "AUREON_PUSH", payload });
+      return;
+    }
+    const title = payload.title || "AUREON";
+    const options = {
+      body: payload.body || "Tienes una notificación nueva.",
+      icon: "./icons/aureon.svg",
+      badge: "./icons/aureon.svg",
+      tag: payload.tag || "aureon-notification",
+      renotify: Boolean(payload.renotify),
+      silent: false,
+      data: { url: payload.url || "./", type: payload.type || "general" },
+      vibrate: payload.type === "call" ? [250, 120, 250, 120, 400] : [100, 50, 100]
+    };
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {
