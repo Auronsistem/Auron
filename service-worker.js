@@ -18,9 +18,10 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visibleClient = windows.find((client) => client.visibilityState === "visible");
+    // Keep the in-app tone when the page is open, but ALWAYS show the
+    // notification too: iOS web push requires a visible notification per push.
     if (visibleClient && payload.type === "message") {
       visibleClient.postMessage({ type: "AUREON_PUSH", payload });
-      return;
     }
     const title = payload.title || "AUREON";
     const options = {
