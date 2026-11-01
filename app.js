@@ -854,34 +854,43 @@ playerDialog?.addEventListener(
 );
 
 // NAVEGACIÓN DE SECCIONES
+// El HTML usa #inicio, #videos, #mensajes, #shorts y #cuenta.
 function showSection(sectionName) {
-  const sections = {
-    home: $("#home"),
-    shorts: $("#shorts")
+  const sectionIds = {
+    home: "#inicio",
+    inicio: "#inicio",
+    videos: "#videos",
+    mensajes: "#mensajes",
+    shorts: "#shorts",
+    cuenta: "#cuenta",
+    youtube: "#youtube"
   };
 
-  for (const [name, section] of Object.entries(sections)) {
-    if (section) section.hidden = name !== sectionName;
+  const targetSelector = sectionIds[sectionName] || `#${sectionName}`;
+  const target = document.querySelector(targetSelector);
+
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  document.querySelectorAll("[data-section]").forEach((button) => {
-    button.classList.toggle(
-      "active",
-      button.dataset.section === sectionName
-    );
+  document.querySelectorAll(".side-link").forEach((link) => {
+    link.classList.toggle("active", link.getAttribute("href") === targetSelector);
   });
 
-  if (sectionName === "shorts") {
-    $("#shorts-grid")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  }
+  document.querySelectorAll("[data-section]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.section === sectionName);
+  });
 }
 
 document.querySelectorAll("[data-section]").forEach((button) => {
-  button.addEventListener("click", () => {
-    showSection(button.dataset.section);
+  button.addEventListener("click", () => showSection(button.dataset.section));
+});
+
+document.querySelectorAll(".side-link[href^='#']").forEach((link) => {
+  link.addEventListener("click", () => {
+    document.querySelectorAll(".side-link").forEach((item) => {
+      item.classList.toggle("active", item === link);
+    });
   });
 });
 
