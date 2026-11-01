@@ -866,6 +866,18 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+playerDialog?.addEventListener("wheel", (event) => {
+  if (!playerDialog.open || peerTubeShortIndex < 0 || !peerTubeShortsQueue.length || Math.abs(event.deltaY) < 20) return;
+  event.preventDefault();
+  if (event.deltaY > 0 && peerTubeShortIndex < peerTubeShortsQueue.length - 1) openPeerTubeShortAt(peerTubeShortIndex + 1);
+  else if (event.deltaY < 0 && peerTubeShortIndex > 0) openPeerTubeShortAt(peerTubeShortIndex - 1);
+}, { passive: false });
+document.addEventListener("keydown", (event) => {
+  if (!playerDialog?.open || peerTubeShortIndex < 0) return;
+  if (event.key === "ArrowDown" && peerTubeShortIndex < peerTubeShortsQueue.length - 1) { event.preventDefault(); openPeerTubeShortAt(peerTubeShortIndex + 1); }
+  else if (event.key === "ArrowUp" && peerTubeShortIndex > 0) { event.preventDefault(); openPeerTubeShortAt(peerTubeShortIndex - 1); }
+});
+
 playerDialog?.addEventListener(
   "wheel",
   (event) => {
@@ -939,6 +951,8 @@ const youtubeResults = $("#youtube-results");
 const PEERTUBE_SEARCH_URL = "https://sepiasearch.org/api/v1/search/videos";
 const PEERTUBE_DEFAULT_QUERY = "gaming Clash Royale Roblox español";
 const peerTubeCache = new Map();
+let peerTubeShortsQueue = [];
+let peerTubeShortIndex = -1;
 
 function normalizePeerTubeVideo(video) {
   const thumbnail = video.thumbnailPath
@@ -1012,6 +1026,7 @@ async function loadRecommendedShorts() {
   try {
     const communityCards = Array.from(shortsGrid.children);
     const videos = await searchPeerTube(PEERTUBE_DEFAULT_QUERY + " short");
+    peerTubeShortsQueue = videos;
     shortsGrid.replaceChildren();
     if (videos.length) {
       const recHeading = document.createElement("h3");
@@ -1039,7 +1054,7 @@ async function loadRecommendedShorts() {
       play.className = "button full";
       play.type = "button";
       play.textContent = "▶ Ver clip";
-      play.addEventListener("click", () => openPeerTubeVideo(video));
+      play.addEventListener("click", () => openPeerTubeShortAt(videos.indexOf(video)));
       info.append(heading, channel, play);
       card.append(info);
       shortsGrid.append(card);
@@ -1112,6 +1127,42 @@ function createYouTubeVideoCard(video) {
   info.append(heading, channel, play);
   card.append(info);
   return card;
+}
+
+function openPeerTubeShortAt(index) {
+  if (!peerTubeShortsQueue.length) return;
+  peerTubeShortIndex = Math.max(0, Math.min(index, peerTubeShortsQueue.length - 1));
+  const video = peerTubeShortsQueue[peerTubeShortIndex];
+  const container = $("#player-container");
+  if (!container || !playerDialog || !video) return;
+  stopPlayerContent();
+  const wrapper = document.createElement("div");
+  wrapper.className = "aureon-short-viewer";
+  const heading = document.createElement("h2");
+  heading.className = "aureon-short-title";
+  heading.textContent = video.title || "Short";
+  const stage = document.createElement("div");
+  stage.className = "aureon-short-stage";
+  const frame = document.createElement("iframe");
+  frame.className = "aureon-short-frame";
+  frame.src = video.embedPath ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href) : video.url;
+  frame.title = video.title || "Short de PeerTube";
+  frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
+  frame.allowFullscreen = true;
+  const controls = document.createElement("div");
+  controls.className = "aureon-short-controls";
+  const previous = document.createElement("button");
+  previous.type = "button"; previous.className = "button button-outline"; previous.textContent = "↑ Anterior";
+  previous.disabled = peerTubeShortIndex <= 0;
+  previous.addEventListener("click", () => openPeerTubeShortAt(peerTubeShortIndex - 1));
+  const counter = document.createElement("span");
+  counter.className = "muted"; counter.textContent = (peerTubeShortIndex + 1) + " de " + peerTubeShortsQueue.length;
+  const next = document.createElement("button");
+  next.type = "button"; next.className = "button"; next.textContent = "↓ Siguiente";
+  next.disabled = peerTubeShortIndex >= peerTubeShortsQueue.length - 1;
+  next.addEventListener("click", () => openPeerTubeShortAt(peerTubeShortIndex + 1));
+  controls.append(previous, counter, next); stage.append(frame); wrapper.append(heading, stage, controls); container.append(wrapper);
+  if (!playerDialog.open) playerDialog.showModal();
 }
 
 function openPeerTubeVideo(video) {
