@@ -934,66 +934,63 @@ const youtubeForm = $("#youtube-search-form");
 const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
-const YOUTUBE_RECOMMENDATION_QUERY = "gaming Clash Royale Roblox español Perú";
-// Se reutiliza una sola búsqueda para no gastar la cuota de YouTube dos veces al abrir AUREON.
-const YOUTUBE_SHORTS_QUERY = YOUTUBE_RECOMMENDATION_QUERY;
-const youtubeRecommendationCache = new Map();
+// RECOMENDACIONES Y BÚSQUEDA SIN YOUTUBE DATA API
+// SepiaSearch indexa videos públicos de PeerTube. El catálogo propio sigue viniendo de Supabase.
+const PEERTUBE_SEARCH_URL = "https://sepiasearch.org/api/v1/search/videos";
+const PEERTUBE_DEFAULT_QUERY = "gaming Clash Royale Roblox español";
+const peerTubeCache = new Map();
 
-async function requestYouTubeRecommendations(query) {
-  const cacheKey = query.trim().toLowerCase();
-  const cached = youtubeRecommendationCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    if (cached.error) throw cached.error;
-    if (cached.promise) return cached.promise;
-    return cached.videos || [];
-  }
-
-  const promise = (async () => {
-    const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, { body: { query } });
-    if (error) {
-      let detail = "";
-      try {
-        const body = await error.context?.json();
-        detail = [body?.error, body?.details].filter(Boolean).join(" ");
-      } catch {}
-      throw new Error(detail || "No se pudo conectar con las recomendaciones de YouTube.");
-    }
-    if (!data?.success) throw new Error([data?.error, data?.details].filter(Boolean).join(" ") || "No se pudieron cargar las recomendaciones.");
-    return Array.isArray(data.videos) ? data.videos : [];
-  })();
-
-  // Cachea la petición en curso para que Vídeos y Shorts compartan la misma llamada.
-  youtubeRecommendationCache.set(cacheKey, { promise, expiresAt: Date.now() + 5 * 60 * 1000 });
-  try {
-    const videos = await promise;
-    youtubeRecommendationCache.set(cacheKey, { videos, expiresAt: Date.now() + 5 * 60 * 1000 });
-    return videos;
-  } catch (error) {
-    youtubeRecommendationCache.set(cacheKey, { error, expiresAt: Date.now() + 60 * 1000 });
-    throw error;
-  }
+function normalizePeerTubeVideo(video) {
+  const thumbnail = video.thumbnailPath
+    ? (video.thumbnailPath.startsWith("http") ? video.thumbnailPath : new URL(video.thumbnailPath, video.url || "https://peertube.tv").href)
+    : "";
+  return {
+    id: String(video.uuid || video.id || video.url || ""),
+    title: video.name || video.title || "Video de PeerTube",
+    thumbnail,
+    channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "PeerTube",
+    url: video.url || "",
+    embedPath: video.embedPath || "",
+    platform: "PeerTube"
+  };
 }
+
+async function searchPeerTube(query) {
+  const key = query.trim().toLowerCase();
+  const cached = peerTubeCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.videos;
+  const url = new URL(PEERTUBE_SEARCH_URL);
+  url.searchParams.set("search", query);
+  url.searchParams.set("count", "12");
+  url.searchParams.set("sort", "-match");
+  const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
+  const payload = await response.json();
+  const raw = Array.isArray(payload) ? payload : (payload.data || payload.videos || []);
+  const videos = raw.map(normalizePeerTubeVideo).filter(v => v.url || v.embedPath);
+  peerTubeCache.set(key, { videos, expiresAt: Date.now() + 10 * 60 * 1000 });
+  return videos;
+}
+
 async function loadRecommendedYouTube() {
   if (!youtubeResults) return;
-  showEmpty(youtubeResults, "Cargando recomendaciones de gaming...");
+  showEmpty(youtubeResults, "Cargando recomendaciones de PeerTube...");
   try {
-    const videos = await requestYouTubeRecommendations(YOUTUBE_RECOMMENDATION_QUERY);
+    const videos = await searchPeerTube(PEERTUBE_DEFAULT_QUERY);
     youtubeResults.replaceChildren();
-    if (!videos.length) showEmpty(youtubeResults, "Todavía no hay recomendaciones disponibles.");
-    else {
-      const heading = document.createElement("p");
-      heading.className = "muted";
-      heading.textContent = "Recomendaciones de gaming · Clash Royale, Roblox y más";
-      youtubeResults.append(heading);
-      videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
-    }
+    const heading = document.createElement("p");
+    heading.className = "muted";
+    heading.textContent = "Videos públicos de PeerTube · fuente independiente de YouTube";
+    youtubeResults.append(heading);
+    if (!videos.length) showEmpty(youtubeResults, "No encontramos videos en PeerTube. Prueba otra búsqueda.");
+    else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
     const videoGrid = $("#video-grid");
     if (videoGrid) {
       const communityCards = Array.from(videoGrid.children);
       videoGrid.replaceChildren();
       if (videos.length) {
         const recHeading = document.createElement("h3");
-        recHeading.textContent = "Recomendados para ti";
+        recHeading.textContent = "Recomendados de PeerTube";
         videoGrid.append(recHeading);
         videos.slice(0, 8).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
       }
@@ -1001,46 +998,50 @@ async function loadRecommendedYouTube() {
         const communityHeading = document.createElement("h3");
         communityHeading.textContent = "Videos de la comunidad";
         videoGrid.append(communityHeading, ...communityCards);
-      } else if (!videos.length) showEmpty(videoGrid, "Todavía no hay videos publicados ni recomendaciones.");
+      } else if (!videos.length) showEmpty(videoGrid, "Todavía no hay videos propios ni recomendaciones disponibles.");
     }
   } catch (error) {
-    console.error("Error en recomendaciones:", error);
-    showEmpty(youtubeResults, error.message || "No se pudieron cargar recomendaciones de YouTube.");
+    console.error("Error en recomendaciones de PeerTube:", error);
+    showEmpty(youtubeResults, "No se pudieron cargar recomendaciones de PeerTube. Puedes usar la búsqueda manual o ver los videos de la comunidad.");
   }
 }
+
 async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
   try {
     const communityCards = Array.from(shortsGrid.children);
-    const videos = await requestYouTubeRecommendations(YOUTUBE_SHORTS_QUERY);
+    const videos = await searchPeerTube(PEERTUBE_DEFAULT_QUERY + " short");
     shortsGrid.replaceChildren();
     if (videos.length) {
       const recHeading = document.createElement("h3");
-      recHeading.textContent = "Clips recomendados";
+      recHeading.textContent = "Clips recomendados de PeerTube";
       shortsGrid.append(recHeading);
     }
     videos.slice(0, 8).forEach(video => {
       const card = document.createElement("article");
       card.className = "short-card";
-      const image = document.createElement("img");
-      image.src = video.thumbnail || "";
-      image.alt = video.title || "Clip recomendado";
-      image.loading = "lazy";
+      if (video.thumbnail) {
+        const image = document.createElement("img");
+        image.src = video.thumbnail;
+        image.alt = video.title;
+        image.loading = "lazy";
+        card.append(image);
+      }
       const info = document.createElement("div");
       info.className = "short-info";
       const heading = document.createElement("h3");
-      heading.textContent = video.title || "Clip recomendado";
+      heading.textContent = video.title;
       const channel = document.createElement("p");
       channel.className = "muted";
-      channel.textContent = video.channelTitle || "YouTube";
+      channel.textContent = video.channelTitle + " · PeerTube";
       const play = document.createElement("button");
       play.className = "button full";
       play.type = "button";
       play.textContent = "▶ Ver clip";
-      play.addEventListener("click", () => openYouTubeVideo(video.id, video.title || "Clip de gaming"));
-      info.append(heading, channel);
-      card.append(image, info, play);
+      play.addEventListener("click", () => openPeerTubeVideo(video));
+      info.append(heading, channel, play);
+      card.append(info);
       shortsGrid.append(card);
     });
     if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
@@ -1048,86 +1049,39 @@ async function loadRecommendedShorts() {
       communityHeading.textContent = "Shorts de la comunidad";
       shortsGrid.append(communityHeading, ...communityCards);
     } else if (!videos.length) {
-      showEmpty(shortsGrid, "No hay Shorts publicados ni clips recomendados por ahora.");
+      showEmpty(shortsGrid, "No encontramos clips en PeerTube. Los Shorts propios aparecerán aquí cuando se publiquen.");
     }
   } catch (error) {
-    console.error("Error en recomendaciones de Shorts:", error);
-    showEmpty(shortsGrid, error.message || "No se pudieron cargar clips de YouTube.");
+    console.error("Error en clips de PeerTube:", error);
+    if (!communityCardsExist(shortsGrid)) showEmpty(shortsGrid, "No se pudieron cargar clips de PeerTube; los Shorts propios siguen disponibles.");
   }
+}
+
+function communityCardsExist(grid) {
+  return Array.from(grid.children).some(node => !node.matches("p.muted"));
 }
 
 youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-
   const query = youtubeInput?.value.trim() || "";
-
   if (query.length < 2 || query.length > 100) {
     showEmpty(youtubeResults, "Escribe entre 2 y 100 caracteres.");
     return;
   }
-
-  if (!currentUser) {
-    openAuth();
-    showEmpty(youtubeResults, "Inicia sesión para buscar en YouTube.");
-    return;
-  }
-
   const button = youtubeForm.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
-
-  showEmpty(youtubeResults, "Buscando en YouTube...");
-
+  showEmpty(youtubeResults, "Buscando en PeerTube...");
   try {
-    const { data, error } = await supabase.functions.invoke(
-      YOUTUBE_FUNCTION,
-      { body: { query } }
-    );
-
-    if (error) {
-      let detail = "";
-      try {
-        const body = await error.context?.json();
-        detail = [body?.error, body?.details].filter(Boolean).join(" ");
-      } catch {}
-      throw new Error(detail || "No se pudo conectar con la búsqueda. Revisa la configuración de YouTube en Supabase.");
-    }
-
-    if (!data?.success) {
-      throw new Error([data?.error, data?.details].filter(Boolean).join(" ") || "La búsqueda no se completó.");
-    }
-
+    const videos = await searchPeerTube(query);
     youtubeResults.replaceChildren();
-
-    const videos = Array.isArray(data.videos) ? data.videos : [];
-    const channels = Array.isArray(data.channels) ? data.channels : [];
-
-    if (!videos.length && !channels.length) {
-      showEmpty(youtubeResults, "No encontramos resultados.");
-      return;
-    }
-
-    if (videos.length) {
-      const heading = document.createElement("h2");
-      heading.textContent = "Videos de YouTube";
-      youtubeResults.append(heading);
-
-      videos.forEach((video) => {
-        youtubeResults.append(createYouTubeVideoCard(video));
-      });
-    }
-
-    if (channels.length) {
-      const heading = document.createElement("h2");
-      heading.textContent = "Canales";
-      youtubeResults.append(heading);
-
-      channels.forEach((channel) => {
-        youtubeResults.append(createYouTubeChannelCard(channel));
-      });
-    }
+    const heading = document.createElement("h2");
+    heading.textContent = "Resultados de PeerTube";
+    youtubeResults.append(heading);
+    if (!videos.length) showEmpty(youtubeResults, "No encontramos resultados. Prueba con otras palabras.");
+    else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
   } catch (error) {
-    console.error(error);
-    showEmpty(youtubeResults, error.message || "Error en la búsqueda.");
+    console.error("Error en búsqueda de PeerTube:", error);
+    showEmpty(youtubeResults, "No se pudo conectar con PeerTube ahora. Inténtalo de nuevo más tarde.");
   } finally {
     if (button) button.disabled = false;
   }
@@ -1136,7 +1090,6 @@ youtubeForm?.addEventListener("submit", async (event) => {
 function createYouTubeVideoCard(video) {
   const card = document.createElement("article");
   card.className = "video-card";
-
   if (video.thumbnail) {
     const image = document.createElement("img");
     image.src = video.thumbnail;
@@ -1145,62 +1098,41 @@ function createYouTubeVideoCard(video) {
     image.className = "video-thumbnail";
     card.append(image);
   }
-
   const info = document.createElement("div");
   info.className = "video-info";
-
   const heading = document.createElement("h3");
   heading.textContent = video.title || "Video sin título";
-
   const channel = document.createElement("p");
   channel.className = "muted";
-  channel.textContent = video.channelTitle || "YouTube";
-
+  channel.textContent = (video.channelTitle || "PeerTube") + " · " + (video.platform || "PeerTube");
   const play = document.createElement("button");
   play.className = "button full";
-  play.textContent = "▶ Ver en SOCORA PLAY";
-
-  play.addEventListener("click", () => {
-    if (!video.id) return;
-
-    openYouTubeVideo(
-      video.id,
-      video.title || "Video de YouTube"
-    );
-  });
-
+  play.textContent = "▶ Ver video";
+  play.addEventListener("click", () => openPeerTubeVideo(video));
   info.append(heading, channel, play);
   card.append(info);
-
   return card;
 }
 
-function openYouTubeVideo(id, title) {
+function openPeerTubeVideo(video) {
   const container = $("#player-container");
-
-  if (!container || !playerDialog) return;
-
+  if (!container || !playerDialog) {
+    if (video.url) window.open(video.url, "_blank", "noopener,noreferrer");
+    return;
+  }
   stopPlayerContent();
-
   const heading = document.createElement("h2");
-  heading.textContent = title;
-
+  heading.textContent = video.title || "Video de PeerTube";
   const frame = document.createElement("iframe");
-  frame.src =
-    `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1`;
-  frame.title = title;
-  frame.allow =
-    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+  frame.src = video.embedPath
+    ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href)
+    : video.url;
+  frame.title = video.title || "Video de PeerTube";
+  frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   frame.allowFullscreen = true;
-
-  Object.assign(frame.style, {
-    width: "100%",
-    aspectRatio: "16 / 9",
-    border: "0"
-  });
-
+  frame.loading = "lazy";
+  Object.assign(frame.style, { width: "100%", aspectRatio: "16 / 9", border: "0" });
   container.append(heading, frame);
-
   if (!playerDialog.open) playerDialog.showModal();
 }
 
