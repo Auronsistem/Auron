@@ -1122,12 +1122,9 @@ async function loadMorePeerTubeShorts() {
   peerTubeShortLoading = true;
   if (loadMore) { loadMore.disabled = true; loadMore.textContent = "Cargando Shorts…"; }
   const categories = [
-    "Minecraft español", "animales curiosos", "ciencia experimentos",
-    "fútbol jugadas", "humor memes", "música covers", "Roblox español",
-    "Clash Royale", "cocina fácil", "tecnología curiosidades",
-    "fails divertidos", "historias curiosas", "dibujos animados",
-    "viajes lugares", "deportes highlights", "manualidades fáciles",
-    "trucos videojuegos", "comedia español", "naturaleza animales", "experimentos"
+    "Minecraft español", "Roblox español", "Clash Royale",
+    "humor español", "animales curiosos", "ciencia curiosidades",
+    "fútbol mejores jugadas", "música y covers"
   ];
   try {
     const offset = peerTubeShortOffset;
@@ -1164,7 +1161,7 @@ async function loadMorePeerTubeShorts() {
   }
 }
 
-async function loadRecommendedShorts() {
+async async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
   const communityCards = Array.from(shortsGrid.children);
