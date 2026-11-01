@@ -927,3 +927,100 @@ dialog:has(.youtube-shorts-viewer) {
   }
   .youtube-shorts-viewer .aureon-short-stage { border-radius: 0; }
 }
+
+
+/* Shorts inmersivo: estilo de feed vertical inspirado en YouTube */
+dialog:has(.youtube-shorts-viewer) {
+  position: fixed;
+  inset: 0;
+  width: min(100vw, 520px);
+  max-width: 520px;
+  height: min(100dvh, 940px);
+  max-height: 100dvh;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  color: #fff;
+  background: #000;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 18px 70px rgba(0,0,0,.55);
+}
+dialog:has(.youtube-shorts-viewer)::backdrop { background: rgba(0,0,0,.88); }
+dialog:has(.youtube-shorts-viewer) .dialog-close {
+  position: absolute;
+  z-index: 20;
+  top: 8px;
+  right: 8px;
+  margin: 0;
+}
+dialog:has(.youtube-shorts-viewer) .dialog-close button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(20,20,20,.55);
+  font-size: 28px;
+}
+.youtube-shorts-viewer { width: 100%; height: 100%; margin: 0; padding: 0; }
+.youtube-shorts-viewer .aureon-short-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: #000;
+  border-radius: inherit;
+}
+.youtube-shorts-viewer .aureon-short-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+.youtube-short-gradient {
+  position: absolute;
+  inset: 45% 0 0;
+  z-index: 2;
+  background: linear-gradient(transparent, rgba(0,0,0,.72));
+  pointer-events: none;
+}
+.youtube-short-metadata {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  right: 56px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  color: white;
+  text-align: left;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
+}
+.youtube-short-creator { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.youtube-short-overlay-title { margin: 0; font-size: 14px; line-height: 1.45; font-weight: 500; overflow-wrap: anywhere; }
+.youtube-short-gesture {
+  position: absolute;
+  z-index: 5;
+  top: 18%;
+  bottom: 18%;
+  width: 24px;
+  background: transparent;
+  touch-action: pan-y;
+}
+.youtube-short-gesture-left { left: 0; }
+.youtube-short-gesture-right { right: 0; }
+@media (max-width: 520px) {
+  dialog:has(.youtube-shorts-viewer) {
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .youtube-shorts-viewer .aureon-short-stage { border-radius: 0; }
+}
