@@ -1420,9 +1420,20 @@ async function prepareCallPeer() {
   });
   callRemoteStream = new MediaStream();
   remoteCallVideo.srcObject = callRemoteStream;
-  callPeer.ontrack = (event) => {
-    event.streams[0]?.getTracks().forEach(track => callRemoteStream.addTrack(track));
-    remoteCallVideo.play().catch(() => {});
+  remoteCallVideo.autoplay = true;
+  remoteCallVideo.playsInline = true;
+  remoteCallVideo.muted = false;
+  localCallVideo.autoplay = true;
+  localCallVideo.playsInline = true;
+  localCallVideo.muted = true;
+  callPeer.ontrack = async (event) => {
+    if (event.track && !callRemoteStream.getTracks().some(track => track.id === event.track.id)) {
+      callRemoteStream.addTrack(event.track);
+    }
+    remoteCallVideo.srcObject = callRemoteStream;
+    try { await remoteCallVideo.play(); } catch (error) {
+      callSubtitle.textContent = "Toca la pantalla del video para permitir la reproducción.";
+    }
   };
   callPeer.onicecandidate = (event) => {
     if (event.candidate && activeCall) sendCallSignal("ice", { candidate: event.candidate.toJSON() });
@@ -1439,11 +1450,12 @@ async function prepareCallPeer() {
   if (!callLocalStream) {
     callLocalStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: activeCall.video ? { facingMode: "user" } : false
+      video: activeCall.video ? { facingMode: { ideal: "user" }, width: { ideal: 640 }, height: { ideal: 480 } } : false
     });
   }
   localCallVideo.srcObject = callLocalStream;
-  localCallVideo.play().catch(() => {});
+  localCallVideo.onloadedmetadata = () => localCallVideo.play().catch(() => {});
+  await localCallVideo.play().catch(() => {});
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
 async function processCallSignal(signal) {
@@ -1568,10 +1580,11 @@ $("#accept-call")?.addEventListener("click", async () => {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite acceder al micrófono o cámara.");
     callLocalStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: activeCall.video ? { facingMode: "user" } : false
+      video: activeCall.video ? { facingMode: { ideal: "user" }, width: { ideal: 640 }, height: { ideal: 480 } } : false
     });
     localCallVideo.srcObject = callLocalStream;
-    localCallVideo.play().catch(() => {});
+    localCallVideo.onloadedmetadata = () => localCallVideo.play().catch(() => {});
+    await localCallVideo.play().catch(() => {});
     await sendCallSignal("accept");
     callSubtitle.textContent = "Aceptada. Preparando conexión…";
     $("#incoming-call-actions").hidden = true;
