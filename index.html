@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090d18">
   <title>SOCORA PLAY</title>
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
 
@@ -166,9 +166,24 @@
       <div class="content-panel">
         <span class="large-icon">◉</span>
         <h3>Tu canal de SOCORA PLAY</h3>
-        <p class="muted">
-          Aquí aparecerán tu perfil y tus publicaciones.
-        </p>
+        <p class="muted">Aquí aparecerán tu perfil y tus publicaciones.</p>
+      </div>
+      <div class="content-panel translation-settings" id="translation-settings">
+        <p class="eyebrow">PREFERENCIAS DE TU CUENTA</p>
+        <h3>🌐 Idioma de videos y Shorts</h3>
+        <p class="muted">Elige qué contenido quieres traducir. La preferencia se guarda para esta cuenta en este navegador.</p>
+        <label for="translation-language">Idioma preferido</label>
+        <select id="translation-language">
+          <option value="es">Español</option><option value="en">English (inglés)</option>
+          <option value="pt">Português (portugués)</option><option value="fr">Français (francés)</option>
+          <option value="de">Deutsch (alemán)</option><option value="it">Italiano</option>
+          <option value="ja">日本語 (japonés)</option><option value="ko">한국어 (coreano)</option>
+          <option value="zh">中文 (chino)</option>
+        </select>
+        <div class="translation-toggle-row"><label for="translate-videos">Videos</label><input id="translate-videos" type="checkbox"><span class="muted">Subtítulos en el idioma elegido, si están disponibles</span></div>
+        <div class="translation-toggle-row"><label for="translate-shorts">Shorts</label><input id="translate-shorts" type="checkbox"><span class="muted">Subtítulos en el idioma elegido, si están disponibles</span></div>
+        <p id="translation-settings-status" class="notice" aria-live="polite"></p>
+        <p class="muted translation-note">Importante: esto no dobla el audio. Los subtítulos solo aparecerán si el reproductor ofrece una pista compatible; traducir automáticamente el audio requiere un servicio adicional.</p>
       </div>
     </section>
 
@@ -294,6 +309,6 @@
     </button>
   </dialog>
 
-  <script type="module" src="app.js?v=18"></script>
+  <script type="module" src="app.js?v=19"></script>
 </body>
 </html>
