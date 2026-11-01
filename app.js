@@ -1304,6 +1304,9 @@ async function startConversation(profile) {
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
   activeGroup = null; activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
+  $("#chat-kind").textContent = "CONVERSACIÓN PRIVADA";
+  $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
+  $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
   await loadMessages(conversation.id); await loadConversations();
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
