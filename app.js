@@ -1544,14 +1544,14 @@ messageForm?.addEventListener("submit", async event => {
   if (activeGroup) {
     const { error } = await supabase.from("chat_group_messages").insert({ group_id: activeGroup.id, sender_id: currentUser.id, body });
     if (error) { showMessage($("#message-status"), error.message || "No se pudo enviar el mensaje al grupo.", true); console.error(error); }
-    else { input.value = ""; showMessage($("#message-status"), "Mensaje enviado al grupo."); await loadGroupMessages(activeGroup.id); }
+    else { input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado al grupo."); await loadGroupMessages(activeGroup.id); }
     if (button) button.disabled = false;
     return;
   }
   const { error } = await supabase.from("messages").insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body });
   if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
   else {
-    input.value = ""; showMessage($("#message-status"), "Mensaje enviado.");
+    input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado.");
     await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", activeConversation.id);
     await loadMessages(activeConversation.id); await loadConversations();
   }
@@ -1736,26 +1736,45 @@ function stopCallAlert() {
   callAudioContext = null;
   if (navigator.vibrate) navigator.vibrate(0);
 }
+
+// Tonos cortos sintetizados por el navegador; no necesitan archivos externos.
+function playAureonTone(kind = "message") {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const now = context.currentTime;
+    const notes = kind === "call"
+      ? [{ start: 0, duration: 0.16, from: 1450, to: 2050 }, { start: 0.19, duration: 0.22, from: 1850, to: 1250 }]
+      : [{ start: 0, duration: 0.10, from: 1100, to: 1550 }];
+    for (const note of notes) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(note.from, now + note.start);
+      oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
+      gain.gain.setValueAtTime(0.0001, now + note.start);
+      gain.gain.exponentialRampToValueAtTime(kind === "call" ? 0.11 : 0.07, now + note.start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now + note.start);
+      oscillator.stop(now + note.start + note.duration + 0.02);
+    }
+    window.setTimeout(() => context.close().catch(() => {}), 700);
+  } catch (error) {
+    console.info("El navegador no permitió reproducir el tono de AUREON.", error);
+  }
+}
+
 function startCallAlert() {
   stopCallAlert();
-  if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 900]);
+  playAureonTone("call");
+  if (navigator.vibrate) navigator.vibrate([250, 120, 250, 250, 450]);
   callRingTimer = window.setInterval(() => {
-    if (navigator.vibrate) navigator.vibrate([450, 250, 450]);
-  }, 2400);
-  try {
-    callAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = callAudioContext.createOscillator();
-    const gain = callAudioContext.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = 740;
-    gain.gain.value = 0.07;
-    oscillator.connect(gain);
-    gain.connect(callAudioContext.destination);
-    oscillator.start();
-    callOscillator = oscillator;
-  } catch (error) {
-    console.info("El navegador no permitió reproducir el tono de llamada.", error);
-  }
+    playAureonTone("call");
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
+  }, 2300);
 }
 function callDisplay(showIncoming = false, showActive = false) {
   if (callDialog && !callDialog.open) callDialog.showModal();
