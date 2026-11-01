@@ -123,7 +123,7 @@
         <aside class="conversation-panel">
           <div class="conversation-heading">
             <h3>Conversaciones</h3>
-            <button id="new-conversation" class="button button-outline" type="button">＋ Nuevo</button>
+            <div class="conversation-tools"><button id="new-conversation" class="button button-outline" type="button">＋ Nuevo</button><button id="new-group" class="button" type="button">👥 Grupo</button></div>
           </div>
           <label class="sr-only" for="people-search">Buscar usuarios</label>
           <input id="people-search" type="search" placeholder="Buscar usuarios..." autocomplete="off">
@@ -140,8 +140,8 @@
           </div>
           <div id="chat-active" hidden>
             <header class="chat-header">
-              <div><p class="eyebrow">CONVERSACIÓN PRIVADA</p><h3 id="chat-title">Usuario</h3></div>
-              <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button></div>
+              <div><p class="eyebrow" id="chat-kind">CONVERSACIÓN PRIVADA</p><h3 id="chat-title">Usuario</h3></div>
+              <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button><button id="group-audio-call" class="button button-outline" type="button" hidden>☎ Llamada grupal</button><button id="group-video-call" class="button" type="button" hidden>▣ Video grupal</button></div>
             </header>
             <div id="message-list" class="message-list" aria-live="polite"></div>
             <form id="message-form" class="message-form">
@@ -233,6 +233,9 @@
     <div id="player-container"></div>
   </dialog>
 
+
+  <dialog id="create-group-dialog"><form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form><p class="eyebrow">AUREON · MENSAJES</p><h2>Crear grupo</h2><form id="create-group-form"><label for="group-name">Nombre del grupo</label><input id="group-name" maxlength="60" placeholder="Ej. Equipo gaming" required><label for="group-member-search">Añadir integrantes</label><input id="group-member-search" type="search" placeholder="Busca usuarios por su nombre..." autocomplete="off"><div id="group-member-results" class="group-member-results" hidden></div><p id="group-selected-count" class="notice">0 integrantes seleccionados</p><p id="group-create-status" class="notice" aria-live="polite"></p><button class="button full" type="submit">Crear grupo</button></form></dialog>
+
   <!-- LLAMADAS PRIVADAS -->
   <dialog id="call-dialog" class="call-dialog">
     <div class="call-screen">
@@ -290,6 +293,6 @@
     </button>
   </dialog>
 
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>
