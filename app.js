@@ -1168,7 +1168,7 @@ async function searchPeople(query) {
   const clean = query.trim(); peopleResults.replaceChildren();
   if (clean.length < 2) { peopleResults.hidden = true; return; }
   const { data, error } = await supabase.from("profiles").select("id, display_name")
-    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "\\// INICIAR") + "%")
+    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "") + "%")
     .order("display_name").limit(12);
   peopleResults.hidden = false;
   if (error) { showEmpty(peopleResults, "No se pudo buscar usuarios."); return; }
