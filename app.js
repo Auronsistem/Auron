@@ -1204,18 +1204,22 @@ function createYouTubeVideoCard(video) {
 }
 
 function openPeerTubeShortAt(index) {
-  if (!peerTubeShortsQueue.length) return;
-  currentShortIndex = -1;
-  peerTubeShortIndex = Math.max(0, Math.min(index, peerTubeShortsQueue.length - 1));
-  const video = peerTubeShortsQueue[peerTubeShortIndex];
+  if (!peerTubeShortsQueue.length || !playerDialog) return;
+  const nextIndex = Math.max(0, Math.min(index, peerTubeShortsQueue.length - 1));
+  const video = peerTubeShortsQueue[nextIndex];
   const container = $("#player-container");
-  if (!container || !playerDialog || !video) return;
+  if (!container || !video) return;
+
+  peerTubeShortIndex = nextIndex;
+  currentShortIndex = -1;
   stopPlayerContent();
 
-  const wrapper = document.createElement("div");
+  const wrapper = document.createElement("section");
   wrapper.className = "aureon-short-viewer youtube-shorts-viewer";
+  wrapper.setAttribute("aria-label", "Reproductor de Shorts");
   const stage = document.createElement("div");
   stage.className = "aureon-short-stage";
+
   const frame = document.createElement("iframe");
   frame.className = "aureon-short-frame";
   frame.src = video.embedPath
@@ -1226,47 +1230,79 @@ function openPeerTubeShortAt(index) {
   frame.allowFullscreen = true;
   frame.setAttribute("loading", "eager");
 
-  const title = document.createElement("div");
+  const gradient = document.createElement("div");
+  gradient.className = "youtube-short-gradient";
+  gradient.setAttribute("aria-hidden", "true");
+
+  const metadata = document.createElement("div");
+  metadata.className = "youtube-short-metadata";
+  const creator = document.createElement("p");
+  creator.className = "youtube-short-creator";
+  creator.textContent = "@" + (video.channelTitle || "creador");
+  const title = document.createElement("p");
   title.className = "youtube-short-overlay-title";
   title.textContent = video.title || "Short";
-  stage.append(frame, title);
+  metadata.append(creator, title);
+
+  // El reproductor incrustado pertenece a otro dominio. Las zonas laterales
+  // permiten cambiar de Short sin tapar los controles del vídeo.
+  const gestureLeft = document.createElement("div");
+  gestureLeft.className = "youtube-short-gesture youtube-short-gesture-left";
+  gestureLeft.setAttribute("aria-hidden", "true");
+  const gestureRight = document.createElement("div");
+  gestureRight.className = "youtube-short-gesture youtube-short-gesture-right";
+  gestureRight.setAttribute("aria-hidden", "true");
+
+  stage.append(frame, gradient, metadata, gestureLeft, gestureRight);
   wrapper.append(stage);
   container.append(wrapper);
 
-  // Navegación tipo Shorts: flechas/rueda o gesto vertical, sin botones anterior/siguiente.
   const navigate = direction => {
     const target = peerTubeShortIndex + direction;
-    if (target >= 0 && target < peerTubeShortsQueue.length) openPeerTubeShortAt(target);
-    else if (direction > 0) loadMorePeerTubeShorts();
+    if (target >= 0 && target < peerTubeShortsQueue.length) {
+      openPeerTubeShortAt(target);
+    } else if (direction > 0) {
+      loadMorePeerTubeShorts();
+    }
   };
-  wrapper.addEventListener("wheel", event => {
-    if (Math.abs(event.deltaY) < 25) return;
+
+  // Wheel works when the pointer is outside the cross-origin iframe.
+  const handleWheel = event => {
+    if (Math.abs(event.deltaY) < 30 || shortWheelLocked) return;
     event.preventDefault();
+    shortWheelLocked = true;
     navigate(event.deltaY > 0 ? 1 : -1);
-  }, { passive: false });
+    window.setTimeout(() => { shortWheelLocked = false; }, 450);
+  };
+  wrapper.addEventListener("wheel", handleWheel, { passive: false });
 
   let touchStartY = null;
-  wrapper.addEventListener("touchstart", event => {
-    touchStartY = event.touches[0]?.clientY ?? null;
-  }, { passive: true });
-  wrapper.addEventListener("touchend", event => {
+  const touchStart = event => { touchStartY = event.touches[0]?.clientY ?? null; };
+  const touchEnd = event => {
     if (touchStartY === null) return;
     const delta = touchStartY - (event.changedTouches[0]?.clientY ?? touchStartY);
     touchStartY = null;
-    if (Math.abs(delta) > 55) navigate(delta > 0 ? 1 : -1);
-  }, { passive: true });
+    if (Math.abs(delta) > 45) navigate(delta > 0 ? 1 : -1);
+  };
+  gestureLeft.addEventListener("touchstart", touchStart, { passive: true });
+  gestureLeft.addEventListener("touchend", touchEnd, { passive: true });
+  gestureRight.addEventListener("touchstart", touchStart, { passive: true });
+  gestureRight.addEventListener("touchend", touchEnd, { passive: true });
+  gestureLeft.addEventListener("wheel", handleWheel, { passive: false });
+  gestureRight.addEventListener("wheel", handleWheel, { passive: false });
 
   if (!playerDialog.open) playerDialog.showModal();
+  playerDialog.focus({ preventScroll: true });
   if (!playerDialog.dataset.shortsKeysBound) {
     playerDialog.dataset.shortsKeysBound = "true";
     playerDialog.addEventListener("keydown", event => {
       if (!playerDialog.querySelector(".youtube-shorts-viewer")) return;
       if (["ArrowDown", "PageDown"].includes(event.key)) {
         event.preventDefault();
-        openPeerTubeShortAt(peerTubeShortIndex + 1);
+        navigate(1);
       } else if (["ArrowUp", "PageUp"].includes(event.key)) {
         event.preventDefault();
-        openPeerTubeShortAt(peerTubeShortIndex - 1);
+        navigate(-1);
       }
     });
   }
