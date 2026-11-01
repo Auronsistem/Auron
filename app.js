@@ -1419,10 +1419,12 @@ async function prepareCallPeer() {
       callSubtitle.textContent = "La conexión se interrumpió. Comprueba la red y los permisos.";
     }
   };
-  callLocalStream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: activeCall.video ? { facingMode: "user" } : false
-  });
+  if (!callLocalStream) {
+    callLocalStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: activeCall.video ? { facingMode: "user" } : false
+    });
+  }
   localCallVideo.srcObject = callLocalStream;
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
@@ -1545,6 +1547,11 @@ $("#accept-call")?.addEventListener("click", async () => {
   stopCallAlert();
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite acceder al micrófono o cámara.");
+    callLocalStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: activeCall.video ? { facingMode: "user" } : false
+    });
+    localCallVideo.srcObject = callLocalStream;
     await sendCallSignal("accept");
     callSubtitle.textContent = "Aceptada. Preparando conexión…";
     $("#incoming-call-actions").hidden = true;
