@@ -659,6 +659,8 @@ function createShortCard(entry, index, video) {
 function openShortAt(index) {
   if (!shortsQueue.length) return;
 
+  // Un solo feed activo evita que se mezclen los Shorts propios y los clips externos.
+  peerTubeShortIndex = -1;
   const safeIndex = Math.max(0, Math.min(index, shortsQueue.length - 1));
   currentShortIndex = safeIndex;
 
@@ -826,6 +828,7 @@ function stopPlayerContent() {
 
 function stopPlayer() {
   stopPlayerContent();
+  peerTubeShortIndex = -1;
 
   if (playerDialog?.open) {
     playerDialog.close();
@@ -837,6 +840,7 @@ function stopPlayer() {
 playerDialog?.addEventListener("close", () => {
   stopPlayerContent();
   currentShortIndex = -1;
+  peerTubeShortIndex = -1;
 });
 
 // TECLADO Y RUEDA DEL MOUSE PARA SHORTS
@@ -1131,6 +1135,7 @@ function createYouTubeVideoCard(video) {
 
 function openPeerTubeShortAt(index) {
   if (!peerTubeShortsQueue.length) return;
+  currentShortIndex = -1;
   peerTubeShortIndex = Math.max(0, Math.min(index, peerTubeShortsQueue.length - 1));
   const video = peerTubeShortsQueue[peerTubeShortIndex];
   const container = $("#player-container");
