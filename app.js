@@ -14,6 +14,10 @@ let authMode = "login";
 let waitingForCode = false;
 let pendingEmail = "";
 
+let shortsQueue = [];
+let currentShortIndex = -1;
+let shortWheelLocked = false;
+
 const authDialog = $("#auth-dialog");
 const authForm = $("#demo-auth");
 const authTitle = $("#auth-title");
@@ -30,6 +34,7 @@ function showMessage(element, message, error = false) {
 
 function showEmpty(container, message) {
   if (!container) return;
+
   const p = document.createElement("p");
   p.className = "muted";
   p.textContent = message;
@@ -41,6 +46,7 @@ function openAuth() {
     alert("No se encontró #auth-dialog en index.html.");
     return;
   }
+
   if (!authDialog.open) authDialog.showModal();
   showMessage($("#auth-message"), "");
 }
@@ -52,6 +58,7 @@ function createLockScreen() {
 
   const overlay = document.createElement("div");
   overlay.id = "socora-lock";
+
   Object.assign(overlay.style, {
     position: "fixed",
     inset: "0",
@@ -189,8 +196,8 @@ authForm?.addEventListener("submit", async (event) => {
 
   const message = $("#auth-message");
   const button = authForm.querySelector('button[type="submit"]');
-  if (button) button.disabled = true;
 
+  if (button) button.disabled = true;
   showMessage(message, "Procesando...");
 
   try {
@@ -208,6 +215,7 @@ authForm?.addEventListener("submit", async (event) => {
       });
 
       if (error) throw error;
+
       if (authDialog?.open) authDialog.close();
       return;
     }
@@ -226,6 +234,7 @@ authForm?.addEventListener("submit", async (event) => {
       });
 
       if (error) throw error;
+
       if (authDialog?.open) authDialog.close();
       return;
     }
@@ -261,8 +270,13 @@ authForm?.addEventListener("submit", async (event) => {
 });
 
 async function logout() {
+  stopPlayer();
+
   const { error } = await supabase.auth.signOut();
-  if (error) alert("No se pudo cerrar sesión: " + error.message);
+
+  if (error) {
+    alert("No se pudo cerrar sesión: " + error.message);
+  }
 }
 
 function updateHeader() {
@@ -293,9 +307,11 @@ async function updateSession(session) {
     removeLockScreen();
     await loadVideos();
   } else {
+    stopPlayer();
     createLockScreen();
     $("#video-grid")?.replaceChildren();
     $("#shorts-grid")?.replaceChildren();
+    shortsQueue = [];
   }
 }
 
@@ -363,6 +379,7 @@ uploadForm?.addEventListener("submit", async (event) => {
 
   try {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
     storagePath =
       `${currentUser.id}/${crypto.randomUUID()}-${safeName}`;
 
@@ -391,6 +408,7 @@ uploadForm?.addEventListener("submit", async (event) => {
     }
 
     uploadForm.reset();
+
     showMessage(
       message,
       "¡Enviado! Tu publicación está pendiente de revisión."
@@ -408,15 +426,17 @@ uploadForm?.addEventListener("submit", async (event) => {
   }
 });
 
-// CARGAR VIDEOS Y SHORTS POR SEPARADO
+// CARGAR VIDEOS Y SHORTS
 async function loadVideos() {
   const videoGrid = $("#video-grid");
   const shortsGrid = $("#shorts-grid");
 
   if (!videoGrid || !shortsGrid || !currentUser) return;
 
+  stopPlayer();
   videoGrid.replaceChildren();
   shortsGrid.replaceChildren();
+  shortsQueue = [];
 
   const { data, error } = await supabase
     .from("videos")
@@ -426,7 +446,7 @@ async function loadVideos() {
   if (error) {
     showEmpty(videoGrid, "No se pudieron cargar los videos.");
     showEmpty(shortsGrid, "No se pudieron cargar los Shorts.");
-    console.error(error);
+    console.error("Error al cargar videos:", error);
     return;
   }
 
@@ -452,40 +472,63 @@ async function loadVideos() {
   }
 
   for (const short of shorts) {
-    const card = await createVideoCard(short, true);
-    if (card) shortsGrid.append(card);
+    const signedUrl = await getSignedVideoUrl(short.storage_path);
+
+    if (!signedUrl) continue;
+
+    const queueIndex = shortsQueue.length;
+    const entry = {
+      id: short.id,
+      title: short.title || "Short",
+      url: signedUrl
+    };
+
+    shortsQueue.push(entry);
+
+    const card = createShortCard(entry, queueIndex, short);
+    shortsGrid.append(card);
+  }
+
+  if (shorts.length && !shortsQueue.length) {
+    showEmpty(
+      shortsGrid,
+      "No se pudieron abrir los Shorts. Revisa el almacenamiento y sus permisos."
+    );
   }
 }
 
-// TARJETAS
-async function createVideoCard(video, isShort) {
+async function getSignedVideoUrl(storagePath) {
+  if (!storagePath) return null;
+
   const { data, error } = await supabase.storage
     .from("videos")
-    .createSignedUrl(video.storage_path, 3600);
+    .createSignedUrl(storagePath, 3600);
 
   if (error || !data?.signedUrl) {
-    console.error("No se pudo abrir la publicación:", error);
+    console.error("No se pudo obtener el enlace del video:", error);
     return null;
   }
 
+  return data.signedUrl;
+}
+
+// TARJETAS DE VIDEOS NORMALES
+async function createVideoCard(video, isShort = false) {
+  const signedUrl = await getSignedVideoUrl(video.storage_path);
+  if (!signedUrl) return null;
+
   const card = document.createElement("article");
-  card.className = isShort ? "short-card" : "video-card";
+  card.className = "video-card";
 
   const preview = document.createElement("video");
-  preview.src = data.signedUrl;
+  preview.src = signedUrl;
   preview.preload = "metadata";
   preview.muted = true;
   preview.playsInline = true;
-  preview.className = isShort ? "short-preview" : "video-thumbnail";
-
-  if (isShort) {
-    preview.style.width = "100%";
-    preview.style.aspectRatio = "9 / 16";
-    preview.style.objectFit = "cover";
-  }
+  preview.className = "video-thumbnail";
 
   const info = document.createElement("div");
-  info.className = isShort ? "short-info" : "video-info";
+  info.className = "video-info";
 
   const heading = document.createElement("h3");
   heading.textContent = video.title || "Sin título";
@@ -493,32 +536,206 @@ async function createVideoCard(video, isShort) {
   const status = document.createElement("p");
   status.className = "muted";
   status.textContent =
-    video.status === "approved" && video.published
+    video.status === "approved" && video.published === true
       ? "Publicado"
       : "Pendiente de revisión";
 
   const play = document.createElement("button");
   play.type = "button";
   play.className = "button full";
-  play.textContent = isShort ? "▶ Ver Short" : "▶ Ver video";
+  play.textContent = "▶ Ver video";
+
   play.addEventListener("click", () => {
-    openUploadedVideo(data.signedUrl, video.title, isShort);
+    openUploadedVideo(signedUrl, video.title, false);
+  });
+
+  preview.style.cursor = "pointer";
+  preview.addEventListener("click", () => {
+    openUploadedVideo(signedUrl, video.title, false);
   });
 
   info.append(heading, status);
   card.append(preview, info, play);
 
-  // También permite abrir tocando la miniatura.
-  preview.style.cursor = "pointer";
-  preview.addEventListener("click", () => {
-    openUploadedVideo(data.signedUrl, video.title, isShort);
+  return card;
+}
+
+// TARJETAS DE SHORTS
+function createShortCard(entry, index, video) {
+  const card = document.createElement("article");
+  card.className = "short-card";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Ver Short: ${entry.title}`);
+
+  const preview = document.createElement("video");
+  preview.src = entry.url;
+  preview.preload = "metadata";
+  preview.muted = true;
+  preview.playsInline = true;
+  preview.className = "short-preview";
+
+  Object.assign(preview.style, {
+    width: "100%",
+    aspectRatio: "9 / 16",
+    objectFit: "cover",
+    display: "block",
+    background: "#000"
   });
+
+  const info = document.createElement("div");
+  info.className = "short-info";
+
+  const heading = document.createElement("h3");
+  heading.textContent = entry.title;
+
+  const status = document.createElement("p");
+  status.className = "muted";
+  status.textContent =
+    video.status === "approved" && video.published === true
+      ? "Publicado"
+      : "Pendiente de revisión";
+
+  const play = document.createElement("button");
+  play.type = "button";
+  play.className = "button full";
+  play.textContent = "▶ Ver Short";
+  play.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openShortAt(index);
+  });
+
+  card.addEventListener("click", () => openShortAt(index));
+
+  card.addEventListener("keydown", (event) => {
+    if (event.target === card && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      openShortAt(index);
+    }
+  });
+
+  info.append(heading, status);
+  card.append(preview, info, play);
 
   return card;
 }
 
-// REPRODUCTOR DENTRO DE SOCORA PLAY
+// REPRODUCTOR DE SHORTS CON NAVEGACIÓN VERTICAL
+function openShortAt(index) {
+  if (!shortsQueue.length) return;
+
+  const safeIndex = Math.max(0, Math.min(index, shortsQueue.length - 1));
+  currentShortIndex = safeIndex;
+
+  const entry = shortsQueue[currentShortIndex];
+  const container = $("#player-container");
+
+  if (!container || !playerDialog || !entry) return;
+
+  stopPlayerContent();
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "socora-short-player";
+
+  Object.assign(wrapper.style, {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "10px"
+  });
+
+  const heading = document.createElement("h2");
+  heading.textContent = entry.title;
+  heading.style.textAlign = "center";
+
+  const stage = document.createElement("div");
+  stage.className = "socora-short-stage";
+
+  Object.assign(stage.style, {
+    width: "min(100%, 420px)",
+    maxHeight: "72vh",
+    aspectRatio: "9 / 16",
+    background: "#000",
+    borderRadius: "14px",
+    overflow: "hidden",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  });
+
+  const player = document.createElement("video");
+  player.className = "socora-short-video";
+  player.src = entry.url;
+  player.controls = true;
+  player.autoplay = true;
+  player.playsInline = true;
+  player.preload = "auto";
+
+  Object.assign(player.style, {
+    width: "100%",
+    height: "100%",
+    objectFit: "contain",
+    background: "#000"
+  });
+
+  const controls = document.createElement("div");
+  controls.className = "socora-short-controls";
+
+  Object.assign(controls.style, {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap"
+  });
+
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.className = "button button-outline";
+  previous.textContent = "↑ Short anterior";
+  previous.disabled = currentShortIndex === 0;
+  previous.addEventListener("click", () => openShortAt(currentShortIndex - 1));
+
+  const counter = document.createElement("span");
+  counter.className = "muted";
+  counter.textContent = `${currentShortIndex + 1} de ${shortsQueue.length}`;
+
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "button";
+  next.textContent = "↓ Siguiente Short";
+  next.disabled = currentShortIndex >= shortsQueue.length - 1;
+  next.addEventListener("click", () => openShortAt(currentShortIndex + 1));
+
+  controls.append(previous, counter, next);
+  stage.append(player);
+  wrapper.append(heading, stage, controls);
+  container.append(wrapper);
+
+  if (!playerDialog.open) playerDialog.showModal();
+
+  player.play().catch(() => {
+    // Algunos navegadores requieren que el usuario pulse reproducir.
+  });
+
+  player.addEventListener("ended", () => {
+    if (currentShortIndex < shortsQueue.length - 1) {
+      openShortAt(currentShortIndex + 1);
+    }
+  });
+}
+
+// REPRODUCTOR DE VIDEOS NORMALES
 function openUploadedVideo(url, title, isShort = false) {
+  if (isShort) {
+    const index = shortsQueue.findIndex((item) => item.url === url);
+    if (index !== -1) {
+      openShortAt(index);
+      return;
+    }
+  }
+
   const container = $("#player-container");
 
   if (!container || !playerDialog) {
@@ -526,27 +743,25 @@ function openUploadedVideo(url, title, isShort = false) {
     return;
   }
 
-  container.replaceChildren();
+  stopPlayerContent();
 
   const heading = document.createElement("h2");
-  heading.textContent = title || (isShort ? "Short" : "Video");
+  heading.textContent = title || "Video";
 
   const player = document.createElement("video");
   player.src = url;
   player.controls = true;
   player.autoplay = true;
   player.playsInline = true;
-  player.style.display = "block";
-  player.style.width = "100%";
-  player.style.maxHeight = "75vh";
-  player.style.margin = "12px auto";
-  player.style.background = "#000";
+  player.preload = "auto";
 
-  if (isShort) {
-    player.style.maxWidth = "420px";
-    player.style.aspectRatio = "9 / 16";
-    player.style.objectFit = "contain";
-  }
+  Object.assign(player.style, {
+    display: "block",
+    width: "100%",
+    maxHeight: "75vh",
+    margin: "12px auto",
+    background: "#000"
+  });
 
   container.append(heading, player);
 
@@ -557,27 +772,96 @@ function openUploadedVideo(url, title, isShort = false) {
   });
 }
 
-playerDialog?.addEventListener("close", () => {
-  const player = $("#player-container video");
-  if (!player) return;
+function stopPlayerContent() {
+  const container = $("#player-container");
+  if (!container) return;
 
-  player.pause();
-  player.removeAttribute("src");
-  player.load();
-  $("#player-container")?.replaceChildren();
-});
+  container.querySelectorAll("video").forEach((video) => {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  });
 
-// NAVEGACIÓN: INICIO Y SHORTS
-function showSection(sectionName) {
-  const videoSection = $("#home");
-  const shortsSection = $("#shorts");
+  container.querySelectorAll("iframe").forEach((frame) => {
+    frame.src = "about:blank";
+  });
 
-  if (videoSection) {
-    videoSection.hidden = sectionName !== "home";
+  container.replaceChildren();
+}
+
+function stopPlayer() {
+  stopPlayerContent();
+
+  if (playerDialog?.open) {
+    playerDialog.close();
   }
 
-  if (shortsSection) {
-    shortsSection.hidden = sectionName !== "shorts";
+  currentShortIndex = -1;
+}
+
+playerDialog?.addEventListener("close", () => {
+  stopPlayerContent();
+  currentShortIndex = -1;
+});
+
+// TECLADO Y RUEDA DEL MOUSE PARA SHORTS
+document.addEventListener("keydown", (event) => {
+  if (!playerDialog?.open || currentShortIndex < 0) return;
+
+  const target = event.target;
+  const typing =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target?.isContentEditable;
+
+  if (typing) return;
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+
+    if (currentShortIndex < shortsQueue.length - 1) {
+      openShortAt(currentShortIndex + 1);
+    }
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+
+    if (currentShortIndex > 0) {
+      openShortAt(currentShortIndex - 1);
+    }
+  }
+});
+
+playerDialog?.addEventListener(
+  "wheel",
+  (event) => {
+    if (!playerDialog.open || currentShortIndex < 0) return;
+    if (Math.abs(event.deltaY) < 20 || shortWheelLocked) return;
+
+    event.preventDefault();
+    shortWheelLocked = true;
+
+    if (event.deltaY > 0 && currentShortIndex < shortsQueue.length - 1) {
+      openShortAt(currentShortIndex + 1);
+    } else if (event.deltaY < 0 && currentShortIndex > 0) {
+      openShortAt(currentShortIndex - 1);
+    }
+
+    window.setTimeout(() => {
+      shortWheelLocked = false;
+    }, 350);
+  },
+  { passive: false }
+);
+
+// NAVEGACIÓN DE SECCIONES
+function showSection(sectionName) {
+  const sections = {
+    home: $("#home"),
+    shorts: $("#shorts")
+  };
+
+  for (const [name, section] of Object.entries(sections)) {
+    if (section) section.hidden = name !== sectionName;
   }
 
   document.querySelectorAll("[data-section]").forEach((button) => {
@@ -588,7 +872,10 @@ function showSection(sectionName) {
   });
 
   if (sectionName === "shorts") {
-    $("#shorts-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    $("#shorts-grid")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   }
 }
 
@@ -630,7 +917,10 @@ youtubeForm?.addEventListener("submit", async (event) => {
       { body: { query } }
     );
 
-    if (error) throw new Error("No se pudo conectar con la búsqueda.");
+    if (error) {
+      throw new Error("No se pudo conectar con la búsqueda.");
+    }
+
     if (!data?.success) {
       throw new Error(data?.error || "La búsqueda no se completó.");
     }
@@ -649,18 +939,20 @@ youtubeForm?.addEventListener("submit", async (event) => {
       const heading = document.createElement("h2");
       heading.textContent = "Videos de YouTube";
       youtubeResults.append(heading);
-      videos.forEach((video) =>
-        youtubeResults.append(createYouTubeVideoCard(video))
-      );
+
+      videos.forEach((video) => {
+        youtubeResults.append(createYouTubeVideoCard(video));
+      });
     }
 
     if (channels.length) {
       const heading = document.createElement("h2");
       heading.textContent = "Canales";
       youtubeResults.append(heading);
-      channels.forEach((channel) =>
-        youtubeResults.append(createYouTubeChannelCard(channel))
-      );
+
+      channels.forEach((channel) => {
+        youtubeResults.append(createYouTubeChannelCard(channel));
+      });
     }
   } catch (error) {
     console.error(error);
@@ -696,11 +988,14 @@ function createYouTubeVideoCard(video) {
   const play = document.createElement("button");
   play.className = "button full";
   play.textContent = "▶ Ver en SOCORA PLAY";
-  play.addEventListener("click", () => {
-    const id = video.id;
-    if (!id) return;
 
-    openYouTubeVideo(id, video.title || "Video de YouTube");
+  play.addEventListener("click", () => {
+    if (!video.id) return;
+
+    openYouTubeVideo(
+      video.id,
+      video.title || "Video de YouTube"
+    );
   });
 
   info.append(heading, channel, play);
@@ -714,20 +1009,24 @@ function openYouTubeVideo(id, title) {
 
   if (!container || !playerDialog) return;
 
-  container.replaceChildren();
+  stopPlayerContent();
 
   const heading = document.createElement("h2");
   heading.textContent = title;
 
   const frame = document.createElement("iframe");
-  frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1`;
+  frame.src =
+    `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1`;
   frame.title = title;
   frame.allow =
     "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   frame.allowFullscreen = true;
-  frame.style.width = "100%";
-  frame.style.aspectRatio = "16 / 9";
-  frame.style.border = "0";
+
+  Object.assign(frame.style, {
+    width: "100%",
+    aspectRatio: "16 / 9",
+    border: "0"
+  });
 
   container.append(heading, frame);
 
@@ -776,11 +1075,14 @@ function createYouTubeChannelCard(channel) {
 async function initialize() {
   try {
     const { data, error } = await supabase.auth.getSession();
+
     if (error) throw error;
+
     await updateSession(data?.session || null);
   } catch (error) {
     console.error("Error de Supabase:", error);
     createLockScreen();
+
     showMessage(
       $("#auth-message"),
       "No se pudo conectar con Supabase. Revisa la URL y la clave pública.",
