@@ -5,6 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090d18">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/aureon.svg">
   <title>SOCORA PLAY</title>
   <link rel="stylesheet" href="styles.css?v=18">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%23090d18%27/%3E%3Cpath d=%27M35 25 L75 50 L35 75 Z%27 fill=%27%2320d9ed%27/%3E%3C/svg%3E">
@@ -310,6 +312,14 @@
     </button>
   </dialog>
 
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js", { scope: "./" })
+          .catch((error) => console.warn("AUREON: no se pudo registrar el service worker", error));
+      });
+    }
+  </script>
   <script type="module" src="app.js?v=23"></script>
 </body>
 </html>
