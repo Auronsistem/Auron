@@ -1024,3 +1024,11 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   }
   .youtube-shorts-viewer .aureon-short-stage { border-radius: 0; }
 }
+
+/* Preferencias de idioma por cuenta */
+.translation-settings { margin-top: 18px; }
+.translation-settings select { width: 100%; margin: 8px 0 16px; }
+.translation-toggle-row { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:10px; padding:12px 0; border-top:1px solid var(--border,rgba(255,255,255,.12)); }
+.translation-toggle-row label { font-weight:700; }
+.translation-toggle-row input { width:18px; height:18px; }
+.translation-note { font-size:12px; line-height:1.5; }
