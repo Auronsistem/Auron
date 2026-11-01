@@ -1072,6 +1072,7 @@ function normalizePeerTubeVideo(video) {
     title: video.name || video.title || "Video de PeerTube",
     thumbnail,
     channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "PeerTube",
+    publishedAt: video.publishedAt || video.createdAt || video.originallyPublishedAt || null,
     url: pageUrl,
     embedPath,
     platform: "PeerTube"
@@ -1086,7 +1087,7 @@ async function searchPeerTube(query, start = 0) {
   url.searchParams.set("search", query);
   url.searchParams.set("count", "20");
   url.searchParams.set("start", String(start));
-  url.searchParams.set("sort", "-match");
+  url.searchParams.set("sort", "-publishedAt");
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
   const payload = await response.json();
@@ -1101,15 +1102,19 @@ async function loadRecommendedYouTube() {
   showEmpty(youtubeResults, "Cargando recomendaciones de PeerTube...");
   try {
     const categories = [
-      "Minecraft español", "ciencia curiosidades", "fútbol mejores jugadas",
-      "humor memes", "música y covers", "animales naturaleza",
-      "tecnología gadgets", "videojuegos variados", "cocina fácil", "Roblox español"
+      "funk viral 2026", "funk automotivo 2026", "música viral tendencias 2026",
+      "edits funk 2026", "videos virales recientes", "tendencias de internet 2026",
+      "Roblox tendencias 2026", "Clash Royale novedades", "gaming español reciente",
+      "memes virales recientes"
     ];
     const batches = await Promise.all(categories.map(q => searchPeerTube(q).catch(() => [])));
     const seen = new Set();
+    const freshCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
     const videos = batches.flat().filter(video => {
       const key = video.id || video.url;
       if (!key || seen.has(key)) return false;
+      const published = video.publishedAt ? Date.parse(video.publishedAt) : NaN;
+      if (Number.isFinite(published) && published < freshCutoff) return false;
       seen.add(key);
       return true;
     });
@@ -1181,18 +1186,22 @@ async function loadMorePeerTubeShorts() {
   peerTubeShortLoading = true;
   if (loadMore) { loadMore.disabled = true; loadMore.textContent = "Cargando Shorts…"; }
   const categories = [
-    "Minecraft español", "Roblox español", "Clash Royale",
-    "humor español", "animales curiosos", "ciencia curiosidades",
-    "fútbol mejores jugadas", "música y covers"
+    "funk viral short 2026", "funk automotivo short", "edits funk short 2026",
+    "música viral short 2026", "tendencias virales short 2026",
+    "Roblox trend short 2026", "Clash Royale short reciente",
+    "memes virales short recientes"
   ];
   try {
     const offset = peerTubeShortOffset;
     const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short", offset).catch(() => [])));
     const incoming = batches.flat();
     let added = 0;
+    const freshCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
     for (const video of incoming) {
       const key = video.id || video.url || video.embedPath;
       if (!key || peerTubeShortSeen.has(key)) continue;
+      const published = video.publishedAt ? Date.parse(video.publishedAt) : NaN;
+      if (Number.isFinite(published) && published < freshCutoff) continue;
       peerTubeShortSeen.add(key);
       peerTubeShortsQueue.push(video);
       shortsGrid.insertBefore(renderPeerTubeShortCard(video), loadMore || null);
