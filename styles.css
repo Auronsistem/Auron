@@ -707,6 +707,7 @@ select:focus-visible {
 
 
 /* MENSAJERÍA PRIVADA */
+.people-results[hidden] { display: none; }
 .messaging-layout {
   display: grid;
   grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
