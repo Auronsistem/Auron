@@ -12,6 +12,7 @@ const $ = (selector) => document.querySelector(selector);
 let currentUser = null;
 let authMode = "login";
 let waitingForCode = false;
+let waitingForPasswordRecovery = false;
 let pendingEmail = "";
 
 let shortsQueue = [];
@@ -176,6 +177,7 @@ function updateAuthForm() {
   if (!authForm || !authTitle || !toggleAuth) return;
 
   waitingForCode = false;
+  waitingForPasswordRecovery = false;
   authTitle.textContent =
     authMode === "login" ? "Iniciar sesión" : "Crear cuenta";
 
@@ -220,9 +222,11 @@ function updateAuthForm() {
         redirectTo: window.location.origin + "/Auron/"
       });
       reset.disabled = false;
-      showMessage($("#auth-message"), result.error
-        ? "No se pudo enviar el enlace: " + result.error.message
-        : "Solicitud enviada. Revisa Recibidos y Spam.");
+      if (result.error) {
+        showMessage($("#auth-message"), "No se pudo enviar el enlace: " + result.error.message, true);
+        return;
+      }
+      showMessage($("#auth-message"), "Solicitud enviada. Abre el correo en tu iPhone y pulsa el enlace para continuar con AUREON.");
     });
   }
 }
@@ -231,6 +235,55 @@ toggleAuth?.addEventListener("click", () => {
   authMode = authMode === "login" ? "register" : "login";
   updateAuthForm();
 });
+
+function showPasswordRecoveryForm() {
+  if (!authForm || !authTitle || !toggleAuth) return;
+
+  waitingForCode = false;
+  waitingForPasswordRecovery = true;
+  authTitle.textContent = "Crear nueva contraseña";
+  toggleAuth.style.display = "none";
+  authForm.replaceChildren();
+
+  const info = document.createElement("p");
+  info.textContent = "Ya verificamos el enlace de recuperación. Escribe tu nueva contraseña.";
+
+  const passwordLabel = document.createElement("label");
+  passwordLabel.htmlFor = "recovery-password";
+  passwordLabel.textContent = "Nueva contraseña";
+
+  const password = document.createElement("input");
+  password.id = "recovery-password";
+  password.type = "password";
+  password.autocomplete = "new-password";
+  password.minLength = 8;
+  password.placeholder = "Mínimo 8 caracteres";
+  password.required = true;
+
+  const confirmLabel = document.createElement("label");
+  confirmLabel.htmlFor = "recovery-password-confirm";
+  confirmLabel.textContent = "Repite la nueva contraseña";
+
+  const confirm = document.createElement("input");
+  confirm.id = "recovery-password-confirm";
+  confirm.type = "password";
+  confirm.autocomplete = "new-password";
+  confirm.minLength = 8;
+  confirm.placeholder = "Confirma tu contraseña";
+  confirm.required = true;
+
+  const button = document.createElement("button");
+  button.className = "button full";
+  button.type = "submit";
+  button.textContent = "Guardar nueva contraseña";
+
+  const message = document.createElement("p");
+  message.id = "auth-message";
+  message.className = "notice";
+  message.setAttribute("aria-live", "polite");
+
+  authForm.append(info, passwordLabel, password, confirmLabel, confirm, button, message);
+}
 
 function showCodeForm() {
   if (!authForm || !authTitle || !toggleAuth) return;
@@ -284,6 +337,26 @@ authForm?.addEventListener("submit", async (event) => {
   showMessage(message, "Procesando...");
 
   try {
+    if (waitingForPasswordRecovery) {
+      const password = $("#recovery-password")?.value || "";
+      const confirmation = $("#recovery-password-confirm")?.value || "";
+
+      if (password.length < 8) {
+        throw new Error("La contraseña debe tener al menos 8 caracteres.");
+      }
+      if (password !== confirmation) {
+        throw new Error("Las contraseñas no coinciden.");
+      }
+
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+
+      waitingForPasswordRecovery = false;
+      showMessage(message, "¡Contraseña actualizada! Ya puedes iniciar sesión en AUREON.");
+      if (authDialog?.open) authDialog.close();
+      return;
+    }
+
     if (waitingForCode) {
       const token = $("#verification-code")?.value.trim() || "";
 
@@ -410,8 +483,15 @@ async function updateSession(session) {
   }
 }
 
-supabase.auth.onAuthStateChange((_event, session) => {
-  queueMicrotask(() => updateSession(session));
+supabase.auth.onAuthStateChange((event, session) => {
+  queueMicrotask(() => {
+    updateSession(session);
+    if (event === "PASSWORD_RECOVERY") {
+      if (authDialog && !authDialog.open) authDialog.showModal();
+      showPasswordRecoveryForm();
+      showMessage($("#auth-message"), "Enlace verificado. Ahora crea una contraseña nueva.");
+    }
+  });
 });
 
 // PUBLICAR
