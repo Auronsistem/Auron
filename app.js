@@ -218,15 +218,17 @@ function updateAuthForm() {
         return;
       }
       reset.disabled = true;
-      const result = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + "/Auron/"
-      });
-      reset.disabled = false;
-      if (result.error) {
-        showMessage($("#auth-message"), "No se pudo enviar el enlace: " + result.error.message, true);
-        return;
+      try {
+        const result = await supabase.auth.resetPasswordForEmail(email);
+        if (result.error) throw result.error;
+        pendingEmail = email;
+        showRecoveryCodeForm();
+        showMessage($("#auth-message"), "Si el correo está registrado, recibirás un código de recuperación. Revisa Recibidos y Spam.");
+      } catch (error) {
+        showMessage($("#auth-message"), "No se pudo solicitar el cambio: " + (error.message || "Inténtalo de nuevo."), true);
+      } finally {
+        reset.disabled = false;
       }
-      showMessage($("#auth-message"), "Solicitud enviada. Abre el correo en tu iPhone y pulsa el enlace para continuar con AUREON.");
     });
   }
 }
@@ -285,6 +287,69 @@ function showPasswordRecoveryForm() {
   authForm.append(info, passwordLabel, password, confirmLabel, confirm, button, message);
 }
 
+function showRecoveryCodeForm() {
+  if (!authForm || !authTitle || !toggleAuth) return;
+  waitingForCode = false;
+  waitingForPasswordRecovery = false;
+  authTitle.textContent = "Restablecer contraseña";
+  toggleAuth.style.display = "none";
+  authForm.replaceChildren();
+
+  const info = document.createElement("p");
+  info.textContent = "Escribe el código de recuperación que llegó a tu correo y crea tu nueva contraseña.";
+
+  const codeLabel = document.createElement("label");
+  codeLabel.htmlFor = "recovery-code";
+  codeLabel.textContent = "Código de recuperación (8 dígitos)";
+
+  const code = document.createElement("input");
+  code.id = "recovery-code";
+  code.type = "text";
+  code.inputMode = "numeric";
+  code.autocomplete = "one-time-code";
+  code.maxLength = 8;
+  code.pattern = "[0-9]{8}";
+  code.placeholder = "12345678";
+  code.required = true;
+
+  const passLabel = document.createElement("label");
+  passLabel.htmlFor = "recovery-code-password";
+  passLabel.textContent = "Nueva contraseña";
+
+  const pass = document.createElement("input");
+  pass.id = "recovery-code-password";
+  pass.type = "password";
+  pass.autocomplete = "new-password";
+  pass.minLength = 8;
+  pass.placeholder = "Mínimo 8 caracteres";
+  pass.required = true;
+
+  const confirmLabel = document.createElement("label");
+  confirmLabel.htmlFor = "recovery-code-confirm";
+  confirmLabel.textContent = "Repite la nueva contraseña";
+
+  const confirm = document.createElement("input");
+  confirm.id = "recovery-code-confirm";
+  confirm.type = "password";
+  confirm.autocomplete = "new-password";
+  confirm.minLength = 8;
+  confirm.placeholder = "Confirma tu contraseña";
+  confirm.required = true;
+
+  const button = document.createElement("button");
+  button.className = "button full";
+  button.type = "submit";
+  button.textContent = "Verificar código y guardar contraseña";
+
+  const message = document.createElement("p");
+  message.id = "auth-message";
+  message.className = "notice";
+  message.setAttribute("aria-live", "polite");
+
+  authForm.append(info, codeLabel, code, passLabel, pass, confirmLabel, confirm, button, message);
+  waitingForPasswordRecovery = true;
+}
+
 function showCodeForm() {
   if (!authForm || !authTitle || !toggleAuth) return;
 
@@ -338,9 +403,13 @@ authForm?.addEventListener("submit", async (event) => {
 
   try {
     if (waitingForPasswordRecovery) {
-      const password = $("#recovery-password")?.value || "";
-      const confirmation = $("#recovery-password-confirm")?.value || "";
+      const token = $("#recovery-code")?.value.trim() || "";
+      const password = $("#recovery-code-password")?.value || "";
+      const confirmation = $("#recovery-code-confirm")?.value || "";
 
+      if (!/^\\d{8}$/.test(token)) {
+        throw new Error("Introduce el código de recuperación de 8 dígitos.");
+      }
       if (password.length < 8) {
         throw new Error("La contraseña debe tener al menos 8 caracteres.");
       }
@@ -348,11 +417,18 @@ authForm?.addEventListener("submit", async (event) => {
         throw new Error("Las contraseñas no coinciden.");
       }
 
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token,
+        type: "recovery"
+      });
+      if (verifyError) throw verifyError;
+
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
 
       waitingForPasswordRecovery = false;
-      showMessage(message, "¡Contraseña actualizada! Ya puedes iniciar sesión en AUREON.");
+      showMessage(message, "¡Código verificado y contraseña actualizada! Ya puedes iniciar sesión en AUREON.");
       if (authDialog?.open) authDialog.close();
       return;
     }
