@@ -1453,9 +1453,21 @@ async function prepareCallPeer() {
       video: activeCall.video ? { facingMode: { ideal: "user" }, width: { ideal: 640 }, height: { ideal: 480 } } : false
     });
   }
+  localCallVideo.muted = true;
+  localCallVideo.autoplay = true;
+  localCallVideo.playsInline = true;
   localCallVideo.srcObject = callLocalStream;
-  localCallVideo.onloadedmetadata = () => localCallVideo.play().catch(() => {});
-  await localCallVideo.play().catch(() => {});
+  localCallVideo.onloadedmetadata = () => {
+    callSubtitle.textContent = "Cámara activa";
+    localCallVideo.play().catch(error => {
+      callSubtitle.textContent = "La cámara está activa. Toca el video para mostrar la vista previa.";
+      console.warn("Reproducción de vista previa bloqueada", error);
+    });
+  };
+  try { await localCallVideo.play(); } catch (_) {}
+  if (activeCall.video && !callLocalStream.getVideoTracks().length) {
+    throw new Error("El navegador no entregó imagen de la cámara. Revisa permisos de Cámara en Ajustes.");
+  }
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
 async function processCallSignal(signal) {
@@ -1590,7 +1602,9 @@ $("#accept-call")?.addEventListener("click", async () => {
     $("#incoming-call-actions").hidden = true;
     $("#active-call-actions").hidden = false;
   } catch (error) {
-    callSubtitle.textContent = error.message || "No se pudo aceptar la llamada.";
+    callSubtitle.textContent = error.name === "NotAllowedError"
+      ? "Permite Cámara y Micrófono en los ajustes del navegador."
+      : (error.message || "No se pudo activar la cámara.");
   }
 });
 $("#reject-call")?.addEventListener("click", async () => {
