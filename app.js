@@ -1858,6 +1858,15 @@ let groupCallChannel = null;
 let activeGroupCall = null;
 const groupCallPeers = new Map();
 const groupCallIceQueue = new Map();
+let groupCallSyncTimer = null;
+async function syncGroupCallPeers() {
+  if (!activeGroupCall || !callLocalStream) return;
+  const { data, error } = await supabase.from("chat_group_call_participants").select("user_id").eq("call_id", activeGroupCall.id).eq("group_id", activeGroupCall.groupId);
+  if (error) { console.error("No se pudo actualizar la lista de participantes:", error); return; }
+  const ids = (data || []).map(item => item.user_id).filter(id => id !== currentUser.id);
+  for (const id of ids) if (currentUser.id.localeCompare(id) < 0) await createGroupPeer(id, true);
+  callSubtitle.textContent = "Participantes conectados: " + (ids.length + 1) + " de 6";
+}
 
 async function sendGroupCallSignal(type, payload = {}, recipientId, call = activeGroupCall) {
   if (!call || !recipientId || !currentUser) return;
@@ -1991,6 +2000,11 @@ async function beginGroupCall(video) {
     remoteCallVideo.hidden = true; localCallVideo.hidden = true;
     const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
     makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    const { error: joinError } = await supabase.from("chat_group_call_participants").insert({ call_id: activeGroupCall.id, group_id: activeGroup.id, user_id: currentUser.id });
+    if (joinError) throw joinError;
+    await syncGroupCallPeers();
+    if (groupCallSyncTimer) window.clearInterval(groupCallSyncTimer);
+    groupCallSyncTimer = window.setInterval(syncGroupCallPeers, 2500);
     callTitle.textContent = activeGroup.name;
     callState.textContent = video ? "VIDEOLLAMADA GRUPAL" : "LLAMADA GRUPAL";
     callSubtitle.textContent = "Invitando a " + others.length + " integrante(s). Máximo 6 conectados.";
@@ -2010,6 +2024,8 @@ async function acceptGroupCall() {
     remoteCallVideo.hidden = true; localCallVideo.hidden = true;
     const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
     makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    const { error: joinError } = await supabase.from("chat_group_call_participants").insert({ call_id: activeGroupCall.id, group_id: activeGroupCall.groupId, user_id: currentUser.id });
+    if (joinError) throw joinError;
     const { data: rows } = await supabase.from("chat_group_members").select("user_id").eq("group_id", activeGroupCall.groupId);
     activeGroupCall.memberIds = (rows || []).map(x => x.user_id).filter(id => id !== currentUser.id).slice(0, 5);
     await sendGroupCallSignal("accept", {}, activeGroupCall.hostId);
@@ -2017,6 +2033,9 @@ async function acceptGroupCall() {
     for (const id of activeGroupCall.memberIds) if (id !== activeGroupCall.hostId) await sendGroupCallSignal("join", {}, id);
     // El anfitrión vuelve a anunciar su presencia para negociar el enlace entre pares.
     await sendGroupCallSignal("join", {}, activeGroupCall.hostId);
+    await syncGroupCallPeers();
+    if (groupCallSyncTimer) window.clearInterval(groupCallSyncTimer);
+    groupCallSyncTimer = window.setInterval(syncGroupCallPeers, 2500);
     callSubtitle.textContent = "Conectando con el grupo…";
     $("#incoming-call-actions").hidden = true; $("#active-call-actions").hidden = false;
   } catch (error) {
@@ -2025,10 +2044,13 @@ async function acceptGroupCall() {
 }
 async function cleanupGroupCall(notify = false) {
   const call = activeGroupCall;
+  if (groupCallSyncTimer) window.clearInterval(groupCallSyncTimer);
+  groupCallSyncTimer = null;
   if (notify && call) for (const id of call.memberIds || []) if (id !== currentUser.id) await sendGroupCallSignal("hangup", {}, id, call);
   for (const pc of groupCallPeers.values()) pc.close();
   groupCallPeers.clear(); groupCallIceQueue.clear();
   if (callLocalStream) callLocalStream.getTracks().forEach(track => track.stop());
+  if (call && currentUser) await supabase.from("chat_group_call_participants").delete().eq("call_id", call.id).eq("user_id", currentUser.id);
   callLocalStream = null; activeGroupCall = null; stopCallAlert();
   const grid = $("#group-call-grid"); if (grid) { grid.replaceChildren(); grid.hidden = true; }
   remoteCallVideo.hidden = false; localCallVideo.hidden = false;
