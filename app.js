@@ -300,7 +300,7 @@ function showRecoveryCodeForm() {
 
   const codeLabel = document.createElement("label");
   codeLabel.htmlFor = "recovery-code";
-  codeLabel.textContent = "Código de recuperación (8 dígitos)";
+  codeLabel.textContent = "Código de recuperación (6 u 8 dígitos)";
 
   const code = document.createElement("input");
   code.id = "recovery-code";
@@ -308,7 +308,7 @@ function showRecoveryCodeForm() {
   code.inputMode = "numeric";
   code.autocomplete = "one-time-code";
   code.maxLength = 8;
-  code.pattern = "[0-9]{8}";
+  code.pattern = "(?:[0-9]{6}|[0-9]{8})";
   code.placeholder = "12345678";
   code.required = true;
 
@@ -367,7 +367,7 @@ function showCodeForm() {
 
   const label = document.createElement("label");
   label.htmlFor = "verification-code";
-  label.textContent = "Código de verificación";
+  label.textContent = "Código de verificación (6 u 8 dígitos)";
 
   const input = document.createElement("input");
   input.id = "verification-code";
@@ -375,7 +375,7 @@ function showCodeForm() {
   input.inputMode = "numeric";
   input.autocomplete = "one-time-code";
   input.maxLength = 8;
-  input.pattern = "[0-9]{8}";
+  input.pattern = "(?:[0-9]{6}|[0-9]{8})";
   input.required = true;
 
   const button = document.createElement("button");
@@ -407,8 +407,8 @@ authForm?.addEventListener("submit", async (event) => {
       const password = $("#recovery-code-password")?.value || "";
       const confirmation = $("#recovery-code-confirm")?.value || "";
 
-      if (!/^\\d{8}$/.test(token)) {
-        throw new Error("Introduce el código de recuperación de 8 dígitos.");
+      if (!/^(?:[0-9]{6}|[0-9]{8})$/.test(token)) {
+        throw new Error("Introduce el código completo que recibiste (6 u 8 dígitos).");
       }
       if (password.length < 8) {
         throw new Error("La contraseña debe tener al menos 8 caracteres.");
