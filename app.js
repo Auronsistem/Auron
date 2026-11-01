@@ -1412,6 +1412,37 @@ async function callGetName(userId) {
   const profiles = await fetchProfiles([userId]);
   return displayName(profiles.get(userId));
 }
+async function attachLocalCallPreview(stream) {
+  const videoTrack = stream?.getVideoTracks?.()[0];
+  if (activeCall?.video && (!videoTrack || videoTrack.readyState !== "live")) {
+    throw new Error("No se pudo iniciar tu cámara. Comprueba que ninguna otra aplicación la esté usando.");
+  }
+  localCallVideo.muted = true;
+  localCallVideo.autoplay = true;
+  localCallVideo.playsInline = true;
+  localCallVideo.setAttribute("autoplay", "");
+  localCallVideo.setAttribute("muted", "");
+  localCallVideo.setAttribute("playsinline", "");
+  localCallVideo.style.display = "block";
+  localCallVideo.style.visibility = "visible";
+  localCallVideo.srcObject = stream;
+  try {
+    await localCallVideo.play();
+  } catch (error) {
+    console.warn("No se pudo iniciar la vista previa local automáticamente:", error);
+  }
+  if (activeCall?.video && localCallVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      localCallVideo.addEventListener("loadeddata", done, { once: true });
+      window.setTimeout(done, 1800);
+    });
+  }
+  if (activeCall?.video && localCallVideo.videoWidth === 0) {
+    console.warn("La cámara está activa, pero la vista previa aún no entrega fotogramas.");
+  }
+}
+
 async function prepareCallPeer() {
   if (callPeer) callPeer.close();
   queuedIceCandidates = [];
@@ -1453,21 +1484,8 @@ async function prepareCallPeer() {
       video: activeCall.video ? { facingMode: { ideal: "user" }, width: { ideal: 640 }, height: { ideal: 480 } } : false
     });
   }
-  localCallVideo.muted = true;
-  localCallVideo.autoplay = true;
-  localCallVideo.playsInline = true;
-  localCallVideo.srcObject = callLocalStream;
-  localCallVideo.onloadedmetadata = () => {
-    callSubtitle.textContent = "Cámara activa";
-    localCallVideo.play().catch(error => {
-      callSubtitle.textContent = "La cámara está activa. Toca el video para mostrar la vista previa.";
-      console.warn("Reproducción de vista previa bloqueada", error);
-    });
-  };
-  try { await localCallVideo.play(); } catch (_) {}
-  if (activeCall.video && !callLocalStream.getVideoTracks().length) {
-    throw new Error("El navegador no entregó imagen de la cámara. Revisa permisos de Cámara en Ajustes.");
-  }
+  await attachLocalCallPreview(callLocalStream);
+  if (activeCall.video) callSubtitle.textContent = "Cámara activa";
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
 async function processCallSignal(signal) {
@@ -1594,9 +1612,7 @@ $("#accept-call")?.addEventListener("click", async () => {
       audio: true,
       video: activeCall.video ? { facingMode: { ideal: "user" }, width: { ideal: 640 }, height: { ideal: 480 } } : false
     });
-    localCallVideo.srcObject = callLocalStream;
-    localCallVideo.onloadedmetadata = () => localCallVideo.play().catch(() => {});
-    await localCallVideo.play().catch(() => {});
+    await attachLocalCallPreview(callLocalStream);
     await sendCallSignal("accept");
     callSubtitle.textContent = "Aceptada. Preparando conexión…";
     $("#incoming-call-actions").hidden = true;
