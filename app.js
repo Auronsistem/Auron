@@ -326,12 +326,15 @@ function updateHeader() {
 async function updateSession(session) {
   currentUser = session?.user || null;
   updateHeader();
+  subscribeToCallSignals();
 
   if (currentUser) {
     removeLockScreen();
     await loadVideos();
     await loadConversations();
   } else {
+    cleanupCall();
+    if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; }
     stopPlayer();
     clearMessaging();
     createLockScreen();
@@ -1273,6 +1276,258 @@ $("#new-conversation")?.addEventListener("click", () => peopleSearch?.focus());
 peopleSearch?.addEventListener("input", () => {
   if (peopleSearchTimer) window.clearTimeout(peopleSearchTimer);
   peopleSearchTimer = window.setTimeout(() => searchPeople(peopleSearch.value), 250);
+});
+
+// LLAMADAS PRIVADAS DE AUDIO Y VIDEO (WebRTC + señalización Supabase)
+const callDialog = $("#call-dialog");
+const callState = $("#call-state");
+const callTitle = $("#call-title");
+const callSubtitle = $("#call-subtitle");
+const remoteCallVideo = $("#remote-call-video");
+const localCallVideo = $("#local-call-video");
+let callChannel = null;
+let activeCall = null;
+let callPeer = null;
+let callLocalStream = null;
+let callRemoteStream = null;
+let callRingTimer = null;
+let callAudioContext = null;
+let callOscillator = null;
+let queuedIceCandidates = [];
+
+function stopCallAlert() {
+  if (callRingTimer) window.clearInterval(callRingTimer);
+  callRingTimer = null;
+  if (callOscillator) { try { callOscillator.stop(); } catch (_) {} }
+  callOscillator = null;
+  if (callAudioContext) { callAudioContext.close().catch(() => {}); }
+  callAudioContext = null;
+  if (navigator.vibrate) navigator.vibrate(0);
+}
+function startCallAlert() {
+  stopCallAlert();
+  if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 900]);
+  callRingTimer = window.setInterval(() => {
+    if (navigator.vibrate) navigator.vibrate([450, 250, 450]);
+  }, 2400);
+  try {
+    callAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = callAudioContext.createOscillator();
+    const gain = callAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 740;
+    gain.gain.value = 0.07;
+    oscillator.connect(gain);
+    gain.connect(callAudioContext.destination);
+    oscillator.start();
+    callOscillator = oscillator;
+  } catch (error) {
+    console.info("El navegador no permitió reproducir el tono de llamada.", error);
+  }
+}
+function callDisplay(showIncoming = false, showActive = false) {
+  if (callDialog && !callDialog.open) callDialog.showModal();
+  $("#incoming-call-actions").hidden = !showIncoming;
+  $("#active-call-actions").hidden = !showActive;
+}
+async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peerId) {
+  if (!activeCall || !recipientId || !currentUser) return;
+  const { error } = await supabase.from("call_signals").insert({
+    conversation_id: activeCall.conversationId,
+    sender_id: currentUser.id,
+    recipient_id: recipientId,
+    call_id: activeCall.id,
+    signal_type: type,
+    payload
+  });
+  if (error) console.error("No se pudo enviar señal de llamada:", error);
+}
+async function callGetName(userId) {
+  const profiles = await fetchProfiles([userId]);
+  return displayName(profiles.get(userId));
+}
+async function prepareCallPeer() {
+  if (callPeer) callPeer.close();
+  queuedIceCandidates = [];
+  callPeer = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }]
+  });
+  callRemoteStream = new MediaStream();
+  remoteCallVideo.srcObject = callRemoteStream;
+  callPeer.ontrack = (event) => {
+    event.streams[0]?.getTracks().forEach(track => callRemoteStream.addTrack(track));
+    remoteCallVideo.play().catch(() => {});
+  };
+  callPeer.onicecandidate = (event) => {
+    if (event.candidate && activeCall) sendCallSignal("ice", { candidate: event.candidate.toJSON() });
+  };
+  callPeer.onconnectionstatechange = () => {
+    if (!callPeer) return;
+    if (callPeer.connectionState === "connected") {
+      callSubtitle.textContent = "Conectado";
+      stopCallAlert();
+    } else if (["failed", "disconnected"].includes(callPeer.connectionState)) {
+      callSubtitle.textContent = "La conexión se interrumpió. Comprueba la red y los permisos.";
+    }
+  };
+  callLocalStream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: activeCall.video ? { facingMode: "user" } : false
+  });
+  localCallVideo.srcObject = callLocalStream;
+  callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
+}
+async function processCallSignal(signal) {
+  if (!signal || !currentUser) return;
+  if (signal.signal_type === "invite") {
+    if (activeCall) {
+      await supabase.from("call_signals").insert({
+        conversation_id: signal.conversation_id, sender_id: currentUser.id,
+        recipient_id: signal.sender_id, call_id: signal.call_id,
+        signal_type: "reject", payload: { reason: "busy" }
+      });
+      return;
+    }
+    activeCall = {
+      id: signal.call_id, conversationId: signal.conversation_id,
+      peerId: signal.sender_id, video: Boolean(signal.payload?.video), incoming: true
+    };
+    const callerName = await callGetName(signal.sender_id);
+    callTitle.textContent = callerName;
+    callState.textContent = activeCall.video ? "VIDEOLLAMADA ENTRANTE" : "LLAMADA ENTRANTE";
+    callSubtitle.textContent = callerName + " te está llamando";
+    callDisplay(true, false);
+    startCallAlert();
+    return;
+  }
+  if (!activeCall || signal.call_id !== activeCall.id || signal.sender_id !== activeCall.peerId) return;
+  if (signal.signal_type === "accept" && !activeCall.incoming) {
+    stopCallAlert();
+    callSubtitle.textContent = "Conectando audio y video…";
+    try {
+      await prepareCallPeer();
+      const offer = await callPeer.createOffer();
+      await callPeer.setLocalDescription(offer);
+      await sendCallSignal("offer", { description: callPeer.localDescription });
+    } catch (error) {
+      console.error(error);
+      callSubtitle.textContent = "No se pudo acceder al micrófono o cámara. Revisa los permisos del navegador.";
+    }
+  } else if (signal.signal_type === "reject") {
+    callSubtitle.textContent = "La llamada fue rechazada o el usuario está ocupado.";
+    stopCallAlert();
+    window.setTimeout(cleanupCall, 1800);
+  } else if (signal.signal_type === "offer" && activeCall.incoming) {
+    try {
+      await prepareCallPeer();
+      await callPeer.setRemoteDescription(new RTCSessionDescription(signal.payload.description));
+      for (const candidate of queuedIceCandidates) await callPeer.addIceCandidate(candidate);
+      queuedIceCandidates = [];
+      const answer = await callPeer.createAnswer();
+      await callPeer.setLocalDescription(answer);
+      await sendCallSignal("answer", { description: callPeer.localDescription });
+      callSubtitle.textContent = "Conectando…";
+      $("#incoming-call-actions").hidden = true;
+      $("#active-call-actions").hidden = false;
+    } catch (error) {
+      console.error(error);
+      callSubtitle.textContent = "No se pudo conectar la llamada. Revisa los permisos y la red.";
+    }
+  } else if (signal.signal_type === "answer" && callPeer && !activeCall.incoming) {
+    await callPeer.setRemoteDescription(new RTCSessionDescription(signal.payload.description));
+    for (const candidate of queuedIceCandidates) await callPeer.addIceCandidate(candidate);
+    queuedIceCandidates = [];
+    callSubtitle.textContent = "Conectando…";
+  } else if (signal.signal_type === "ice" && callPeer && signal.payload?.candidate) {
+    const candidate = new RTCIceCandidate(signal.payload.candidate);
+    if (callPeer.remoteDescription) await callPeer.addIceCandidate(candidate);
+    else queuedIceCandidates.push(candidate);
+  } else if (signal.signal_type === "hangup") {
+    callSubtitle.textContent = "La otra persona finalizó la llamada.";
+    window.setTimeout(cleanupCall, 1000);
+  }
+}
+function subscribeToCallSignals() {
+  if (callChannel) supabase.removeChannel(callChannel);
+  if (!currentUser) return;
+  callChannel = supabase.channel("private-calls-" + currentUser.id)
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "call_signals",
+      filter: "recipient_id=eq." + currentUser.id
+    }, ({ new: signal }) => processCallSignal(signal).catch(error => console.error("Error procesando llamada:", error)))
+    .subscribe();
+}
+function cleanupCall() {
+  stopCallAlert();
+  if (callPeer) callPeer.close();
+  callPeer = null;
+  if (callLocalStream) callLocalStream.getTracks().forEach(track => track.stop());
+  callLocalStream = null;
+  callRemoteStream = null;
+  queuedIceCandidates = [];
+  if (localCallVideo) localCallVideo.srcObject = null;
+  if (remoteCallVideo) remoteCallVideo.srcObject = null;
+  if (callDialog?.open) callDialog.close();
+  activeCall = null;
+}
+async function beginCall(video) {
+  if (!currentUser || !activeConversation) {
+    showMessage($("#message-status"), "Abre una conversación e inicia sesión para llamar.", true);
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+    showMessage($("#message-status"), "Este navegador no permite llamadas. Abre SOCORA PLAY en Safari o Chrome actualizado y usa HTTPS.", true);
+    return;
+  }
+  const peerId = otherParticipant(activeConversation);
+  activeCall = { id: crypto.randomUUID(), conversationId: activeConversation.id, peerId, video, incoming: false };
+  const peerName = await callGetName(peerId);
+  callTitle.textContent = peerName;
+  callState.textContent = video ? "VIDEOLLAMANDO" : "LLAMANDO";
+  callSubtitle.textContent = "Llamando a " + peerName + "…";
+  callDisplay(false, true);
+  startCallAlert();
+  await sendCallSignal("invite", { video });
+}
+$("#start-audio-call")?.addEventListener("click", () => beginCall(false));
+$("#start-video-call")?.addEventListener("click", () => beginCall(true));
+$("#accept-call")?.addEventListener("click", async () => {
+  if (!activeCall?.incoming) return;
+  stopCallAlert();
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite acceder al micrófono o cámara.");
+    await sendCallSignal("accept");
+    callSubtitle.textContent = "Aceptada. Preparando conexión…";
+    $("#incoming-call-actions").hidden = true;
+    $("#active-call-actions").hidden = false;
+  } catch (error) {
+    callSubtitle.textContent = error.message || "No se pudo aceptar la llamada.";
+  }
+});
+$("#reject-call")?.addEventListener("click", async () => {
+  await sendCallSignal("reject");
+  cleanupCall();
+});
+$("#end-call")?.addEventListener("click", async () => {
+  await sendCallSignal("hangup");
+  cleanupCall();
+});
+$("#toggle-call-mic")?.addEventListener("click", () => {
+  const tracks = callLocalStream?.getAudioTracks() || [];
+  tracks.forEach(track => track.enabled = !track.enabled);
+  $("#toggle-call-mic").textContent = tracks.some(track => track.enabled) ? "Silenciar" : "Activar micrófono";
+});
+$("#toggle-call-camera")?.addEventListener("click", () => {
+  const tracks = callLocalStream?.getVideoTracks() || [];
+  if (!tracks.length) return;
+  tracks.forEach(track => track.enabled = !track.enabled);
+  $("#toggle-call-camera").textContent = tracks.some(track => track.enabled) ? "Apagar cámara" : "Activar cámara";
+});
+callDialog?.addEventListener("close", () => { if (activeCall) cleanupCall(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && activeCall && callSubtitle) {
+    callSubtitle.textContent += "";
+  }
 });
 
 // INICIAR
