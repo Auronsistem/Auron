@@ -204,7 +204,7 @@ authForm?.addEventListener("submit", async (event) => {
     if (waitingForCode) {
       const token = $("#verification-code")?.value.trim() || "";
 
-      if (!/^\d{8}$/.test(token)) {
+      if (!/^\\d{6}$/.test(token)) {
         throw new Error("Escribe el código de 6 dígitos que llegó a tu correo.");
       }
 
