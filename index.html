@@ -119,13 +119,38 @@
           <h2>Mensajes</h2>
         </div>
       </div>
-      <div class="content-panel">
-        <span class="large-icon">☁</span>
-        <h3>Mensajes de SOCORA</h3>
-        <p class="muted">
-          Aquí podrás conversar con otros usuarios.
-        </p>
-        <p class="notice">El sistema de mensajería se conectará en una siguiente fase.</p>
+      <div class="messaging-layout">
+        <aside class="conversation-panel">
+          <div class="conversation-heading">
+            <h3>Conversaciones</h3>
+            <button id="new-conversation" class="button button-outline" type="button">＋ Nuevo</button>
+          </div>
+          <label class="sr-only" for="people-search">Buscar usuarios</label>
+          <input id="people-search" type="search" placeholder="Buscar usuarios..." autocomplete="off">
+          <div id="people-results" class="people-results" hidden></div>
+          <div id="conversation-list" class="conversation-list">
+            <p class="muted">Inicia sesión para ver tus conversaciones.</p>
+          </div>
+        </aside>
+        <section class="chat-panel" aria-label="Conversación seleccionada">
+          <div id="chat-empty" class="chat-empty">
+            <span class="large-icon">☁</span>
+            <h3>Tus mensajes privados</h3>
+            <p class="muted">Elige una conversación o pulsa «Nuevo» para hablar con alguien.</p>
+          </div>
+          <div id="chat-active" hidden>
+            <header class="chat-header">
+              <div><p class="eyebrow">CONVERSACIÓN PRIVADA</p><h3 id="chat-title">Usuario</h3></div>
+            </header>
+            <div id="message-list" class="message-list" aria-live="polite"></div>
+            <form id="message-form" class="message-form">
+              <label class="sr-only" for="message-input">Escribe un mensaje</label>
+              <textarea id="message-input" maxlength="4000" rows="2" placeholder="Escribe un mensaje..." required></textarea>
+              <button class="button" type="submit">Enviar</button>
+            </form>
+            <p id="message-status" class="notice" aria-live="polite"></p>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -244,6 +269,6 @@
     </button>
   </dialog>
 
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>
