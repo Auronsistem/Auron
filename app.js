@@ -1161,7 +1161,7 @@ async function loadMorePeerTubeShorts() {
   }
 }
 
-async async function loadRecommendedShorts() {
+async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
   const communityCards = Array.from(shortsGrid.children);
