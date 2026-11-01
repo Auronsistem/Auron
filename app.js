@@ -1656,7 +1656,7 @@ async function prepareCallPeer() {
 async function processCallSignal(signal) {
   if (!signal || !currentUser) return;
   if (signal.signal_type === "invite") {
-    if (activeCall) {
+    if (activeCall || activeGroupCall) {
       await supabase.from("call_signals").insert({
         conversation_id: signal.conversation_id, sender_id: currentUser.id,
         recipient_id: signal.sender_id, call_id: signal.call_id,
@@ -1941,6 +1941,7 @@ async function processGroupCallSignal(signal) {
   } else if (signal.signal_type === "join") {
     if (!callLocalStream || signal.sender_id === currentUser.id) return;
     if (currentUser.id.localeCompare(signal.sender_id) < 0) await createGroupPeer(signal.sender_id, true);
+    else if (!signal.payload?.ack) await sendGroupCallSignal("join", { ack: true }, signal.sender_id);
   } else if (signal.signal_type === "offer") {
     if (!callLocalStream) return;
     await createGroupPeer(signal.sender_id, false);
