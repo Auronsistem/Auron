@@ -1870,7 +1870,7 @@ function makeGroupTile(userId, name, stream, local = false) {
   let tile = grid.querySelector('[data-user-id="' + userId + '"]');
   if (!tile) {
     tile = document.createElement("div"); tile.className = "group-call-tile"; tile.dataset.userId = userId;
-    const media = document.createElement(local || activeGroupCall?.video ? "video" : "audio");
+    const media = document.createElement(activeGroupCall?.video ? "video" : "audio");
     media.autoplay = true; media.playsInline = true; media.srcObject = stream;
     if (local) media.muted = true;
     const title = document.createElement("strong"); title.textContent = name;
@@ -1933,7 +1933,7 @@ async function processGroupCallSignal(signal) {
   if (!activeGroupCall || signal.call_id !== activeGroupCall.id || signal.group_id !== activeGroupCall.groupId) return;
   if (signal.signal_type === "accept") {
     if (!callLocalStream) return;
-    await createGroupPeer(signal.sender_id, currentUser.id.localeCompare(signal.sender_id) < 0);
+    if (currentUser.id.localeCompare(signal.sender_id) < 0) await createGroupPeer(signal.sender_id, true);
     callSubtitle.textContent = "Participantes conectados: " + (groupCallPeers.size + 1) + " de 6";
   } else if (signal.signal_type === "join") {
     if (!callLocalStream || signal.sender_id === currentUser.id) return;
@@ -2009,6 +2009,7 @@ async function acceptGroupCall() {
     const { data: rows } = await supabase.from("chat_group_members").select("user_id").eq("group_id", activeGroupCall.groupId);
     activeGroupCall.memberIds = (rows || []).map(x => x.user_id).filter(id => id !== currentUser.id).slice(0, 5);
     await sendGroupCallSignal("accept", {}, activeGroupCall.hostId);
+    if (currentUser.id.localeCompare(activeGroupCall.hostId) < 0) await createGroupPeer(activeGroupCall.hostId, true);
     for (const id of activeGroupCall.memberIds) if (id !== activeGroupCall.hostId) await sendGroupCallSignal("join", {}, id);
     // El anfitrión vuelve a anunciar su presencia para negociar el enlace entre pares.
     await sendGroupCallSignal("join", {}, activeGroupCall.hostId);
