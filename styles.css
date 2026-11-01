@@ -28,17 +28,30 @@ body {
   min-height: 100vh;
 }
 
+body:has(#player-dialog[open]) {
+  overflow: hidden;
+}
+
 a {
   color: inherit;
   text-decoration: none;
 }
 
-button, input, textarea, select {
+button,
+input,
+textarea,
+select {
   font: inherit;
 }
 
 button {
   cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* CABECERA */
@@ -52,8 +65,9 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  background: rgba(9, 13, 24, .96);
+  background: rgba(9, 13, 24, 0.96);
   border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
 }
 
 .brand {
@@ -79,16 +93,21 @@ button {
 /* BOTONES */
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: linear-gradient(120deg, var(--primary), #5540d9);
   color: white;
   border: 0;
   padding: 12px 20px;
   border-radius: 10px;
   font-weight: 700;
-  transition: .2s;
+  text-align: center;
+  transition: transform 0.2s, filter 0.2s, border-color 0.2s;
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
   transform: translateY(-2px);
   filter: brightness(1.15);
 }
@@ -115,6 +134,7 @@ button {
   background: #0d1321;
   border-right: 1px solid var(--border);
   z-index: 10;
+  overflow-y: auto;
 }
 
 .side-link {
@@ -130,7 +150,7 @@ button {
   border-radius: 10px;
   text-align: left;
   font-size: 15px;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .side-link span {
@@ -154,6 +174,7 @@ button {
 #main-content {
   margin-left: 230px;
   padding: 95px 35px 60px;
+  min-width: 0;
 }
 
 .hero {
@@ -165,7 +186,7 @@ button {
   border-radius: 22px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 85% 25%, rgba(32,217,237,.2), transparent 30%),
+    radial-gradient(circle at 85% 25%, rgba(32, 217, 237, 0.2), transparent 30%),
     linear-gradient(120deg, #21184b, #101a31 65%, #101e35);
 }
 
@@ -207,6 +228,7 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   margin-bottom: 22px;
 }
 
@@ -228,7 +250,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  transition: .2s;
+  transition: transform 0.2s, border-color 0.2s;
 }
 
 .video-card:hover {
@@ -247,6 +269,7 @@ button {
 
 .video-info {
   padding: 14px;
+  overflow-wrap: anywhere;
 }
 
 .video-info h3 {
@@ -296,55 +319,60 @@ textarea {
 
 .shorts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 17px;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 210px));
+  align-items: start;
+  gap: 20px;
 }
 
 .short-card {
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 13px;
   overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-.short-card img {
+.short-card:hover,
+.short-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--cyan);
+  box-shadow: 0 8px 30px rgba(32, 217, 237, 0.1);
+  outline: none;
+}
+
+.short-card video,
+.short-card img,
+.short-preview {
+  display: block;
   width: 100%;
   aspect-ratio: 9 / 16;
   object-fit: cover;
+  background: #05070d;
 }
 
-.short-card h3 {
+.short-info {
   padding: 12px;
+}
+
+.short-info h3 {
   font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
 }
 
-/* PANELES */
-
-.content-panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  padding: 30px;
-  max-width: 700px;
+.short-info p {
+  font-size: 12px;
 }
 
-.content-panel h3 {
-  margin: 12px 0;
+.short-card .button {
+  border-radius: 0;
+  margin-top: 0;
 }
 
-.large-icon {
-  font-size: 40px;
-  color: var(--cyan);
-}
-
-.notice {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-  margin-top: 12px;
-}
-
-/* VENTANAS */
+/* VENTANA DEL REPRODUCTOR */
 
 dialog {
   width: min(92%, 480px);
@@ -359,12 +387,13 @@ dialog {
 }
 
 dialog::backdrop {
-  background: rgba(0,0,0,.8);
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(5px);
 }
 
 dialog h2 {
   margin-bottom: 12px;
+  overflow-wrap: anywhere;
 }
 
 dialog label {
@@ -395,20 +424,134 @@ dialog label {
   border: 0;
 }
 
+/* REPRODUCTOR DE VIDEO */
+
 #player-dialog {
   width: min(95%, 900px);
+  max-width: 900px;
+  padding: 24px;
+  overflow-x: hidden;
+}
+
+#player-container {
+  min-width: 0;
 }
 
 #player-container iframe {
+  display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 0;
+  background: #000;
+}
+
+#player-container video {
+  display: block;
+  background: #000;
+}
+
+/* REPRODUCTOR VERTICAL DE SHORTS */
+
+.socora-short-player {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.socora-short-player h2 {
+  width: 100%;
+  text-align: center;
+  font-size: 19px;
+}
+
+.socora-short-stage {
+  width: min(100%, 420px);
+  height: min(72vh, 746px);
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.socora-short-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.socora-short-controls {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.socora-short-controls .button {
+  min-width: 145px;
+}
+
+.socora-short-controls .muted {
+  font-size: 13px;
+  text-align: center;
+}
+
+/* PANELES */
+
+.content-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 30px;
+  max-width: 700px;
+}
+
+.content-panel h3 {
+  margin: 12px 0;
+}
+
+.large-icon {
+  font-size: 40px;
+  color: var(--cyan);
+}
+
+.notice {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+/* PANTALLA DE INICIO DE SESIÓN */
+
+#socora-lock {
+  min-height: 100vh;
 }
 
 /* NAVEGACIÓN MÓVIL */
 
 .mobile-nav {
   display: none;
+}
+
+/* ACCESIBILIDAD */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
 }
 
 /* RESPONSIVE */
@@ -422,6 +565,10 @@ dialog label {
     margin-left: 190px;
     padding-left: 22px;
     padding-right: 22px;
+  }
+
+  .shorts-grid {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
   }
 }
 
@@ -457,6 +604,11 @@ dialog label {
     padding-top: 40px;
   }
 
+  .section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .mobile-nav {
     position: fixed;
     z-index: 30;
@@ -469,6 +621,7 @@ dialog label {
     right: 0;
     background: #101827;
     border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
   .mobile-nav a,
@@ -502,9 +655,52 @@ dialog label {
 
   .shorts-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .short-info {
+    padding: 9px;
+  }
+
+  .short-info h3 {
+    font-size: 13px;
   }
 
   dialog {
     padding: 22px;
+  }
+
+  #player-dialog {
+    width: 96%;
+    padding: 14px;
+  }
+
+  .socora-short-stage {
+    width: min(100%, 360px);
+    height: min(66vh, 640px);
+  }
+
+  .socora-short-controls {
+    gap: 8px;
+  }
+
+  .socora-short-controls .button {
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
