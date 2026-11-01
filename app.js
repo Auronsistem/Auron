@@ -326,6 +326,7 @@ function updateHeader() {
 
 async function updateSession(session) {
   currentUser = session?.user || null;
+  loadTranslationSettings();
   updateHeader();
   subscribeToCallSignals();
   subscribeToGroupCallSignals();
@@ -958,17 +959,62 @@ const peerTubeCache = new Map();
 let peerTubeShortsQueue = [];
 let peerTubeShortIndex = -1;
 
+// Preferencias de subtítulos separadas por cuenta
+function translationStorageKey() { return "aureon-translation-settings:" + (currentUser?.id || "guest"); }
+function readTranslationSettings() {
+  try { return JSON.parse(localStorage.getItem(translationStorageKey()) || "{}"); }
+  catch (_) { return {}; }
+}
+function saveTranslationSettings() {
+  const settings = { language: $("#translation-language")?.value || "es", videos: Boolean($("#translate-videos")?.checked), shorts: Boolean($("#translate-shorts")?.checked) };
+  try {
+    localStorage.setItem(translationStorageKey(), JSON.stringify(settings));
+    const status = $("#translation-settings-status");
+    if (status) status.textContent = "Preferencias guardadas para esta cuenta en este navegador.";
+  } catch (_) {
+    const status = $("#translation-settings-status");
+    if (status) status.textContent = "No se pudieron guardar las preferencias.";
+  }
+}
+function loadTranslationSettings() {
+  const settings = readTranslationSettings();
+  if ($("#translation-language")) $("#translation-language").value = settings.language || "es";
+  if ($("#translate-videos")) $("#translate-videos").checked = Boolean(settings.videos);
+  if ($("#translate-shorts")) $("#translate-shorts").checked = Boolean(settings.shorts);
+  const status = $("#translation-settings-status");
+  if (status) status.textContent = "";
+}
+["#translation-language", "#translate-videos", "#translate-shorts"].forEach(selector => $(selector)?.addEventListener("change", saveTranslationSettings));
+function applySubtitlePreference(embedUrl, kind) {
+  const settings = readTranslationSettings();
+  if (!(kind === "short" ? settings.shorts : settings.videos) || !embedUrl) return embedUrl;
+  try { const url = new URL(embedUrl); url.searchParams.set("subtitle", settings.language || "es"); return url.href; }
+  catch (_) { return embedUrl; }
+}
+
 function normalizePeerTubeVideo(video) {
+  const pageUrl = video.url || "";
+  let embedPath = video.embedPath || "";
+  if (!embedPath && pageUrl) {
+    try {
+      const parsed = new URL(pageUrl);
+      const id = video.uuid || parsed.pathname.match(/(?:videos\/watch|w)\/([^/?#]+)/)?.[1];
+      if (id) embedPath = new URL("/videos/embed/" + encodeURIComponent(id), parsed.origin).href;
+    } catch (_) {}
+  }
+  if (embedPath && pageUrl && !/^https?:\/\//i.test(embedPath)) {
+    try { embedPath = new URL(embedPath, pageUrl).href; } catch (_) {}
+  }
   const thumbnail = video.thumbnailPath
-    ? (video.thumbnailPath.startsWith("http") ? video.thumbnailPath : new URL(video.thumbnailPath, video.url || "https://peertube.tv").href)
+    ? (video.thumbnailPath.startsWith("http") ? video.thumbnailPath : new URL(video.thumbnailPath, pageUrl || "https://peertube.tv").href)
     : "";
   return {
-    id: String(video.uuid || video.id || video.url || ""),
+    id: String(video.uuid || video.id || pageUrl || ""),
     title: video.name || video.title || "Video de PeerTube",
     thumbnail,
     channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "PeerTube",
-    url: video.url || "",
-    embedPath: video.embedPath || "",
+    url: pageUrl,
+    embedPath,
     platform: "PeerTube"
   };
 }
@@ -1222,9 +1268,7 @@ function openPeerTubeShortAt(index) {
 
   const frame = document.createElement("iframe");
   frame.className = "aureon-short-frame";
-  frame.src = video.embedPath
-    ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href)
-    : video.url;
+  frame.src = applySubtitlePreference(video.embedPath || video.url, "short");
   frame.title = video.title || "Short";
   frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
   frame.allowFullscreen = true;
@@ -1318,9 +1362,7 @@ function openPeerTubeVideo(video) {
   const heading = document.createElement("h2");
   heading.textContent = video.title || "Video de PeerTube";
   const frame = document.createElement("iframe");
-  frame.src = video.embedPath
-    ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href)
-    : video.url;
+  frame.src = applySubtitlePreference(video.embedPath || video.url, "video");
   frame.title = video.title || "Video de PeerTube";
   frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   frame.allowFullscreen = true;
