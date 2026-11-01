@@ -158,7 +158,7 @@ function updateAuthForm() {
       }
       reset.disabled = true;
       const result = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin
+        redirectTo: window.location.origin + "/Auron/"
       });
       reset.disabled = false;
       showMessage($("#auth-message"), result.error
