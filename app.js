@@ -1,66 +1,68 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// CONEXIÓN CON SUPABASE
+// AUREON / SOCORA PLAY
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
 const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// FUNCIÓN DE SUPABASE PARA BUSCAR EN YOUTUBE
 const YOUTUBE_FUNCTION = "smooth-action";
 
-// ELEMENTOS
-const authDialog = document.querySelector("#auth-dialog");
-const authForm = document.querySelector("#demo-auth");
-const authMessage = document.querySelector("#auth-message");
-const authTitle = document.querySelector("#auth-title");
-const toggleAuth = document.querySelector("#toggle-auth");
-const uploadDialog = document.querySelector("#upload-dialog");
-const uploadForm = document.querySelector("#upload-form");
-const uploadMessage = document.querySelector("#upload-message");
-const playerDialog = document.querySelector("#player-dialog");
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = (selector) => document.querySelector(selector);
+
+const authDialog = $("#auth-dialog");
+const authForm = $("#demo-auth");
+const authTitle = $("#auth-title");
+const toggleAuth = $("#toggle-auth");
+const uploadDialog = $("#upload-dialog");
+const uploadForm = $("#upload-form");
+const playerDialog = $("#player-dialog");
 
 let currentUser = null;
 let authMode = "login";
 let waitingForCode = false;
 let pendingEmail = "";
-let pendingPassword = "";
 
-// FUNCIONES DE MENSAJES
-function showMessage(element, message, error = false) {
+function showMessage(element, message, isError = false) {
   if (!element) return;
+  element.textContent = message || "";
+  element.style.color = isError ? "#ff7777" : "#20d9ed";
+}
 
-  element.textContent = message;
-  element.style.color = error ? "#ff7777" : "#20d9ed";
+function showEmpty(container, message) {
+  if (!container) return;
+  const p = document.createElement("p");
+  p.className = "muted";
+  p.textContent = message;
+  container.replaceChildren(p);
 }
 
 function openAuth() {
-  if (!authDialog) return;
-
-  authDialog.showModal();
-  showMessage(authMessage, "");
+  if (!authDialog) {
+    alert("No se encontró el formulario de inicio de sesión.");
+    return;
+  }
+  if (!authDialog.open) authDialog.showModal();
+  showMessage($("#auth-message"), "");
 }
 
-document.querySelector("#open-auth")?.addEventListener("click", openAuth);
+$("#open-auth")?.addEventListener("click", openAuth);
 
-// PANTALLA DE BLOQUEO
 function createLockScreen() {
-  if (document.querySelector("#socora-lock")) return;
+  if ($("#socora-lock")) return;
 
-  const lock = document.createElement("div");
-  lock.id = "socora-lock";
-
-  Object.assign(lock.style, {
+  const overlay = document.createElement("div");
+  overlay.id = "socora-lock";
+  Object.assign(overlay.style, {
     position: "fixed",
     inset: "0",
     zIndex: "1000",
     background: "#090d18",
+    color: "white",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     textAlign: "center",
-    padding: "25px"
+    padding: "24px"
   });
 
   const content = document.createElement("div");
@@ -68,86 +70,66 @@ function createLockScreen() {
 
   const logo = document.createElement("h1");
   logo.textContent = "▶ SOCORA PLAY";
-  logo.style.fontSize = "36px";
   logo.style.color = "#20d9ed";
 
-  const title = document.createElement("h2");
-  title.textContent = "Tu comunidad gaming te espera";
-  title.style.margin = "25px 0 12px";
-  title.style.color = "white";
+  const heading = document.createElement("h2");
+  heading.textContent = "Tu comunidad gaming te espera";
 
   const description = document.createElement("p");
   description.textContent = "Inicia sesión o crea una cuenta para entrar.";
   description.style.color = "#9ba8bd";
 
-  const loginButton = document.createElement("button");
-  loginButton.textContent = "Iniciar sesión";
-  loginButton.className = "button";
-  loginButton.style.margin = "25px 8px 0";
-  loginButton.addEventListener("click", () => {
+  const login = document.createElement("button");
+  login.className = "button";
+  login.textContent = "Iniciar sesión";
+  login.addEventListener("click", () => {
     authMode = "login";
     updateAuthForm();
     openAuth();
   });
 
-  const registerButton = document.createElement("button");
-  registerButton.textContent = "Crear cuenta";
-  registerButton.className = "button button-outline";
-  registerButton.style.margin = "25px 8px 0";
-  registerButton.addEventListener("click", () => {
+  const register = document.createElement("button");
+  register.className = "button button-outline";
+  register.textContent = "Crear cuenta";
+  register.style.marginLeft = "8px";
+  register.addEventListener("click", () => {
     authMode = "register";
     updateAuthForm();
     openAuth();
   });
 
-  content.append(logo, title, description, loginButton, registerButton);
-  lock.append(content);
-  document.body.append(lock);
+  content.append(logo, heading, description, login, register);
+  overlay.append(content);
+  document.body.append(overlay);
 }
 
 function removeLockScreen() {
-  document.querySelector("#socora-lock")?.remove();
+  $("#socora-lock")?.remove();
 }
 
-// FORMULARIO DE AUTENTICACIÓN
 function updateAuthForm() {
+  if (!authForm || !authTitle || !toggleAuth) return;
   waitingForCode = false;
-
   authTitle.textContent =
     authMode === "login" ? "Iniciar sesión" : "Crear cuenta";
 
   authForm.innerHTML = `
     <label for="email">Correo electrónico</label>
-    <input
-      id="email"
-      type="email"
-      placeholder="tu@correo.com"
-      autocomplete="email"
-      required
-    >
-
+    <input id="email" type="email" autocomplete="email"
+      placeholder="tu@correo.com" required>
     <label for="password">Contraseña</label>
-    <input
-      id="password"
-      type="password"
-      placeholder="Mínimo 8 caracteres"
-      minlength="8"
+    <input id="password" type="password" minlength="8"
       autocomplete="${authMode === "login" ? "current-password" : "new-password"}"
-      required
-    >
-
+      placeholder="Mínimo 8 caracteres" required>
     <button class="button full" type="submit">
       ${authMode === "login" ? "Iniciar sesión" : "Enviar código"}
     </button>
-
     <p id="auth-message" class="notice" aria-live="polite"></p>
   `;
 
-  toggleAuth.textContent =
-    authMode === "login"
-      ? "¿No tienes cuenta? Crear cuenta"
-      : "¿Ya tienes cuenta? Iniciar sesión";
-
+  toggleAuth.textContent = authMode === "login"
+    ? "¿No tienes cuenta? Crear cuenta"
+    : "¿Ya tienes cuenta? Iniciar sesión";
   toggleAuth.style.display = "block";
 }
 
@@ -157,52 +139,34 @@ toggleAuth?.addEventListener("click", () => {
 });
 
 function showCodeForm() {
+  if (!authForm || !authTitle || !toggleAuth) return;
   waitingForCode = true;
-
   authTitle.textContent = "Verifica tu correo";
 
+  const safeEmail = pendingEmail.replace(/[&<>"']/g, "");
   authForm.innerHTML = `
-    <p class="muted">
-      Te enviamos un código de 8 dígitos a:
-      <strong>${pendingEmail.replace(/[&<>"']/g, "")}</strong>
+    <p class="muted">Te enviamos un código de 8 dígitos a:
+      <strong>${safeEmail}</strong>
     </p>
-
     <label for="verification-code">Código de verificación</label>
-    <input
-      id="verification-code"
-      type="text"
-      inputmode="numeric"
-      maxlength="8"
-      pattern="[0-9]{8}"
-      placeholder="12345678"
-      autocomplete="one-time-code"
-      required
-    >
-
-    <button class="button full" type="submit">
-      Verificar cuenta
-    </button>
-
+    <input id="verification-code" type="text" inputmode="numeric"
+      maxlength="8" pattern="[0-9]{8}" autocomplete="one-time-code"
+      placeholder="Código de 8 dígitos" required>
+    <button class="button full" type="submit">Verificar cuenta</button>
     <p id="auth-message" class="notice" aria-live="polite"></p>
   `;
-
   toggleAuth.style.display = "none";
 }
 
-// REGISTRO E INICIO DE SESIÓN
 authForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const message = document.querySelector("#auth-message");
-  const submitButton = authForm.querySelector('button[type="submit"]');
-
-  submitButton.disabled = true;
-  showMessage(message, "Procesando...");
+  const button = authForm.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+  showMessage($("#auth-message"), "Procesando...");
 
   try {
     if (waitingForCode) {
-      const code = document.querySelector("#verification-code").value.trim();
-
+      const code = $("#verification-code")?.value.trim() || "";
       if (!/^\d{8}$/.test(code)) {
         throw new Error("Escribe el código de 8 dígitos.");
       }
@@ -212,23 +176,14 @@ authForm?.addEventListener("submit", async (event) => {
         token: code,
         type: "signup"
       });
-
       if (error) throw error;
 
-      const { error: passwordError } = await supabase.auth.updateUser({
-        password: pendingPassword
-      });
-
-      if (passwordError) throw passwordError;
-
-      pendingPassword = "";
-      authDialog.close();
-      showMessage(uploadMessage, "");
+      if (authDialog?.open) authDialog.close();
       return;
     }
 
-    const email = document.querySelector("#email").value.trim();
-    const password = document.querySelector("#password").value;
+    const email = $("#email")?.value.trim() || "";
+    const password = $("#password")?.value || "";
 
     if (password.length < 8) {
       throw new Error("La contraseña debe tener al menos 8 caracteres.");
@@ -239,73 +194,60 @@ authForm?.addEventListener("submit", async (event) => {
         email,
         password
       });
-
       if (error) throw error;
-
-      authDialog.close();
+      if (authDialog?.open) authDialog.close();
       return;
     }
 
     pendingEmail = email;
-    pendingPassword = password;
-
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password
     });
-
     if (error) throw error;
 
-    showCodeForm();
-    showMessage(
-      document.querySelector("#auth-message"),
-      "Código enviado. Revisa tu correo."
-    );
-
+    if (data?.user && !data?.session) {
+      showCodeForm();
+      showMessage($("#auth-message"), "Revisa tu correo e introduce el código.");
+    } else if (authDialog?.open) {
+      authDialog.close();
+    }
   } catch (error) {
     showMessage(
-      document.querySelector("#auth-message"),
-      error.message || "Ocurrió un error.",
+      $("#auth-message"),
+      error?.message || "Ocurrió un error.",
       true
     );
   } finally {
-    const button = authForm.querySelector('button[type="submit"]');
-    if (button) button.disabled = false;
+    const activeButton = authForm.querySelector('button[type="submit"]');
+    if (activeButton) activeButton.disabled = false;
   }
 });
 
-// CERRAR SESIÓN
 async function logout() {
   const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    alert(error.message);
-  }
+  if (error) alert(`No se pudo cerrar sesión: ${error.message}`);
 }
 
 function updateHeader() {
-  const headerActions = document.querySelector(".header-actions");
-  if (!headerActions) return;
+  const actions = $(".header-actions");
+  if (!actions) return;
+  actions.replaceChildren();
 
-  headerActions.replaceChildren();
+  const button = document.createElement("button");
+  button.className = "button button-outline";
 
   if (currentUser) {
-    const logoutButton = document.createElement("button");
-    logoutButton.className = "button button-outline";
-    logoutButton.textContent = "Cerrar sesión";
-    logoutButton.addEventListener("click", logout);
-    headerActions.append(logoutButton);
+    button.textContent = "Cerrar sesión";
+    button.addEventListener("click", logout);
   } else {
-    const loginButton = document.createElement("button");
-    loginButton.id = "open-auth";
-    loginButton.className = "button button-outline";
-    loginButton.textContent = "Iniciar sesión";
-    loginButton.addEventListener("click", openAuth);
-    headerActions.append(loginButton);
+    button.textContent = "Iniciar sesión";
+    button.addEventListener("click", openAuth);
   }
+
+  actions.append(button);
 }
 
-// CONTROL DE SESIÓN
 async function updateSession(session) {
   currentUser = session?.user || null;
 
@@ -316,63 +258,63 @@ async function updateSession(session) {
   } else {
     createLockScreen();
     updateHeader();
-
-    document.querySelector("#video-grid")?.replaceChildren();
-    document.querySelector("#shorts-grid")?.replaceChildren();
+    $("#video-grid")?.replaceChildren();
+    $("#shorts-grid")?.replaceChildren();
   }
 }
 
 supabase.auth.onAuthStateChange((_event, session) => {
-  setTimeout(() => updateSession(session), 0);
+  queueMicrotask(() => updateSession(session));
 });
 
-// PUBLICAR VIDEOS
-document.querySelector("#open-upload")?.addEventListener("click", openUpload);
-document.querySelector("#mobile-upload")?.addEventListener("click", openUpload);
-
+// SUBIR VIDEOS
 function openUpload() {
   if (!currentUser) {
     openAuth();
     return;
   }
 
-  uploadDialog.showModal();
-  showMessage(uploadMessage, "");
+  if (uploadDialog && !uploadDialog.open) uploadDialog.showModal();
+  showMessage($("#upload-message"), "");
 }
+
+$("#open-upload")?.addEventListener("click", openUpload);
+$("#mobile-upload")?.addEventListener("click", openUpload);
 
 uploadForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  const message = $("#upload-message");
   if (!currentUser) {
-    showMessage(uploadMessage, "Inicia sesión primero.", true);
+    showMessage(message, "Inicia sesión primero.", true);
     return;
   }
 
-  const title = document.querySelector("#upload-title").value.trim();
-  const description = document.querySelector("#upload-description").value.trim();
-  const type = document.querySelector("#upload-type").value;
-  const file = document.querySelector("#upload-file").files[0];
+  const title = $("#upload-title")?.value.trim() || "";
+  const description = $("#upload-description")?.value.trim() || "";
+  const type = $("#upload-type")?.value || "video";
+  const file = $("#upload-file")?.files?.[0];
   const button = uploadForm.querySelector('button[type="submit"]');
 
-  if (!file) {
-    showMessage(uploadMessage, "Selecciona un video.", true);
+  if (!title) {
+    showMessage(message, "Escribe un título para el video.", true);
     return;
   }
 
-  if (!file.type.startsWith("video/")) {
-    showMessage(uploadMessage, "El archivo debe ser un video.", true);
+  if (!file || !file.type.startsWith("video/")) {
+    showMessage(message, "Selecciona un archivo de video válido.", true);
     return;
   }
 
   if (file.size > 100 * 1024 * 1024) {
-    showMessage(uploadMessage, "El video no puede superar 100 MB.", true);
+    showMessage(message, "El video no puede superar 100 MB.", true);
     return;
   }
 
-  button.disabled = true;
-  showMessage(uploadMessage, "Subiendo video...");
+  if (button) button.disabled = true;
+  showMessage(message, "Subiendo video...");
 
-  let storagePath = null;
+  let storagePath = "";
 
   try {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -387,47 +329,39 @@ uploadForm?.addEventListener("submit", async (event) => {
 
     if (storageError) throw storageError;
 
-    const { error: databaseError } = await supabase
-      .from("videos")
-      .insert({
-        user_id: currentUser.id,
-        title,
-        description,
-        video_type: type,
-        storage_path: storagePath,
-        status: "pending",
-        published: false
-      });
+    const { error: insertError } = await supabase.from("videos").insert({
+      user_id: currentUser.id,
+      title,
+      description,
+      video_type: type,
+      storage_path: storagePath,
+      status: "pending",
+      published: false
+    });
 
-    if (databaseError) {
+    if (insertError) {
       await supabase.storage.from("videos").remove([storagePath]);
-      throw databaseError;
+      throw insertError;
     }
 
     uploadForm.reset();
-
-    showMessage(
-      uploadMessage,
-      "¡Enviado! Tu publicación está pendiente de revisión."
-    );
-
+    showMessage(message, "¡Enviado! Tu video quedó pendiente de revisión.");
     await loadVideos();
-
   } catch (error) {
     showMessage(
-      uploadMessage,
-      error.message || "No se pudo publicar el video.",
+      message,
+      error?.message || "No se pudo subir el video.",
       true
     );
   } finally {
-    button.disabled = false;
+    if (button) button.disabled = false;
   }
 });
 
-// CARGAR VIDEOS APROBADOS Y PROPIOS
+// CARGAR VIDEOS
 async function loadVideos() {
-  const videoGrid = document.querySelector("#video-grid");
-  const shortsGrid = document.querySelector("#shorts-grid");
+  const videoGrid = $("#video-grid");
+  const shortsGrid = $("#shorts-grid");
 
   if (!videoGrid || !shortsGrid || !currentUser) return;
 
@@ -440,26 +374,20 @@ async function loadVideos() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    showEmpty(videoGrid, "No se pudieron cargar los videos.");
+    showEmpty(videoGrid, `Error al cargar videos: ${error.message}`);
+    showEmpty(shortsGrid, "No se pudieron cargar los Shorts.");
     return;
   }
 
-  const visibleVideos = (data || []).filter((video) => {
-    return (
-      (video.status === "approved" && video.published === true) ||
-      video.user_id === currentUser.id
-    );
-  });
-
-  const normalVideos = visibleVideos.filter(
-    (video) => video.video_type === "video"
+  const visible = (data || []).filter((video) =>
+    (video.status === "approved" && video.published === true) ||
+    video.user_id === currentUser.id
   );
 
-  const shorts = visibleVideos.filter(
-    (video) => video.video_type === "short"
-  );
+  const videos = visible.filter((video) => video.video_type === "video");
+  const shorts = visible.filter((video) => video.video_type === "short");
 
-  if (!normalVideos.length) {
+  if (!videos.length) {
     showEmpty(videoGrid, "Todavía no hay videos publicados.");
   }
 
@@ -467,7 +395,7 @@ async function loadVideos() {
     showEmpty(shortsGrid, "Todavía no hay Shorts publicados.");
   }
 
-  for (const video of normalVideos) {
+  for (const video of videos) {
     const card = await createVideoCard(video, false);
     if (card) videoGrid.append(card);
   }
@@ -476,15 +404,6 @@ async function loadVideos() {
     const card = await createVideoCard(video, true);
     if (card) shortsGrid.append(card);
   }
-}
-
-function showEmpty(container, message) {
-  if (!container) return;
-
-  const paragraph = document.createElement("p");
-  paragraph.className = "muted";
-  paragraph.textContent = message;
-  container.append(paragraph);
 }
 
 async function createVideoCard(video, isShort) {
@@ -498,11 +417,12 @@ async function createVideoCard(video, isShort) {
   card.className = isShort ? "short-card" : "video-card";
 
   const media = document.createElement("video");
-  media.className = isShort ? "" : "video-thumbnail";
   media.src = data.signedUrl;
   media.preload = "metadata";
   media.muted = true;
   media.playsInline = true;
+
+  if (!isShort) media.className = "video-thumbnail";
 
   const info = document.createElement("div");
   info.className = isShort ? "" : "video-info";
@@ -518,20 +438,19 @@ async function createVideoCard(video, isShort) {
 
   info.append(heading, status);
 
-  const playButton = document.createElement("button");
-  playButton.className = "button full";
-  playButton.textContent = "Reproducir";
-  playButton.addEventListener("click", () => {
+  const play = document.createElement("button");
+  play.className = "button full";
+  play.textContent = "Reproducir";
+  play.addEventListener("click", () => {
     openUploadedVideo(data.signedUrl, video.title);
   });
 
-  card.append(media, info, playButton);
+  card.append(media, info, play);
   return card;
 }
 
-// REPRODUCTOR DE VIDEOS SUBIDOS
 function openUploadedVideo(url, title) {
-  const container = document.querySelector("#player-container");
+  const container = $("#player-container");
   if (!container || !playerDialog) return;
 
   container.replaceChildren();
@@ -548,23 +467,22 @@ function openUploadedVideo(url, title) {
   player.style.marginTop = "15px";
 
   container.append(heading, player);
-  playerDialog.showModal();
+  if (!playerDialog.open) playerDialog.showModal();
 }
 
 playerDialog?.addEventListener("close", () => {
-  const player = document.querySelector("#player-container video");
+  const player = $("#player-container video");
+  if (!player) return;
 
-  if (player) {
-    player.pause();
-    player.removeAttribute("src");
-    player.load();
-  }
+  player.pause();
+  player.removeAttribute("src");
+  player.load();
 });
 
-// BÚSQUEDA DE YOUTUBE
-const youtubeForm = document.querySelector("#youtube-search-form");
-const youtubeInput = document.querySelector("#youtube-search");
-const youtubeResults = document.querySelector("#youtube-results");
+ // BÚSQUEDA DE YOUTUBE
+const youtubeForm = $("#youtube-search-form");
+const youtubeInput = $("#youtube-search");
+const youtubeResults = $("#youtube-results");
 
 youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -573,9 +491,8 @@ youtubeForm?.addEventListener("submit", async (event) => {
 
   const query = youtubeInput.value.trim();
 
-  if (query.length < 2) {
-    youtubeResults.replaceChildren();
-    showEmpty(youtubeResults, "Escribe al menos 2 caracteres para buscar.");
+  if (query.length < 2 || query.length > 100) {
+    showEmpty(youtubeResults, "Escribe entre 2 y 100 caracteres para buscar.");
     return;
   }
 
@@ -588,22 +505,17 @@ youtubeForm?.addEventListener("submit", async (event) => {
   const button = youtubeForm.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
 
-  youtubeResults.replaceChildren();
-  showEmpty(youtubeResults, "Buscando videos y canales...");
+  showEmpty(youtubeResults, "Buscando en YouTube...");
 
   try {
-    // invoke utiliza la sesión iniciada del usuario.
-    // No es necesario copiar ni mostrar el token.
     const { data, error } = await supabase.functions.invoke(
       YOUTUBE_FUNCTION,
-      {
-        body: { query }
-      }
+      { body: { query } }
     );
 
     if (error) {
       throw new Error(
-        "No se pudo conectar con el buscador. Comprueba la función de Supabase."
+        "No se pudo conectar con la función de búsqueda de Supabase."
       );
     }
 
@@ -617,45 +529,42 @@ youtubeForm?.addEventListener("submit", async (event) => {
     const channels = Array.isArray(data.channels) ? data.channels : [];
 
     if (!videos.length && !channels.length) {
-      showEmpty(youtubeResults, "No encontramos resultados para esa búsqueda.");
+      showEmpty(youtubeResults, "No encontramos resultados.");
       return;
     }
 
     if (videos.length) {
       const heading = document.createElement("h2");
-      heading.textContent = "Videos";
       heading.className = "section-title";
+      heading.textContent = "Videos";
       youtubeResults.append(heading);
 
-      for (const video of videos) {
+      videos.forEach((video) => {
         youtubeResults.append(createYouTubeVideoCard(video));
-      }
+      });
     }
 
     if (channels.length) {
       const heading = document.createElement("h2");
-      heading.textContent = "Canales";
       heading.className = "section-title";
+      heading.textContent = "Canales";
       youtubeResults.append(heading);
 
-      for (const channel of channels) {
+      channels.forEach((channel) => {
         youtubeResults.append(createYouTubeChannelCard(channel));
-      }
+      });
     }
-
   } catch (error) {
     console.error("Error en búsqueda de YouTube:", error);
-    youtubeResults.replaceChildren();
     showEmpty(
       youtubeResults,
-      error.message || "Ocurrió un error al buscar en YouTube."
+      error?.message || "Ocurrió un error al buscar en YouTube."
     );
   } finally {
     if (button) button.disabled = false;
   }
 });
 
-// TARJETA DE VIDEO DE YOUTUBE
 function createYouTubeVideoCard(video) {
   const card = document.createElement("article");
   card.className = "video-card";
@@ -672,8 +581,8 @@ function createYouTubeVideoCard(video) {
   const info = document.createElement("div");
   info.className = "video-info";
 
-  const title = document.createElement("h3");
-  title.textContent = video.title || "Video sin título";
+  const heading = document.createElement("h3");
+  heading.textContent = video.title || "Video sin título";
 
   const channel = document.createElement("p");
   channel.className = "muted";
@@ -682,17 +591,17 @@ function createYouTubeVideoCard(video) {
   const link = document.createElement("a");
   link.className = "button full";
   link.textContent = "Ver en YouTube";
-  link.href = video.url;
+  link.href = video.url ||
+    `https://www.youtube.com/watch?v=${encodeURIComponent(video.id || "")}`;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
 
-  info.append(title, channel, link);
+  info.append(heading, channel, link);
   card.append(info);
 
   return card;
 }
 
-// TARJETA DE CANAL DE YOUTUBE
 function createYouTubeChannelCard(channel) {
   const card = document.createElement("article");
   card.className = "video-card";
@@ -710,8 +619,8 @@ function createYouTubeChannelCard(channel) {
   const info = document.createElement("div");
   info.className = "video-info";
 
-  const title = document.createElement("h3");
-  title.textContent = channel.title || "Canal sin nombre";
+  const heading = document.createElement("h3");
+  heading.textContent = channel.title || "Canal sin nombre";
 
   const description = document.createElement("p");
   description.className = "muted";
@@ -720,30 +629,35 @@ function createYouTubeChannelCard(channel) {
   const link = document.createElement("a");
   link.className = "button full";
   link.textContent = "Visitar canal";
-  link.href = channel.url;
+  link.href = channel.url ||
+    `https://www.youtube.com/channel/${encodeURIComponent(channel.id || "")}`;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
 
-  info.append(title, description, link);
+  info.append(heading, description, link);
   card.append(info);
 
   return card;
 }
 
-// MENSAJES
-// La mensajería todavía necesita tablas, políticas y funciones en tiempo real.
-
-// INICIO
+// INICIO DE LA APLICACIÓN
 async function initialize() {
   createLockScreen();
 
-  const { data, error } = await supabase.auth.getSession();
+  try {
+    const { data, error } = await supabase.auth.getSession();
 
-  if (error) {
-    console.error("Error de sesión:", error.message);
+    if (error) throw error;
+
+    await updateSession(data?.session || null);
+  } catch (error) {
+    console.error("Error al iniciar Supabase:", error);
+    showMessage(
+      $("#auth-message"),
+      "No se pudo conectar con Supabase. Revisa la URL y la clave pública.",
+      true
+    );
   }
-
-  await updateSession(data?.session || null);
 }
 
 initialize();
