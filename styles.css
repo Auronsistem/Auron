@@ -798,3 +798,5 @@ select:focus-visible {
 .group-sender { display:block; color:var(--cyan); font-size:12px; margin-bottom:5px; }
 .group-conversation { border-color:#3a326e; }
 @media(max-width:650px) { .conversation-tools { flex-wrap:wrap; } }
+
+.group-call-grid{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.group-call-tile{min-width:0;background:#101827;border:1px solid var(--border);border-radius:12px;overflow:hidden}.group-call-tile video,.group-call-tile audio{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#02040a}.group-call-tile strong{display:block;padding:7px 9px;font-size:12px;text-align:left}
