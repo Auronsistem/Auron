@@ -413,6 +413,10 @@ authForm?.addEventListener("submit", async (event) => {
       if (password.length < 8) {
         throw new Error("La contraseña debe tener al menos 8 caracteres.");
       }
+      if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) ||
+          !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        throw new Error("La contraseña debe incluir al menos una minúscula, una mayúscula, un número y un símbolo (por ejemplo, ! o @).");
+      }
       if (password !== confirmation) {
         throw new Error("Las contraseñas no coinciden.");
       }
