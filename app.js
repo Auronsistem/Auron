@@ -979,7 +979,7 @@ async function searchPeerTube(query) {
   if (cached && cached.expiresAt > Date.now()) return cached.videos;
   const url = new URL(PEERTUBE_SEARCH_URL);
   url.searchParams.set("search", query);
-  url.searchParams.set("count", "30");
+  url.searchParams.set("count", "20");
   url.searchParams.set("sort", "-match");
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
@@ -994,7 +994,19 @@ async function loadRecommendedYouTube() {
   if (!youtubeResults) return;
   showEmpty(youtubeResults, "Cargando recomendaciones de PeerTube...");
   try {
-    const videos = await searchPeerTube(PEERTUBE_DEFAULT_QUERY);
+    const categories = [
+      "Minecraft español", "ciencia curiosidades", "fútbol mejores jugadas",
+      "humor memes", "música y covers", "animales naturaleza",
+      "tecnología gadgets", "videojuegos variados", "cocina fácil", "Roblox español"
+    ];
+    const batches = await Promise.all(categories.map(q => searchPeerTube(q).catch(() => [])));
+    const seen = new Set();
+    const videos = batches.flat().filter(video => {
+      const key = video.id || video.url;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     youtubeResults.replaceChildren();
     const heading = document.createElement("p");
     heading.className = "muted";
@@ -1010,7 +1022,7 @@ async function loadRecommendedYouTube() {
         const recHeading = document.createElement("h3");
         recHeading.textContent = "Recomendados de PeerTube";
         videoGrid.append(recHeading);
-        videos.slice(0, 8).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
+        videos.slice(0, 24).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
       }
       if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
         const communityHeading = document.createElement("h3");
@@ -1032,10 +1044,8 @@ async function loadRecommendedShorts() {
     // Rotamos categorías para que no todo sea Clash Royale/Roblox.
     const categories = [
       "Minecraft español", "animales curiosos", "ciencia experimentos",
-      "fútbol jugadas", "humor memes", "música covers", "dibujos animación",
-      "videojuegos indie", "Roblox español", "Clash Royale", "cocina fácil",
-      "tecnología curiosidades", "naturaleza paisajes", "parkour deportes",
-      "historias misterios", "manualidades trucos"
+      "fútbol jugadas", "humor memes", "música covers", "Roblox español",
+      "Clash Royale", "cocina fácil", "tecnología curiosidades"
     ];
     const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short").catch(() => [])));
     const seen = new Set();
