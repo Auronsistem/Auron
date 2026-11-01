@@ -973,13 +973,14 @@ function normalizePeerTubeVideo(video) {
   };
 }
 
-async function searchPeerTube(query) {
-  const key = query.trim().toLowerCase();
+async function searchPeerTube(query, start = 0) {
+  const key = query.trim().toLowerCase() + "::" + start;
   const cached = peerTubeCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.videos;
   const url = new URL(PEERTUBE_SEARCH_URL);
   url.searchParams.set("search", query);
   url.searchParams.set("count", "20");
+  url.searchParams.set("start", String(start));
   url.searchParams.set("sort", "-match");
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
@@ -1036,68 +1037,112 @@ async function loadRecommendedYouTube() {
   }
 }
 
+let peerTubeShortOffset = 0;
+let peerTubeShortSeen = new Set();
+let peerTubeShortLoading = false;
+
+function renderPeerTubeShortCard(video) {
+  const card = document.createElement("article");
+  card.className = "short-card youtube-short-card";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", "Ver Short: " + (video.title || "clip"));
+  const image = document.createElement("img");
+  image.src = video.thumbnail || "";
+  image.alt = "";
+  image.loading = "lazy";
+  image.onerror = () => { image.style.display = "none"; };
+  const info = document.createElement("div");
+  info.className = "short-info";
+  const heading = document.createElement("h3");
+  heading.textContent = video.title || "Short";
+  const channel = document.createElement("p");
+  channel.className = "muted";
+  channel.textContent = (video.channelTitle || "Creador") + " · PeerTube";
+  info.append(heading, channel);
+  card.append(image, info);
+  const open = () => openPeerTubeShortAt(peerTubeShortsQueue.indexOf(video));
+  card.addEventListener("click", open);
+  card.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+  });
+  return card;
+}
+
+async function loadMorePeerTubeShorts() {
+  const shortsGrid = $("#shorts-grid");
+  const loadMore = $("#load-more-shorts");
+  if (!shortsGrid || peerTubeShortLoading) return;
+  peerTubeShortLoading = true;
+  if (loadMore) { loadMore.disabled = true; loadMore.textContent = "Cargando Shorts…"; }
+  const categories = [
+    "Minecraft español", "animales curiosos", "ciencia experimentos",
+    "fútbol jugadas", "humor memes", "música covers", "Roblox español",
+    "Clash Royale", "cocina fácil", "tecnología curiosidades",
+    "fails divertidos", "historias curiosas", "dibujos animados",
+    "viajes lugares", "deportes highlights", "manualidades fáciles",
+    "trucos videojuegos", "comedia español", "naturaleza animales", "experimentos"
+  ];
+  try {
+    const offset = peerTubeShortOffset;
+    const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short", offset).catch(() => [])));
+    const incoming = batches.flat();
+    let added = 0;
+    for (const video of incoming) {
+      const key = video.id || video.url || video.embedPath;
+      if (!key || peerTubeShortSeen.has(key)) continue;
+      peerTubeShortSeen.add(key);
+      peerTubeShortsQueue.push(video);
+      shortsGrid.insertBefore(renderPeerTubeShortCard(video), loadMore || null);
+      added++;
+    }
+    peerTubeShortOffset += 20;
+    let count = $("#shorts-result-count");
+    if (!count) {
+      count = document.createElement("p");
+      count.id = "shorts-result-count";
+      count.className = "muted shorts-result-count";
+      shortsGrid.prepend(count);
+    }
+    count.textContent = peerTubeShortsQueue.length + " Shorts cargados";
+    if (loadMore) {
+      loadMore.disabled = false;
+      loadMore.textContent = added ? "Cargar más Shorts" : "No hay más resultados en esta tanda";
+      loadMore.hidden = added === 0;
+    }
+  } catch (error) {
+    console.error("Error cargando más Shorts:", error);
+    if (loadMore) { loadMore.disabled = false; loadMore.textContent = "Reintentar cargar Shorts"; }
+  } finally {
+    peerTubeShortLoading = false;
+  }
+}
+
 async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
-  try {
-    const communityCards = Array.from(shortsGrid.children);
-    // Rotamos categorías para que no todo sea Clash Royale/Roblox.
-    const categories = [
-      "Minecraft español", "animales curiosos", "ciencia experimentos",
-      "fútbol jugadas", "humor memes", "música covers", "Roblox español",
-      "Clash Royale", "cocina fácil", "tecnología curiosidades"
-    ];
-    const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short").catch(() => [])));
-    const seen = new Set();
-    const videos = batches.flat().filter(video => {
-      const key = video.id || video.url;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    peerTubeShortsQueue = videos;
-    shortsGrid.replaceChildren();
-    if (videos.length) {
-      const recHeading = document.createElement("h3");
-      recHeading.textContent = "Clips recomendados de PeerTube";
-      shortsGrid.append(recHeading);
-    }
-    videos.slice(0, 8).forEach(video => {
-      const card = document.createElement("article");
-      card.className = "short-card";
-      if (video.thumbnail) {
-        const image = document.createElement("img");
-        image.src = video.thumbnail;
-        image.alt = video.title;
-        image.loading = "lazy";
-        card.append(image);
-      }
-      const info = document.createElement("div");
-      info.className = "short-info";
-      const heading = document.createElement("h3");
-      heading.textContent = video.title;
-      const channel = document.createElement("p");
-      channel.className = "muted";
-      channel.textContent = video.channelTitle + " · PeerTube";
-      const play = document.createElement("button");
-      play.className = "button full";
-      play.type = "button";
-      play.textContent = "▶ Ver clip";
-      play.addEventListener("click", () => openPeerTubeShortAt(videos.indexOf(video)));
-      info.append(heading, channel, play);
-      card.append(info);
-      shortsGrid.append(card);
-    });
-    if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
-      const communityHeading = document.createElement("h3");
-      communityHeading.textContent = "Shorts de la comunidad";
-      shortsGrid.append(communityHeading, ...communityCards);
-    } else if (!videos.length) {
-      showEmpty(shortsGrid, "No encontramos clips en PeerTube. Los Shorts propios aparecerán aquí cuando se publiquen.");
-    }
-  } catch (error) {
-    console.error("Error en clips de PeerTube:", error);
-    if (!communityCardsExist(shortsGrid)) showEmpty(shortsGrid, "No se pudieron cargar clips de PeerTube; los Shorts propios siguen disponibles.");
+  const communityCards = Array.from(shortsGrid.children);
+  shortsGrid.replaceChildren();
+  peerTubeShortOffset = 0;
+  peerTubeShortSeen = new Set();
+  peerTubeShortsQueue = [];
+  const heading = document.createElement("h3");
+  heading.className = "shorts-section-heading";
+  heading.textContent = "Shorts recomendados";
+  shortsGrid.append(heading);
+  const loadMore = document.createElement("button");
+  loadMore.id = "load-more-shorts";
+  loadMore.className = "button shorts-load-more";
+  loadMore.type = "button";
+  loadMore.textContent = "Cargar más Shorts";
+  loadMore.addEventListener("click", loadMorePeerTubeShorts);
+  shortsGrid.append(loadMore);
+  await loadMorePeerTubeShorts();
+  if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
+    const communityHeading = document.createElement("h3");
+    communityHeading.className = "shorts-section-heading";
+    communityHeading.textContent = "Shorts de la comunidad";
+    shortsGrid.append(communityHeading, ...communityCards);
   }
 }
 
