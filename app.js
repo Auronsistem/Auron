@@ -955,26 +955,36 @@ async function loadRecommendedYouTube() {
     }
     const videoGrid = $("#video-grid");
     if (videoGrid) {
+      const communityCards = Array.from(videoGrid.children);
       videoGrid.replaceChildren();
-      if (!videos.length) showEmpty(videoGrid, "Todavía no hay recomendaciones disponibles.");
-      else videos.slice(0, 8).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
+      if (videos.length) {
+        const recHeading = document.createElement("h3");
+        recHeading.textContent = "Recomendados para ti";
+        videoGrid.append(recHeading);
+        videos.slice(0, 8).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
+      }
+      if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
+        const communityHeading = document.createElement("h3");
+        communityHeading.textContent = "Videos de la comunidad";
+        videoGrid.append(communityHeading, ...communityCards);
+      } else if (!videos.length) showEmpty(videoGrid, "Todavía no hay videos publicados ni recomendaciones.");
     }
   } catch (error) {
     console.error("Error en recomendaciones:", error);
     showEmpty(youtubeResults, "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
-    showEmpty($("#video-grid"), "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
   }
 }
 async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
-  showEmpty(shortsGrid, "Cargando clips cortos recomendados...");
   try {
+    const communityCards = Array.from(shortsGrid.children);
     const videos = await requestYouTubeRecommendations(YOUTUBE_SHORTS_QUERY);
     shortsGrid.replaceChildren();
-    if (!videos.length) {
-      showEmpty(shortsGrid, "No hay clips cortos recomendados disponibles por ahora.");
-      return;
+    if (videos.length) {
+      const recHeading = document.createElement("h3");
+      recHeading.textContent = "Clips recomendados";
+      shortsGrid.append(recHeading);
     }
     videos.slice(0, 8).forEach(video => {
       const card = document.createElement("article");
@@ -999,9 +1009,16 @@ async function loadRecommendedShorts() {
       card.append(image, info, play);
       shortsGrid.append(card);
     });
+    if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
+      const communityHeading = document.createElement("h3");
+      communityHeading.textContent = "Shorts de la comunidad";
+      shortsGrid.append(communityHeading, ...communityCards);
+    } else if (!videos.length) {
+      showEmpty(shortsGrid, "No hay Shorts publicados ni clips recomendados por ahora.");
+    }
   } catch (error) {
     console.error("Error en recomendaciones de Shorts:", error);
-    showEmpty(shortsGrid, "No se pudieron cargar clips. Comprueba la configuración de YouTube en Supabase.");
+    if (!shortsGrid.children.length) showEmpty(shortsGrid, "No se pudieron cargar clips. Comprueba la configuración de YouTube en Supabase.");
   }
 }
 
