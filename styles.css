@@ -787,3 +787,14 @@ select:focus-visible {
   .chat-header .call-actions .button { flex:1; padding:10px 8px; font-size:13px; }
   .call-dialog { padding:18px; }
 }
+
+/* GRUPOS DE MENSAJERÍA */
+.conversation-tools { display:flex; gap:7px; }
+.conversation-tools .button { padding:9px 10px; font-size:12px; white-space:nowrap; }
+.group-member-results { display:flex; flex-direction:column; gap:6px; max-height:230px; overflow:auto; margin-top:10px; }
+.group-member-results[hidden] { display:none; }
+.group-member-option { display:flex !important; align-items:center; gap:10px; padding:10px; margin:0 !important; background:#0d1423; border:1px solid var(--border); border-radius:9px; cursor:pointer; }
+.group-member-option input { width:auto; accent-color:var(--primary); }
+.group-sender { display:block; color:var(--cyan); font-size:12px; margin-bottom:5px; }
+.group-conversation { border-color:#3a326e; }
+@media(max-width:650px) { .conversation-tools { flex-wrap:wrap; } }
