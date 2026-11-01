@@ -782,7 +782,6 @@ select:focus-visible {
 .call-screen { display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
 #remote-call-video { width:100%; max-height:52vh; aspect-ratio:16/9; background:#02040a; border-radius:12px; object-fit:contain; }
 #local-call-video { width:120px; max-height:170px; aspect-ratio:9/16; object-fit:cover; background:#101827; border:1px solid var(--border); border-radius:10px; align-self:flex-end; }
-.call-screen video:empty { display:none; }
 @media (max-width:600px) {
   .chat-header .call-actions { width:100%; }
   .chat-header .call-actions .button { flex:1; padding:10px 8px; font-size:13px; }
