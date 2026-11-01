@@ -143,6 +143,29 @@ function updateAuthForm() {
       : "¿Ya tienes cuenta? Iniciar sesión";
 
   toggleAuth.style.display = "block";
+  if (authMode === "login") {
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "text-button";
+    reset.textContent = "Olvidé mi contraseña";
+    authForm.append(reset);
+    reset.addEventListener("click", async () => {
+      const email = $("#email")?.value.trim() || "";
+      if (!email) {
+        showMessage($("#auth-message"), "Escribe tu correo primero.", true);
+        $("#email")?.focus();
+        return;
+      }
+      reset.disabled = true;
+      const result = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      });
+      reset.disabled = false;
+      showMessage($("#auth-message"), result.error
+        ? "No se pudo enviar el enlace: " + result.error.message
+        : "Solicitud enviada. Revisa Recibidos y Spam.");
+    });
+  }
 }
 
 toggleAuth?.addEventListener("click", () => {
