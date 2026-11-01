@@ -979,7 +979,7 @@ async function searchPeerTube(query) {
   if (cached && cached.expiresAt > Date.now()) return cached.videos;
   const url = new URL(PEERTUBE_SEARCH_URL);
   url.searchParams.set("search", query);
-  url.searchParams.set("count", "12");
+  url.searchParams.set("count", "30");
   url.searchParams.set("sort", "-match");
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
@@ -1029,7 +1029,22 @@ async function loadRecommendedShorts() {
   if (!shortsGrid) return;
   try {
     const communityCards = Array.from(shortsGrid.children);
-    const videos = await searchPeerTube(PEERTUBE_DEFAULT_QUERY + " short");
+    // Rotamos categorías para que no todo sea Clash Royale/Roblox.
+    const categories = [
+      "Minecraft español", "animales curiosos", "ciencia experimentos",
+      "fútbol jugadas", "humor memes", "música covers", "dibujos animación",
+      "videojuegos indie", "Roblox español", "Clash Royale", "cocina fácil",
+      "tecnología curiosidades", "naturaleza paisajes", "parkour deportes",
+      "historias misterios", "manualidades trucos"
+    ];
+    const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short").catch(() => [])));
+    const seen = new Set();
+    const videos = batches.flat().filter(video => {
+      const key = video.id || video.url;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     peerTubeShortsQueue = videos;
     shortsGrid.replaceChildren();
     if (videos.length) {
