@@ -306,8 +306,10 @@ async function updateSession(session) {
   if (currentUser) {
     removeLockScreen();
     await loadVideos();
+    await loadConversations();
   } else {
     stopPlayer();
+    clearMessaging();
     createLockScreen();
     $("#video-grid")?.replaceChildren();
     $("#shorts-grid")?.replaceChildren();
@@ -1079,6 +1081,147 @@ function createYouTubeChannelCard(channel) {
 
   return card;
 }
+
+
+// MENSAJERÍA PRIVADA
+let activeConversation = null;
+let conversationCache = [];
+let messageRefreshTimer = null;
+let peopleSearchTimer = null;
+const conversationList = $("#conversation-list");
+const peopleSearch = $("#people-search");
+const peopleResults = $("#people-results");
+const messageList = $("#message-list");
+const messageForm = $("#message-form");
+
+function clearMessaging() {
+  activeConversation = null;
+  conversationCache = [];
+  if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
+  messageRefreshTimer = null;
+  if (conversationList) showEmpty(conversationList, "Inicia sesión para ver tus conversaciones.");
+  if (peopleResults) { peopleResults.replaceChildren(); peopleResults.hidden = true; }
+  if ($("#chat-empty")) $("#chat-empty").hidden = false;
+  if ($("#chat-active")) $("#chat-active").hidden = true;
+  if (messageList) messageList.replaceChildren();
+}
+function otherParticipant(conversation) {
+  return conversation.participant_one === currentUser.id ? conversation.participant_two : conversation.participant_one;
+}
+function displayName(profile) { return profile?.display_name?.trim() || "Usuario de SOCORA"; }
+async function fetchProfiles(ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const { data, error } = await supabase.from("profiles").select("id, display_name").in("id", unique);
+  if (error) { console.error("No se pudieron cargar perfiles:", error); return new Map(); }
+  return new Map((data || []).map(profile => [profile.id, profile]));
+}
+async function loadConversations() {
+  if (!currentUser || !conversationList) return;
+  const { data, error } = await supabase.from("conversations")
+    .select("id, participant_one, participant_two, created_at, last_message_at")
+    .or("participant_one.eq." + currentUser.id + ",participant_two.eq." + currentUser.id)
+    .order("last_message_at", { ascending: false });
+  if (error) { showEmpty(conversationList, "No se pudieron cargar las conversaciones."); console.error(error); return; }
+  conversationCache = data || [];
+  if (!conversationCache.length) { showEmpty(conversationList, "Aún no tienes conversaciones. Pulsa «Nuevo» para encontrar a alguien."); return; }
+  const profiles = await fetchProfiles(conversationCache.map(otherParticipant));
+  conversationList.replaceChildren();
+  for (const conversation of conversationCache) {
+    const profile = profiles.get(otherParticipant(conversation));
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-item" + (activeConversation?.id === conversation.id ? " active" : "");
+    const name = document.createElement("strong"); name.textContent = displayName(profile);
+    const preview = document.createElement("span"); preview.textContent = "Abrir conversación";
+    button.append(name, preview);
+    button.addEventListener("click", () => openConversation(conversation, profile));
+    conversationList.append(button);
+  }
+}
+async function searchPeople(query) {
+  if (!currentUser || !peopleResults) return;
+  const clean = query.trim(); peopleResults.replaceChildren();
+  if (clean.length < 2) { peopleResults.hidden = true; return; }
+  const { data, error } = await supabase.from("profiles").select("id, display_name")
+    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "\\// INICIAR") + "%")
+    .order("display_name").limit(12);
+  peopleResults.hidden = false;
+  if (error) { showEmpty(peopleResults, "No se pudo buscar usuarios."); return; }
+  if (!data?.length) { showEmpty(peopleResults, "No encontramos usuarios con ese nombre."); return; }
+  for (const profile of data) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "people-result"; button.textContent = displayName(profile);
+    button.addEventListener("click", () => startConversation(profile)); peopleResults.append(button);
+  }
+}
+async function startConversation(profile) {
+  if (!currentUser || !profile || profile.id === currentUser.id) return;
+  const pair = [currentUser.id, profile.id].sort();
+  const existing = conversationCache.find(item => item.participant_one === pair[0] && item.participant_two === pair[1]);
+  if (existing) { peopleResults.hidden = true; if (peopleSearch) peopleSearch.value = ""; await openConversation(existing, profile); return; }
+  const { data, error } = await supabase.from("conversations").insert({ participant_one: pair[0], participant_two: pair[1] })
+    .select("id, participant_one, participant_two, created_at, last_message_at").single();
+  let conversation = data;
+  if (error) {
+    const fallback = await supabase.from("conversations").select("id, participant_one, participant_two, created_at, last_message_at")
+      .eq("participant_one", pair[0]).eq("participant_two", pair[1]).maybeSingle();
+    conversation = fallback.data;
+    if (!conversation) { showMessage($("#message-status"), "No se pudo iniciar la conversación.", true); console.error(error); return; }
+  }
+  peopleResults.hidden = true; if (peopleSearch) peopleSearch.value = "";
+  await loadConversations(); await openConversation(conversation, profile);
+}
+async function openConversation(conversation, profile = null) {
+  if (!currentUser || !conversation) return;
+  activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
+  $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
+  await loadMessages(conversation.id); await loadConversations();
+  if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
+  messageRefreshTimer = window.setInterval(() => { if (activeConversation?.id === conversation.id) loadMessages(conversation.id, true); }, 5000);
+}
+async function loadMessages(conversationId, quiet = false) {
+  if (!currentUser || !messageList) return;
+  const { data, error } = await supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
+    .eq("conversation_id", conversationId).order("created_at", { ascending: true }).limit(300);
+  if (error) { if (!quiet) showEmpty(messageList, "No se pudieron cargar los mensajes."); console.error(error); return; }
+  const messages = data || [];
+  const signature = messages.map(m => m.id + ":" + (m.read_at || "")).join("|");
+  if (quiet && messageList.dataset.signature === signature) return;
+  messageList.replaceChildren(); messageList.dataset.signature = signature;
+  if (!messages.length) { showEmpty(messageList, "Todavía no hay mensajes. ¡Saluda para comenzar!"); return; }
+  for (const message of messages) {
+    const bubble = document.createElement("article");
+    bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
+    const body = document.createElement("p"); body.textContent = message.body;
+    const time = document.createElement("time"); time.dateTime = message.created_at;
+    time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    bubble.append(body, time); messageList.append(bubble);
+  }
+  messageList.scrollTop = messageList.scrollHeight;
+  const unread = messages.filter(m => m.sender_id !== currentUser.id && !m.read_at).map(m => m.id);
+  if (unread.length) await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unread);
+}
+messageForm?.addEventListener("submit", async event => {
+  event.preventDefault(); if (!currentUser || !activeConversation) return;
+  const input = $("#message-input"); const body = input?.value.trim() || "";
+  const button = messageForm.querySelector('button[type="submit"]');
+  if (!body) return; if (button) button.disabled = true;
+  showMessage($("#message-status"), "Enviando...");
+  const { error } = await supabase.from("messages").insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body });
+  if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
+  else {
+    input.value = ""; showMessage($("#message-status"), "Mensaje enviado.");
+    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", activeConversation.id);
+    await loadMessages(activeConversation.id); await loadConversations();
+  }
+  if (button) button.disabled = false;
+});
+$("#new-conversation")?.addEventListener("click", () => peopleSearch?.focus());
+peopleSearch?.addEventListener("input", () => {
+  if (peopleSearchTimer) window.clearTimeout(peopleSearchTimer);
+  peopleSearchTimer = window.setTimeout(() => searchPeople(peopleSearch.value), 250);
+});
 
 // INICIAR
 async function initialize() {
