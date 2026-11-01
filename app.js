@@ -1845,7 +1845,7 @@ function playAureonTone(kind = "message") {
       oscillator.frequency.setValueAtTime(note.from, now + note.start);
       oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
       gain.gain.setValueAtTime(0.0001, now + note.start);
-      gain.gain.exponentialRampToValueAtTime(kind === "call" ? 0.11 : 0.07, now + note.start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(kind === "call" ? 0.30 : 0.20, now + note.start + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
       oscillator.connect(gain);
       gain.connect(context.destination);
