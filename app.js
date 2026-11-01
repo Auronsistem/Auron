@@ -1206,6 +1206,9 @@ function createYouTubeChannelCard(channel) {
 
 // MENSAJERÍA PRIVADA
 let activeConversation = null;
+let activeGroup = null;
+let groupCache = [];
+let selectedGroupUsers = new Map();
 let conversationCache = [];
 let messageRefreshTimer = null;
 let peopleSearchTimer = null;
@@ -1217,6 +1220,7 @@ const messageForm = $("#message-form");
 
 function clearMessaging() {
   activeConversation = null;
+  activeGroup = null;
   conversationCache = [];
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
   messageRefreshTimer = null;
@@ -1245,9 +1249,9 @@ async function loadConversations() {
     .order("last_message_at", { ascending: false });
   if (error) { showEmpty(conversationList, "No se pudieron cargar las conversaciones."); console.error(error); return; }
   conversationCache = data || [];
-  if (!conversationCache.length) { showEmpty(conversationList, "Aún no tienes conversaciones. Pulsa «Nuevo» para encontrar a alguien."); return; }
-  const profiles = await fetchProfiles(conversationCache.map(otherParticipant));
   conversationList.replaceChildren();
+  if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones privadas. Puedes crear un grupo.");
+  const profiles = await fetchProfiles(conversationCache.map(otherParticipant));
   for (const conversation of conversationCache) {
     const profile = profiles.get(otherParticipant(conversation));
     const button = document.createElement("button");
@@ -1259,6 +1263,7 @@ async function loadConversations() {
     button.addEventListener("click", () => openConversation(conversation, profile));
     conversationList.append(button);
   }
+  await loadGroupConversations(true);
 }
 async function searchPeople(query) {
   if (!currentUser || !peopleResults) return;
@@ -1295,7 +1300,7 @@ async function startConversation(profile) {
 }
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
-  activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
+  activeGroup = null; activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
   await loadMessages(conversation.id); await loadConversations();
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
@@ -1324,11 +1329,18 @@ async function loadMessages(conversationId, quiet = false) {
   if (unread.length) await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unread);
 }
 messageForm?.addEventListener("submit", async event => {
-  event.preventDefault(); if (!currentUser || !activeConversation) return;
+  event.preventDefault(); if (!currentUser || (!activeConversation && !activeGroup)) return;
   const input = $("#message-input"); const body = input?.value.trim() || "";
   const button = messageForm.querySelector('button[type="submit"]');
   if (!body) return; if (button) button.disabled = true;
   showMessage($("#message-status"), "Enviando...");
+  if (activeGroup) {
+    const { error } = await supabase.from("chat_group_messages").insert({ group_id: activeGroup.id, sender_id: currentUser.id, body });
+    if (error) { showMessage($("#message-status"), error.message || "No se pudo enviar el mensaje al grupo.", true); console.error(error); }
+    else { input.value = ""; showMessage($("#message-status"), "Mensaje enviado al grupo."); await loadGroupMessages(activeGroup.id); }
+    if (button) button.disabled = false;
+    return;
+  }
   const { error } = await supabase.from("messages").insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body });
   if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
   else {
@@ -1343,6 +1355,153 @@ peopleSearch?.addEventListener("input", () => {
   if (peopleSearchTimer) window.clearTimeout(peopleSearchTimer);
   peopleSearchTimer = window.setTimeout(() => searchPeople(peopleSearch.value), 250);
 });
+ 
+// GRUPOS DE MENSAJERÍA
+const createGroupDialog = $("#create-group-dialog");
+const createGroupForm = $("#create-group-form");
+const groupMemberSearch = $("#group-member-search");
+const groupMemberResults = $("#group-member-results");
+const groupCreateStatus = $("#group-create-status");
+
+async function loadGroupConversations(append = false) {
+  if (!currentUser || !conversationList) return;
+  const { data: memberships, error } = await supabase.from("chat_group_members")
+    .select("group_id").eq("user_id", currentUser.id);
+  if (error) { console.error("No se pudieron cargar los grupos:", error); return; }
+  const ids = (memberships || []).map(item => item.group_id);
+  if (!ids.length) {
+    if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones ni grupos. Pulsa «＋ Grupo» para crear uno.");
+    return;
+  }
+  const { data: groups, error: groupError } = await supabase.from("chat_groups")
+    .select("id, name, created_by, created_at").in("id", ids).order("created_at", { ascending: false });
+  if (groupError) { console.error("No se pudieron cargar los grupos:", groupError); return; }
+  groupCache = groups || [];
+  for (const group of groupCache) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-item group-conversation" + (activeGroup?.id === group.id ? " active" : "");
+    const name = document.createElement("strong"); name.textContent = "👥 " + group.name;
+    const preview = document.createElement("span"); preview.textContent = "Chat grupal";
+    button.append(name, preview);
+    button.addEventListener("click", () => openGroup(group));
+    conversationList.append(button);
+  }
+}
+async function searchGroupMembers(query) {
+  if (!currentUser || !groupMemberResults) return;
+  const clean = query.trim();
+  groupMemberResults.replaceChildren();
+  if (clean.length < 2) { groupMemberResults.hidden = true; return; }
+  const { data, error } = await supabase.from("profiles").select("id, display_name")
+    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "") + "%")
+    .order("display_name").limit(30);
+  groupMemberResults.hidden = false;
+  if (error) { showEmpty(groupMemberResults, "No se pudieron buscar usuarios."); return; }
+  if (!data?.length) { showEmpty(groupMemberResults, "No encontramos usuarios."); return; }
+  for (const profile of data) {
+    const label = document.createElement("label");
+    label.className = "group-member-option";
+    const check = document.createElement("input");
+    check.type = "checkbox"; check.checked = selectedGroupUsers.has(profile.id);
+    check.addEventListener("change", () => {
+      if (check.checked) selectedGroupUsers.set(profile.id, profile);
+      else selectedGroupUsers.delete(profile.id);
+      updateGroupSelectionCount();
+    });
+    const name = document.createElement("span"); name.textContent = displayName(profile);
+    label.append(check, name); groupMemberResults.append(label);
+  }
+}
+function updateGroupSelectionCount() {
+  const count = $("#group-selected-count");
+  if (count) count.textContent = selectedGroupUsers.size + " integrante(s) seleccionado(s)";
+}
+$("#new-group")?.addEventListener("click", () => {
+  if (!currentUser) { openAuth(); return; }
+  selectedGroupUsers = new Map();
+  createGroupForm?.reset();
+  groupMemberResults.replaceChildren();
+  groupMemberResults.hidden = true;
+  updateGroupSelectionCount();
+  showMessage(groupCreateStatus, "");
+  if (createGroupDialog && !createGroupDialog.open) createGroupDialog.showModal();
+});
+groupMemberSearch?.addEventListener("input", () => searchGroupMembers(groupMemberSearch.value));
+createGroupForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!currentUser) return;
+  const name = $("#group-name")?.value.trim() || "";
+  if (!name) { showMessage(groupCreateStatus, "Escribe un nombre para el grupo.", true); return; }
+  const button = createGroupForm.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+  showMessage(groupCreateStatus, "Creando grupo...");
+  try {
+    const { data: group, error } = await supabase.from("chat_groups")
+      .insert({ name, created_by: currentUser.id }).select("id, name, created_by, created_at").single();
+    if (error) throw error;
+    const members = [currentUser.id, ...selectedGroupUsers.keys()].map(user_id => ({ group_id: group.id, user_id }));
+    const { error: memberError } = await supabase.from("chat_group_members").insert(members);
+    if (memberError) throw memberError;
+    createGroupDialog.close();
+    await loadConversations();
+    await openGroup(group);
+  } catch (error) {
+    console.error("Error creando grupo:", error);
+    showMessage(groupCreateStatus, error.message || "No se pudo crear el grupo.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+async function openGroup(group) {
+  if (!currentUser || !group) return;
+  activeConversation = null;
+  activeGroup = group;
+  $("#chat-empty").hidden = true;
+  $("#chat-active").hidden = false;
+  $("#chat-title").textContent = group.name;
+  const eyebrow = $("#chat-kind");
+  if (eyebrow) eyebrow.textContent = "CHAT GRUPAL";
+  $("#group-audio-call").hidden = false;
+  $("#group-video-call").hidden = false;
+  $("#start-audio-call").hidden = true;
+  $("#start-video-call").hidden = true;
+  showMessage($("#message-status"), "");
+  await loadGroupMessages(group.id);
+  if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
+  messageRefreshTimer = window.setInterval(() => {
+    if (activeGroup?.id === group.id) loadGroupMessages(group.id, true);
+  }, 3500);
+}
+async function loadGroupMessages(groupId, quiet = false) {
+  if (!currentUser || !messageList) return;
+  const { data, error } = await supabase.from("chat_group_messages")
+    .select("id, group_id, sender_id, body, created_at")
+    .eq("group_id", groupId).order("created_at", { ascending: true }).limit(300);
+  if (error) { if (!quiet) showEmpty(messageList, "No se pudieron cargar los mensajes del grupo."); console.error(error); return; }
+  const messages = data || [];
+  const signature = messages.map(m => m.id).join("|");
+  if (quiet && messageList.dataset.signature === "group:" + signature) return;
+  messageList.replaceChildren(); messageList.dataset.signature = "group:" + signature;
+  if (!messages.length) { showEmpty(messageList, "Este grupo está listo. ¡Envía el primer mensaje!"); return; }
+  const profiles = await fetchProfiles(messages.map(m => m.sender_id));
+  for (const message of messages) {
+    const bubble = document.createElement("article");
+    bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
+    if (message.sender_id !== currentUser.id) {
+      const sender = document.createElement("strong");
+      sender.className = "group-sender";
+      sender.textContent = displayName(profiles.get(message.sender_id));
+      bubble.append(sender);
+    }
+    const body = document.createElement("p"); body.textContent = message.body;
+    const time = document.createElement("time"); time.dateTime = message.created_at;
+    time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    bubble.append(body, time); messageList.append(bubble);
+  }
+  messageList.scrollTop = messageList.scrollHeight;
+}
+
 
 // LLAMADAS PRIVADAS DE AUDIO Y VIDEO (WebRTC + señalización Supabase)
 const callDialog = $("#call-dialog");
