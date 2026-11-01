@@ -934,13 +934,43 @@ const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
 const YOUTUBE_RECOMMENDATION_QUERY = "gaming Clash Royale Roblox español Perú";
-const YOUTUBE_SHORTS_QUERY = "Shorts gaming Clash Royale Roblox español";
+// Se reutiliza una sola búsqueda para no gastar la cuota de YouTube dos veces al abrir AUREON.
+const YOUTUBE_SHORTS_QUERY = YOUTUBE_RECOMMENDATION_QUERY;
+const youtubeRecommendationCache = new Map();
 
 async function requestYouTubeRecommendations(query) {
-  const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, { body: { query } });
-  if (error) throw new Error("No se pudo conectar con las recomendaciones.");
-  if (!data?.success) throw new Error(data?.error || "No se pudieron cargar las recomendaciones.");
-  return Array.isArray(data.videos) ? data.videos : [];
+  const cacheKey = query.trim().toLowerCase();
+  const cached = youtubeRecommendationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.error) throw cached.error;
+    if (cached.promise) return cached.promise;
+    return cached.videos || [];
+  }
+
+  const promise = (async () => {
+    const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, { body: { query } });
+    if (error) {
+      let detail = "";
+      try {
+        const body = await error.context?.json();
+        detail = [body?.error, body?.details].filter(Boolean).join(" ");
+      } catch {}
+      throw new Error(detail || "No se pudo conectar con las recomendaciones de YouTube.");
+    }
+    if (!data?.success) throw new Error([data?.error, data?.details].filter(Boolean).join(" ") || "No se pudieron cargar las recomendaciones.");
+    return Array.isArray(data.videos) ? data.videos : [];
+  })();
+
+  // Cachea la petición en curso para que Vídeos y Shorts compartan la misma llamada.
+  youtubeRecommendationCache.set(cacheKey, { promise, expiresAt: Date.now() + 5 * 60 * 1000 });
+  try {
+    const videos = await promise;
+    youtubeRecommendationCache.set(cacheKey, { videos, expiresAt: Date.now() + 5 * 60 * 1000 });
+    return videos;
+  } catch (error) {
+    youtubeRecommendationCache.set(cacheKey, { error, expiresAt: Date.now() + 60 * 1000 });
+    throw error;
+  }
 }
 async function loadRecommendedYouTube() {
   if (!youtubeResults) return;
@@ -974,7 +1004,7 @@ async function loadRecommendedYouTube() {
     }
   } catch (error) {
     console.error("Error en recomendaciones:", error);
-    showEmpty(youtubeResults, "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
+    showEmpty(youtubeResults, error.message || "No se pudieron cargar recomendaciones de YouTube.");
   }
 }
 async function loadRecommendedShorts() {
@@ -1021,7 +1051,7 @@ async function loadRecommendedShorts() {
     }
   } catch (error) {
     console.error("Error en recomendaciones de Shorts:", error);
-    if (!shortsGrid.children.length) showEmpty(shortsGrid, "No se pudieron cargar clips. Comprueba la configuración de YouTube en Supabase.");
+    showEmpty(shortsGrid, error.message || "No se pudieron cargar clips de YouTube.");
   }
 }
 
