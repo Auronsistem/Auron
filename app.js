@@ -32,6 +32,65 @@ function showMessage(element, message, error = false) {
   element.style.color = error ? "#ff7777" : "#20d9ed";
 }
 
+
+function urlBase64ToUint8Array(value) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+}
+
+async function enableAureonPushNotifications() {
+  const button = $("#enable-call-notifications");
+  const status = $("#call-notification-status");
+  const say = (message, error = false) => showMessage(status, message, error);
+  if (!currentUser) {
+    say("Inicia sesión antes de activar las notificaciones.", true);
+    return;
+  }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    say("Este navegador no admite notificaciones push. Actualiza Chrome e inténtalo de nuevo.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      say("No se concedió permiso para notificaciones. Puedes activarlo en los ajustes de Chrome.", true);
+      return;
+    }
+    const { data: config, error: configError } = await supabase.functions.invoke("call-push", {
+      body: { action: "config" }
+    });
+    if (configError || !config?.publicKey) {
+      throw new Error(config?.error || "Falta configurar las claves de notificaciones en el servidor.");
+    }
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey)
+      });
+    }
+    const serialized = subscription.toJSON();
+    const { error: saveError } = await supabase.from("push_subscriptions").upsert({
+      user_id: currentUser.id,
+      endpoint: serialized.endpoint,
+      subscription: serialized,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "endpoint" });
+    if (saveError) throw saveError;
+    say("¡Notificaciones activadas en este dispositivo! Haz una prueba con otra cuenta.");
+  } catch (error) {
+    console.error("No se pudieron activar las notificaciones de AUREON:", error);
+    say(error?.message || "No se pudieron activar las notificaciones. Inténtalo de nuevo.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("#enable-call-notifications")?.addEventListener("click", enableAureonPushNotifications);
+
 function showEmpty(container, message) {
   if (!container) return;
 
@@ -1791,7 +1850,22 @@ async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peer
     signal_type: type,
     payload
   });
-  if (error) console.error("No se pudo enviar señal de llamada:", error);
+  if (error) {
+    console.error("No se pudo enviar señal de llamada:", error);
+    return;
+  }
+  if (type === "invite") {
+    const { error: pushError } = await supabase.functions.invoke("call-push", {
+      body: {
+        action: "call",
+        recipientId,
+        conversationId: activeCall.conversationId,
+        callId: activeCall.id,
+        video: Boolean(payload.video)
+      }
+    });
+    if (pushError) console.warn("La invitación de llamada se envió, pero falló la notificación push:", pushError);
+  }
 }
 async function callGetName(userId) {
   const profiles = await fetchProfiles([userId]);
