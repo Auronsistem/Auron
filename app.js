@@ -1211,33 +1211,65 @@ function openPeerTubeShortAt(index) {
   const container = $("#player-container");
   if (!container || !playerDialog || !video) return;
   stopPlayerContent();
+
   const wrapper = document.createElement("div");
-  wrapper.className = "aureon-short-viewer";
-  const heading = document.createElement("h2");
-  heading.className = "aureon-short-title";
-  heading.textContent = video.title || "Short";
+  wrapper.className = "aureon-short-viewer youtube-shorts-viewer";
   const stage = document.createElement("div");
   stage.className = "aureon-short-stage";
   const frame = document.createElement("iframe");
   frame.className = "aureon-short-frame";
-  frame.src = video.embedPath ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href) : video.url;
-  frame.title = video.title || "Short de PeerTube";
+  frame.src = video.embedPath
+    ? (video.embedPath.startsWith("http") ? video.embedPath : new URL(video.embedPath, video.url).href)
+    : video.url;
+  frame.title = video.title || "Short";
   frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
   frame.allowFullscreen = true;
-  const controls = document.createElement("div");
-  controls.className = "aureon-short-controls";
-  const previous = document.createElement("button");
-  previous.type = "button"; previous.className = "button button-outline"; previous.textContent = "↑ Anterior";
-  previous.disabled = peerTubeShortIndex <= 0;
-  previous.addEventListener("click", () => openPeerTubeShortAt(peerTubeShortIndex - 1));
-  const counter = document.createElement("span");
-  counter.className = "muted"; counter.textContent = (peerTubeShortIndex + 1) + " de " + peerTubeShortsQueue.length;
-  const next = document.createElement("button");
-  next.type = "button"; next.className = "button"; next.textContent = "↓ Siguiente";
-  next.disabled = peerTubeShortIndex >= peerTubeShortsQueue.length - 1;
-  next.addEventListener("click", () => openPeerTubeShortAt(peerTubeShortIndex + 1));
-  controls.append(previous, counter, next); stage.append(frame); wrapper.append(heading, stage, controls); container.append(wrapper);
+  frame.setAttribute("loading", "eager");
+
+  const title = document.createElement("div");
+  title.className = "youtube-short-overlay-title";
+  title.textContent = video.title || "Short";
+  stage.append(frame, title);
+  wrapper.append(stage);
+  container.append(wrapper);
+
+  // Navegación tipo Shorts: flechas/rueda o gesto vertical, sin botones anterior/siguiente.
+  const navigate = direction => {
+    const target = peerTubeShortIndex + direction;
+    if (target >= 0 && target < peerTubeShortsQueue.length) openPeerTubeShortAt(target);
+    else if (direction > 0) loadMorePeerTubeShorts();
+  };
+  wrapper.addEventListener("wheel", event => {
+    if (Math.abs(event.deltaY) < 25) return;
+    event.preventDefault();
+    navigate(event.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+
+  let touchStartY = null;
+  wrapper.addEventListener("touchstart", event => {
+    touchStartY = event.touches[0]?.clientY ?? null;
+  }, { passive: true });
+  wrapper.addEventListener("touchend", event => {
+    if (touchStartY === null) return;
+    const delta = touchStartY - (event.changedTouches[0]?.clientY ?? touchStartY);
+    touchStartY = null;
+    if (Math.abs(delta) > 55) navigate(delta > 0 ? 1 : -1);
+  }, { passive: true });
+
   if (!playerDialog.open) playerDialog.showModal();
+  if (!playerDialog.dataset.shortsKeysBound) {
+    playerDialog.dataset.shortsKeysBound = "true";
+    playerDialog.addEventListener("keydown", event => {
+      if (!playerDialog.querySelector(".youtube-shorts-viewer")) return;
+      if (["ArrowDown", "PageDown"].includes(event.key)) {
+        event.preventDefault();
+        openPeerTubeShortAt(peerTubeShortIndex + 1);
+      } else if (["ArrowUp", "PageUp"].includes(event.key)) {
+        event.preventDefault();
+        openPeerTubeShortAt(peerTubeShortIndex - 1);
+      }
+    });
+  }
 }
 
 function openPeerTubeVideo(video) {
