@@ -327,6 +327,7 @@ async function updateSession(session) {
   currentUser = session?.user || null;
   updateHeader();
   subscribeToCallSignals();
+  subscribeToGroupCallSignals();
 
   if (currentUser) {
     removeLockScreen();
@@ -337,6 +338,8 @@ async function updateSession(session) {
   } else {
     cleanupCall();
     if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; }
+    if (groupCallChannel) { supabase.removeChannel(groupCallChannel); groupCallChannel = null; }
+    cleanupGroupCall();
     stopPlayer();
     clearMessaging();
     createLockScreen();
@@ -1763,6 +1766,7 @@ async function beginCall(video) {
 $("#start-audio-call")?.addEventListener("click", () => beginCall(false));
 $("#start-video-call")?.addEventListener("click", () => beginCall(true));
 $("#accept-call")?.addEventListener("click", async () => {
+  if (activeGroupCall?.incoming) { await acceptGroupCall(); return; }
   if (!activeCall?.incoming) return;
   stopCallAlert();
   try {
@@ -1783,10 +1787,12 @@ $("#accept-call")?.addEventListener("click", async () => {
   }
 });
 $("#reject-call")?.addEventListener("click", async () => {
+  if (activeGroupCall?.incoming) { await sendGroupCallSignal("reject", {}, activeGroupCall.hostId); await cleanupGroupCall(); return; }
   await sendCallSignal("reject");
   cleanupCall();
 });
 $("#end-call")?.addEventListener("click", async () => {
+  if (activeGroupCall) { await cleanupGroupCall(true); return; }
   await sendCallSignal("hangup");
   cleanupCall();
 });
@@ -1835,12 +1841,196 @@ $("#switch-call-camera")?.addEventListener("click", async () => {
     callSubtitle.textContent = "No se pudo cambiar la cámara. Revisa los permisos del navegador.";
   }
 });
-callDialog?.addEventListener("close", () => { if (activeCall) cleanupCall(); });
+callDialog?.addEventListener("close", () => { if (activeGroupCall) cleanupGroupCall(); else if (activeCall) cleanupCall(); });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && activeCall && callSubtitle) {
     callSubtitle.textContent += "";
   }
 });
+
+
+ 
+// VIDEOLLAMADAS Y LLAMADAS GRUPALES (hasta 6 participantes conectados)
+let groupCallChannel = null;
+let activeGroupCall = null;
+const groupCallPeers = new Map();
+const groupCallIceQueue = new Map();
+
+async function sendGroupCallSignal(type, payload = {}, recipientId, call = activeGroupCall) {
+  if (!call || !recipientId || !currentUser) return;
+  const { error } = await supabase.from("chat_group_call_signals").insert({
+    group_id: call.groupId, call_id: call.id, sender_id: currentUser.id,
+    recipient_id: recipientId, signal_type: type, payload
+  });
+  if (error) console.error("No se pudo enviar señal grupal:", error);
+}
+function makeGroupTile(userId, name, stream, local = false) {
+  const grid = $("#group-call-grid");
+  if (!grid) return;
+  let tile = grid.querySelector('[data-user-id="' + userId + '"]');
+  if (!tile) {
+    tile = document.createElement("div"); tile.className = "group-call-tile"; tile.dataset.userId = userId;
+    const media = document.createElement(local || activeGroupCall?.video ? "video" : "audio");
+    media.autoplay = true; media.playsInline = true; media.srcObject = stream;
+    if (local) media.muted = true;
+    const title = document.createElement("strong"); title.textContent = name;
+    tile.append(media, title); grid.append(tile);
+  } else {
+    const media = tile.querySelector("video,audio"); if (media) media.srcObject = stream;
+  }
+}
+async function createGroupPeer(userId, makeOffer) {
+  if (!activeGroupCall || !callLocalStream || groupCallPeers.has(userId)) return;
+  const pc = new RTCPeerConnection({ iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }
+  ]});
+  groupCallPeers.set(userId, pc);
+  callLocalStream.getTracks().forEach(track => pc.addTrack(track, callLocalStream));
+  pc.onicecandidate = event => {
+    if (event.candidate) sendGroupCallSignal("ice", { candidate: event.candidate.toJSON() }, userId);
+  };
+  pc.ontrack = async event => {
+    const stream = event.streams?.[0] || new MediaStream([event.track]);
+    const profile = await fetchProfiles([userId]);
+    makeGroupTile(userId, displayName(profile.get(userId)), stream, false);
+    const media = $("#group-call-grid")?.querySelector('[data-user-id="' + userId + '"] video, [data-user-id="' + userId + '"] audio');
+    media?.play().catch(() => {});
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed" || pc.connectionState === "closed") removeGroupPeer(userId);
+  };
+  if (makeOffer) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await sendGroupCallSignal("offer", { description: pc.localDescription }, userId);
+  }
+}
+async function removeGroupPeer(userId) {
+  const pc = groupCallPeers.get(userId);
+  if (pc) pc.close();
+  groupCallPeers.delete(userId);
+  groupCallIceQueue.delete(userId);
+  $("#group-call-grid")?.querySelector('[data-user-id="' + userId + '"]')?.remove();
+}
+async function processGroupCallSignal(signal) {
+  if (!signal || !currentUser) return;
+  if (signal.signal_type === "invite") {
+    if (activeCall || activeGroupCall) {
+      await supabase.from("chat_group_call_signals").insert({
+        group_id: signal.group_id, call_id: signal.call_id, sender_id: currentUser.id,
+        recipient_id: signal.sender_id, signal_type: "reject", payload: { reason: "busy" }
+      });
+      return;
+    }
+    activeGroupCall = { id: signal.call_id, groupId: signal.group_id, hostId: signal.sender_id, video: !!signal.payload?.video, incoming: true, memberIds: [] };
+    const profile = await fetchProfiles([signal.sender_id]);
+    callTitle.textContent = "Grupo: " + (groupCache.find(g => g.id === signal.group_id)?.name || "AUREON");
+    callState.textContent = activeGroupCall.video ? "VIDEOLLAMADA GRUPAL ENTRANTE" : "LLAMADA GRUPAL ENTRANTE";
+    callSubtitle.textContent = displayName(profile.get(signal.sender_id)) + " te invita a una llamada grupal";
+    remoteCallVideo.hidden = true; localCallVideo.hidden = true; $("#group-call-grid").hidden = true;
+    callDisplay(true, false); startCallAlert(); return;
+  }
+  if (!activeGroupCall || signal.call_id !== activeGroupCall.id || signal.group_id !== activeGroupCall.groupId) return;
+  if (signal.signal_type === "accept") {
+    if (!callLocalStream) return;
+    await createGroupPeer(signal.sender_id, currentUser.id.localeCompare(signal.sender_id) < 0);
+    callSubtitle.textContent = "Participantes conectados: " + (groupCallPeers.size + 1) + " de 6";
+  } else if (signal.signal_type === "join") {
+    if (!callLocalStream || signal.sender_id === currentUser.id) return;
+    if (currentUser.id.localeCompare(signal.sender_id) < 0) await createGroupPeer(signal.sender_id, true);
+  } else if (signal.signal_type === "offer") {
+    if (!callLocalStream) return;
+    await createGroupPeer(signal.sender_id, false);
+    const pc = groupCallPeers.get(signal.sender_id);
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.description));
+    for (const ice of (groupCallIceQueue.get(signal.sender_id) || [])) await pc.addIceCandidate(ice);
+    groupCallIceQueue.delete(signal.sender_id);
+    const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+    await sendGroupCallSignal("answer", { description: pc.localDescription }, signal.sender_id);
+  } else if (signal.signal_type === "answer") {
+    const pc = groupCallPeers.get(signal.sender_id); if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(signal.payload.description));
+    for (const ice of (groupCallIceQueue.get(signal.sender_id) || [])) await pc.addIceCandidate(ice);
+    groupCallIceQueue.delete(signal.sender_id);
+  } else if (signal.signal_type === "ice" && signal.payload?.candidate) {
+    const pc = groupCallPeers.get(signal.sender_id);
+    const candidate = new RTCIceCandidate(signal.payload.candidate);
+    if (pc?.remoteDescription) await pc.addIceCandidate(candidate);
+    else { const queue = groupCallIceQueue.get(signal.sender_id) || []; queue.push(candidate); groupCallIceQueue.set(signal.sender_id, queue); }
+  } else if (signal.signal_type === "hangup" || signal.signal_type === "reject") {
+    if (signal.sender_id === activeGroupCall.hostId) { cleanupGroupCall(); return; }
+    await removeGroupPeer(signal.sender_id);
+    callSubtitle.textContent = "Un participante salió. Conectados: " + (groupCallPeers.size + 1);
+  }
+}
+async function subscribeToGroupCallSignals() {
+  if (groupCallChannel) await supabase.removeChannel(groupCallChannel);
+  if (!currentUser) return;
+  groupCallChannel = supabase.channel("group-calls-" + currentUser.id)
+    .on("postgres_changes", { event:"INSERT", schema:"public", table:"chat_group_call_signals", filter:"recipient_id=eq." + currentUser.id },
+      ({ new: signal }) => processGroupCallSignal(signal).catch(error => { console.error("Error en llamada grupal:", error); callSubtitle.textContent = "Error al conectar un participante."; }))
+    .subscribe();
+}
+async function beginGroupCall(video) {
+  if (!currentUser || !activeGroup) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+    showMessage($("#message-status"), "Este navegador no permite llamadas. Usa Chrome actualizado y HTTPS.", true); return;
+  }
+  const { data: rows, error } = await supabase.from("chat_group_members").select("user_id").eq("group_id", activeGroup.id);
+  if (error) { showMessage($("#message-status"), "No se pudieron cargar los integrantes.", true); return; }
+  const others = (rows || []).map(x => x.user_id).filter(id => id !== currentUser.id).slice(0, 5);
+  if (!others.length) { showMessage($("#message-status"), "Añade integrantes al grupo antes de llamar.", true); return; }
+  activeGroupCall = { id: crypto.randomUUID(), groupId: activeGroup.id, hostId: currentUser.id, video, incoming:false, memberIds:[currentUser.id, ...others] };
+  try {
+    callLocalStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:video ? { facingMode:{ideal:"user"}, width:{ideal:640}, height:{ideal:480} } : false });
+    remoteCallVideo.hidden = true; localCallVideo.hidden = true;
+    const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
+    makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    callTitle.textContent = activeGroup.name;
+    callState.textContent = video ? "VIDEOLLAMADA GRUPAL" : "LLAMADA GRUPAL";
+    callSubtitle.textContent = "Invitando a " + others.length + " integrante(s). Máximo 6 conectados.";
+    callDisplay(false, true);
+    for (const id of others) await sendGroupCallSignal("invite", { video }, id);
+    for (const id of others) await sendGroupCallSignal("join", {}, id);
+  } catch (error) {
+    callSubtitle.textContent = error.name === "NotAllowedError" ? "Permite el acceso al micrófono y la cámara." : (error.message || "No se pudo iniciar la llamada.");
+    cleanupGroupCall();
+  }
+}
+async function acceptGroupCall() {
+  if (!activeGroupCall?.incoming) return;
+  stopCallAlert();
+  try {
+    callLocalStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:activeGroupCall.video ? { facingMode:{ideal:"user"}, width:{ideal:640}, height:{ideal:480} } : false });
+    remoteCallVideo.hidden = true; localCallVideo.hidden = true;
+    const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
+    makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    const { data: rows } = await supabase.from("chat_group_members").select("user_id").eq("group_id", activeGroupCall.groupId);
+    activeGroupCall.memberIds = (rows || []).map(x => x.user_id).filter(id => id !== currentUser.id).slice(0, 5);
+    await sendGroupCallSignal("accept", {}, activeGroupCall.hostId);
+    for (const id of activeGroupCall.memberIds) if (id !== activeGroupCall.hostId) await sendGroupCallSignal("join", {}, id);
+    // El anfitrión vuelve a anunciar su presencia para negociar el enlace entre pares.
+    await sendGroupCallSignal("join", {}, activeGroupCall.hostId);
+    callSubtitle.textContent = "Conectando con el grupo…";
+    $("#incoming-call-actions").hidden = true; $("#active-call-actions").hidden = false;
+  } catch (error) {
+    callSubtitle.textContent = error.message || "No se pudo activar el micrófono o cámara.";
+  }
+}
+async function cleanupGroupCall(notify = false) {
+  const call = activeGroupCall;
+  if (notify && call) for (const id of call.memberIds || []) if (id !== currentUser.id) await sendGroupCallSignal("hangup", {}, id, call);
+  for (const pc of groupCallPeers.values()) pc.close();
+  groupCallPeers.clear(); groupCallIceQueue.clear();
+  if (callLocalStream) callLocalStream.getTracks().forEach(track => track.stop());
+  callLocalStream = null; activeGroupCall = null; stopCallAlert();
+  const grid = $("#group-call-grid"); if (grid) { grid.replaceChildren(); grid.hidden = true; }
+  remoteCallVideo.hidden = false; localCallVideo.hidden = false;
+  if (callDialog?.open) callDialog.close();
+}
+$("#group-audio-call")?.addEventListener("click", () => beginGroupCall(false));
+$("#group-video-call")?.addEventListener("click", () => beginGroupCall(true));
 
 // INICIAR
 async function initialize() {
