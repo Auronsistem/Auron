@@ -1084,11 +1084,16 @@ youtubeForm?.addEventListener("submit", async (event) => {
     );
 
     if (error) {
-      throw new Error("No se pudo conectar con la búsqueda.");
+      let detail = "";
+      try {
+        const body = await error.context?.json();
+        detail = [body?.error, body?.details].filter(Boolean).join(" ");
+      } catch {}
+      throw new Error(detail || "No se pudo conectar con la búsqueda. Revisa la configuración de YouTube en Supabase.");
     }
 
     if (!data?.success) {
-      throw new Error(data?.error || "La búsqueda no se completó.");
+      throw new Error([data?.error, data?.details].filter(Boolean).join(" ") || "La búsqueda no se completó.");
     }
 
     youtubeResults.replaceChildren();
