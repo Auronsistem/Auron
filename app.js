@@ -925,6 +925,34 @@ const youtubeForm = $("#youtube-search-form");
 const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
+const YOUTUBE_RECOMMENDATION_QUERY = "gaming Clash Royale Roblox español Perú";
+
+async function loadRecommendedYouTube() {
+  if (!youtubeResults) return;
+  showEmpty(youtubeResults, "Cargando recomendaciones de gaming...");
+  try {
+    const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, {
+      body: { query: YOUTUBE_RECOMMENDATION_QUERY }
+    });
+    if (error) throw new Error("No se pudo conectar con las recomendaciones.");
+    if (!data?.success) throw new Error(data?.error || "No se pudieron cargar las recomendaciones.");
+    youtubeResults.replaceChildren();
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    if (!videos.length) {
+      showEmpty(youtubeResults, "Todavía no hay recomendaciones disponibles. Intenta más tarde.");
+      return;
+    }
+    const heading = document.createElement("p");
+    heading.className = "muted";
+    heading.textContent = "Recomendaciones de gaming · Clash Royale, Roblox y más";
+    youtubeResults.append(heading);
+    videos.forEach((video) => youtubeResults.append(createYouTubeVideoCard(video)));
+  } catch (error) {
+    console.error("Error en recomendaciones:", error);
+    showEmpty(youtubeResults, "No se pudieron cargar recomendaciones. Comprueba la configuración de YouTube en Supabase.");
+  }
+}
+
 youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -1249,6 +1277,7 @@ peopleSearch?.addEventListener("input", () => {
 
 // INICIAR
 async function initialize() {
+  loadRecommendedYouTube();
   try {
     const { data, error } = await supabase.auth.getSession();
 
