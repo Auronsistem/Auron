@@ -1443,6 +1443,7 @@ async function prepareCallPeer() {
     });
   }
   localCallVideo.srcObject = callLocalStream;
+  localCallVideo.play().catch(() => {});
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
 async function processCallSignal(signal) {
@@ -1532,6 +1533,7 @@ function cleanupCall() {
   if (callLocalStream) callLocalStream.getTracks().forEach(track => track.stop());
   callLocalStream = null;
   callRemoteStream = null;
+  if ($("#toggle-call-camera")) $("#toggle-call-camera").textContent = "Apagar cámara";
   queuedIceCandidates = [];
   if (localCallVideo) localCallVideo.srcObject = null;
   if (remoteCallVideo) remoteCallVideo.srcObject = null;
@@ -1569,6 +1571,7 @@ $("#accept-call")?.addEventListener("click", async () => {
       video: activeCall.video ? { facingMode: "user" } : false
     });
     localCallVideo.srcObject = callLocalStream;
+    localCallVideo.play().catch(() => {});
     await sendCallSignal("accept");
     callSubtitle.textContent = "Aceptada. Preparando conexión…";
     $("#incoming-call-actions").hidden = true;
@@ -1595,6 +1598,40 @@ $("#toggle-call-camera")?.addEventListener("click", () => {
   if (!tracks.length) return;
   tracks.forEach(track => track.enabled = !track.enabled);
   $("#toggle-call-camera").textContent = tracks.some(track => track.enabled) ? "Apagar cámara" : "Activar cámara";
+});
+$("#switch-call-camera")?.addEventListener("click", async () => {
+  if (!activeCall?.video || !callLocalStream) {
+    callSubtitle.textContent = "Para usar la cámara, inicia una videollamada.";
+    return;
+  }
+  const currentTrack = callLocalStream.getVideoTracks()[0];
+  if (!currentTrack) {
+    callSubtitle.textContent = "No hay una cámara activa. Pulsa Activar cámara.";
+    return;
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter(device => device.kind === "videoinput");
+    if (cameras.length < 2) {
+      callSubtitle.textContent = "Este dispositivo solo detecta una cámara.";
+      return;
+    }
+    const currentIndex = cameras.findIndex(device => device.deviceId === currentTrack.getSettings().deviceId);
+    const nextCamera = cameras[(currentIndex + 1 + cameras.length) % cameras.length];
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: nextCamera.deviceId } }, audio: false });
+    const nextTrack = stream.getVideoTracks()[0];
+    const sender = callPeer?.getSenders().find(item => item.track?.kind === "video");
+    if (sender) await sender.replaceTrack(nextTrack);
+    callLocalStream.removeTrack(currentTrack);
+    currentTrack.stop();
+    callLocalStream.addTrack(nextTrack);
+    localCallVideo.srcObject = callLocalStream;
+    await localCallVideo.play().catch(() => {});
+    callSubtitle.textContent = "Cámara cambiada.";
+  } catch (error) {
+    console.error("No se pudo cambiar la cámara:", error);
+    callSubtitle.textContent = "No se pudo cambiar la cámara. Revisa los permisos del navegador.";
+  }
 });
 callDialog?.addEventListener("close", () => { if (activeCall) cleanupCall(); });
 document.addEventListener("visibilitychange", () => {
