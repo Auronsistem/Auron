@@ -1481,6 +1481,18 @@ const peopleResults = $("#people-results");
 const messageList = $("#message-list");
 const messageForm = $("#message-form");
 
+async function notifyAureonPush(action, details) {
+  try {
+    const { data, error } = await supabase.functions.invoke("call-push", {
+      body: { action, ...details }
+    });
+    if (error) console.warn("El mensaje se envió, pero no se pudo mandar el aviso push:", error);
+    else if (data?.error) console.warn("Aviso push de AUREON:", data.error);
+  } catch (error) {
+    console.warn("No se pudo enviar el aviso push de AUREON:", error);
+  }
+}
+
 function clearMessaging() {
   activeConversation = null;
   activeGroup = null;
@@ -1601,16 +1613,25 @@ messageForm?.addEventListener("submit", async event => {
   if (!body) return; if (button) button.disabled = true;
   showMessage($("#message-status"), "Enviando...");
   if (activeGroup) {
-    const { error } = await supabase.from("chat_group_messages").insert({ group_id: activeGroup.id, sender_id: currentUser.id, body });
+    const { data: sentGroupMessage, error } = await supabase.from("chat_group_messages")
+      .insert({ group_id: activeGroup.id, sender_id: currentUser.id, body })
+      .select("id").single();
     if (error) { showMessage($("#message-status"), error.message || "No se pudo enviar el mensaje al grupo.", true); console.error(error); }
-    else { input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado al grupo."); await loadGroupMessages(activeGroup.id); }
+    else {
+      input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado al grupo.");
+      notifyAureonPush("group-message", { messageId: sentGroupMessage.id });
+      await loadGroupMessages(activeGroup.id);
+    }
     if (button) button.disabled = false;
     return;
   }
-  const { error } = await supabase.from("messages").insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body });
+  const { data: sentMessage, error } = await supabase.from("messages")
+    .insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body })
+    .select("id").single();
   if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
   else {
     input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado.");
+    notifyAureonPush("message", { messageId: sentMessage.id });
     await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", activeConversation.id);
     await loadMessages(activeConversation.id); await loadConversations();
   }
@@ -1805,6 +1826,8 @@ function playAureonTone(kind = "message") {
     const now = context.currentTime;
     const notes = kind === "call"
       ? [{ start: 0, duration: 0.16, from: 1450, to: 2050 }, { start: 0.19, duration: 0.22, from: 1850, to: 1250 }]
+      : kind === "bird"
+      ? [{ start: 0, duration: 0.075, from: 1750, to: 2450 }, { start: 0.10, duration: 0.085, from: 2200, to: 2850 }, { start: 0.23, duration: 0.11, from: 1900, to: 2550 }]
       : [{ start: 0, duration: 0.10, from: 1100, to: 1550 }];
     for (const note of notes) {
       const oscillator = context.createOscillator();
@@ -1820,11 +1843,19 @@ function playAureonTone(kind = "message") {
       oscillator.start(now + note.start);
       oscillator.stop(now + note.start + note.duration + 0.02);
     }
+    context.resume?.().catch(() => {});
     window.setTimeout(() => context.close().catch(() => {}), 700);
   } catch (error) {
     console.info("El navegador no permitió reproducir el tono de AUREON.", error);
   }
 }
+
+// El service worker avisa a esta pestaña cuando llega un push mientras está visible.
+navigator.serviceWorker?.addEventListener("message", (event) => {
+  if (event.data?.type === "AUREON_PUSH" && event.data?.payload?.type === "message") {
+    playAureonTone("bird");
+  }
+});
 
 function startCallAlert() {
   stopCallAlert();
