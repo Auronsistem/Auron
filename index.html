@@ -245,7 +245,13 @@
         <p id="theme-settings-status" class="notice" aria-live="polite"></p>
       </div>
       <div class="content-panel profile-settings-panel" id="profile-settings-panel">
-        <p class="eyebrow">TU CUENTA</p><h3>👤 Foto de perfil</h3>
+        <p class="eyebrow">TU CUENTA</p><h3>👤 Perfil y apodo</h3>
+        <label for="profile-nickname">Apodo que verán tus contactos</label>
+        <input id="profile-nickname" type="text" maxlength="32" autocomplete="nickname" placeholder="Escribe el nombre que quieras">
+        <p class="muted">Se mostrará en tus chats y llamadas personales y grupales. Si lo dejas vacío, se usará el nombre de tu cuenta.</p>
+        <button id="save-profile-nickname" class="button" type="button">Guardar apodo</button>
+        <p id="profile-nickname-status" class="notice" aria-live="polite"></p>
+        <h3>📷 Foto de perfil</h3>
         <div class="profile-settings-row">
           <span id="profile-settings-preview" class="profile-settings-avatar avatar-frame avatar-default" aria-label="Vista previa de foto de perfil"><span class="avatar-silhouette" aria-hidden="true"></span></span>
           <div class="profile-settings-actions"><p class="muted">Esta foto aparecerá en tu perfil, mensajes y llamadas.</p>
