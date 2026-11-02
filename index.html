@@ -153,7 +153,6 @@
             <div id="message-list" class="message-list" aria-live="polite"></div>
             <div class="message-tools" aria-label="Herramientas de mensaje">
               <button id="open-message-picker" class="emoji-picker-trigger" type="button" aria-label="Abrir emojis y GIF" title="Emojis y GIF">😀</button>
-              <button id="record-voice-message" class="button button-outline voice-record-button" type="button" aria-pressed="false">🎙 Grabar audio</button>
               <span class="message-shortcut-hint">Windows: pulsa Win + . para abrir el panel de emojis.</span>
             </div>
             <p id="voice-recording-status" class="voice-recording-status" aria-live="polite"></p>
@@ -177,7 +176,8 @@
             </section>
             <form id="message-form" class="message-form">
               <label class="sr-only" for="message-input">Escribe un mensaje</label>
-              <textarea id="message-input" maxlength="4000" rows="2" placeholder="Escribe un mensaje..." required></textarea>
+              <textarea id="message-input" maxlength="4000" rows="2" placeholder="Escribe un mensaje..."></textarea>
+              <button id="record-voice-message" class="button button-outline voice-record-button" type="button" aria-label="Grabar mensaje de voz" title="En computadora: clic para grabar y clic para enviar; en celular: mantén pulsado para grabar y suelta para enviar" aria-pressed="false">🎙</button>
               <button class="button" type="submit">Enviar</button>
             </form>
             <p id="message-status" class="notice" aria-live="polite"></p>
