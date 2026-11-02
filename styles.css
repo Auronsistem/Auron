@@ -2300,3 +2300,10 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .status-viewer-music-panel { padding:8px; }
   .status-viewer-audio { width:100%; }
 }
+
+.settings-nav-button .nav-count {
+  width:auto;
+  flex:0 0 auto;
+  font-size:11px;
+  text-align:center;
+}
