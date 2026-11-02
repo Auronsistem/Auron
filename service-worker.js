@@ -13,8 +13,8 @@ self.addEventListener("push", (event) => {
     const isCall = payload.type === "call" || payload.type === "group-call";
     const options = {
       body: payload.body || "Tienes una notificación nueva.",
-      icon: "./icons/aureon.svg",
-      badge: "./icons/aureon.svg",
+      icon: "./icons/aureon.svg?v=2",
+      badge: "./icons/aureon.svg?v=2",
       tag: payload.tag || "aureon-notification",
       renotify: Boolean(payload.renotify),
       silent: false,
