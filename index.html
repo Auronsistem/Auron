@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=31">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -461,11 +461,12 @@
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./service-worker.js", { scope: "./" })
+        navigator.serviceWorker.register("./service-worker.js", { scope: "./", updateViaCache: "none" })
+          .then((registration) => registration.update().catch((error) => console.warn("AUREON: no se pudo comprobar la actualización del service worker", error)))
           .catch((error) => console.warn("AUREON: no se pudo registrar el service worker", error));
       });
     }
   </script>
-  <script type="module" src="app.js?v=54"></script>
+  <script type="module" src="app.js?v=55"></script>
 </body>
 </html>
