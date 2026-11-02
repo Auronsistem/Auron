@@ -10,7 +10,7 @@ self.addEventListener("push", (event) => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visibleClient = windows.find(client => client.visibilityState === "visible");
     if (visibleClient && payload.type === "message") visibleClient.postMessage({ type: "AUREON_PUSH", payload });
-    const isCall = payload.type === "call";
+    const isCall = payload.type === "call" || payload.type === "group-call";
     const options = {
       body: payload.body || "Tienes una notificación nueva.",
       icon: "./icons/aureon.svg",
@@ -38,7 +38,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const targetUrl = new URL(data.url || "./", self.registration.scope);
-    if (data.type === "call" && data.callId) {
+    if (["call", "group-call"].includes(data.type) && data.callId) {
       targetUrl.searchParams.set("callId", data.callId);
       if (["accept", "reject"].includes(action)) targetUrl.searchParams.set("notificationAction", action);
     }
