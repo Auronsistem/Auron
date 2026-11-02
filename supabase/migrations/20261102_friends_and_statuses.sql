@@ -66,6 +66,57 @@ revoke all on public.friendships from anon, authenticated;
 grant select on public.friendships to authenticated;
 grant select, insert on public.friend_requests to authenticated;
 
+-- Permite enviar una solicitud nueva o reenviar una que fue rechazada.
+create or replace function public.send_friend_request(p_recipient_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  actor uuid := (select auth.uid());
+  existing_request public.friend_requests%rowtype;
+begin
+  if actor is null then
+    raise exception 'Debes iniciar sesión.';
+  end if;
+  if p_recipient_id is null or p_recipient_id = actor then
+    raise exception 'No puedes enviarte una solicitud a ti mismo.';
+  end if;
+
+  if exists (
+    select 1 from public.friendships f
+    where f.user_id = actor and f.friend_id = p_recipient_id
+  ) then
+    return 'friends';
+  end if;
+
+  select * into existing_request
+  from public.friend_requests
+  where sender_id = actor and recipient_id = p_recipient_id
+  for update;
+
+  if found then
+    if existing_request.status = 'pending' then
+      return 'pending';
+    elsif existing_request.status = 'accepted' then
+      return 'friends';
+    end if;
+
+    update public.friend_requests
+      set status = 'pending', created_at = now(), updated_at = now()
+      where id = existing_request.id;
+    return 'resent';
+  end if;
+
+  insert into public.friend_requests(sender_id, recipient_id, status)
+    values (actor, p_recipient_id, 'pending');
+  return 'sent';
+end;
+$;
+revoke all on function public.send_friend_request(uuid) from public, anon;
+grant execute on function public.send_friend_request(uuid) to authenticated;
+
 -- Solo el destinatario puede responder. La función crea las dos filas de amistad
 -- de forma atómica, para que ambos vean la relación como amigos.
 create or replace function public.respond_friend_request(p_request_id uuid, p_accept boolean)
@@ -99,6 +150,12 @@ begin
     where id = req.id;
 
   if p_accept then
+    update public.friend_requests
+      set status = 'accepted', updated_at = now()
+      where sender_id = req.recipient_id
+        and recipient_id = req.sender_id
+        and status = 'pending';
+
     insert into public.friendships(user_id, friend_id)
       values (req.sender_id, req.recipient_id), (req.recipient_id, req.sender_id)
       on conflict do nothing;
