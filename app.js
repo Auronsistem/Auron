@@ -606,7 +606,6 @@ async function updateSession(session) {
   } else {
     cleanupCall();
     if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; }
-    if (groupCallChannel) { supabase.removeChannel(groupCallChannel); groupCallChannel = null; }
     cleanupGroupCall();
     stopPlayer();
     clearMessaging();
@@ -2550,6 +2549,8 @@ document.addEventListener("visibilitychange", () => {
  
 // VIDEOLLAMADAS Y LLAMADAS GRUPALES (hasta 6 participantes conectados)
 let groupCallChannel = null;
+let groupCallChannelUserId = null;
+let groupCallSubscriptionQueue = Promise.resolve();
 let activeGroupCall = null;
 const groupCallPeers = new Map();
 const groupCallIceQueue = new Map();
@@ -2672,13 +2673,45 @@ async function processGroupCallSignal(signal) {
     callSubtitle.textContent = "Un participante salió. Conectados: " + (groupCallPeers.size + 1);
   }
 }
-async function subscribeToGroupCallSignals() {
-  if (groupCallChannel) await supabase.removeChannel(groupCallChannel);
-  if (!currentUser) return;
-  groupCallChannel = supabase.channel("group-calls-" + currentUser.id)
-    .on("postgres_changes", { event:"INSERT", schema:"public", table:"chat_group_call_signals", filter:"recipient_id=eq." + currentUser.id },
-      ({ new: signal }) => processGroupCallSignal(signal).catch(error => { console.error("Error en llamada grupal:", error); callSubtitle.textContent = "Error al conectar un participante."; }))
-    .subscribe();
+function subscribeToGroupCallSignals() {
+  const requestedUserId = currentUser?.id || null;
+
+  // Serializa los cambios de sesión para evitar crear/suscribir el mismo canal dos veces.
+  groupCallSubscriptionQueue = groupCallSubscriptionQueue
+    .catch(error => console.error("AUREON: error previo al cambiar el canal de llamadas grupales:", error))
+    .then(async () => {
+      if (requestedUserId && currentUser?.id !== requestedUserId) return;
+      if (groupCallChannel && groupCallChannelUserId === requestedUserId) return;
+
+      const previousChannel = groupCallChannel;
+      groupCallChannel = null;
+      groupCallChannelUserId = null;
+      if (previousChannel) await supabase.removeChannel(previousChannel);
+
+      if (!requestedUserId || currentUser?.id !== requestedUserId) return;
+
+      // El topic único evita reutilizar accidentalmente un canal que ya fue suscrito.
+      const channel = supabase.channel("group-calls-" + requestedUserId + "-" + crypto.randomUUID())
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_group_call_signals",
+          filter: "recipient_id=eq." + requestedUserId
+        }, ({ new: signal }) => processGroupCallSignal(signal).catch(error => {
+          console.error("Error en llamada grupal:", error);
+          if (callSubtitle) callSubtitle.textContent = "Error al conectar un participante.";
+        }))
+        .subscribe((status, error) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error("AUREON: no se pudo conectar el canal de llamadas grupales:", error);
+          }
+        });
+
+      groupCallChannel = channel;
+      groupCallChannelUserId = requestedUserId;
+    });
+
+  return groupCallSubscriptionQueue;
 }
 async function beginGroupCall(video) {
   if (!currentUser || !activeGroup) return;
