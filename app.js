@@ -2759,6 +2759,22 @@ const CHAT_MEDIA_TYPES = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"]
 ]);
+const CHAT_AUDIO_BUCKET = CHAT_MEDIA_BUCKET;
+const CHAT_AUDIO_MAX_BYTES = 5 * 1024 * 1024;
+const CHAT_AUDIO_TYPES = new Map([
+  ["audio/webm", "webm"],
+  ["audio/ogg", "ogg"],
+  ["audio/mp4", "m4a"],
+  ["audio/mpeg", "mp3"],
+  ["audio/wav", "wav"],
+  ["audio/aac", "aac"]
+]);
+let voiceRecorder = null;
+let voiceChunks = [];
+let voiceStream = null;
+let voiceRecordTimer = null;
+let voiceRecording = false;
+let voiceRecordingTarget = null;
 
 function isAllowedGifUrl(raw) {
   try {
@@ -2891,6 +2907,28 @@ async function buildMessageBody(container, rawBody) {
   const stickerPrefix = "AUREON_STICKER:";
   const gifPrefix = "AUREON_GIF:";
   const mediaPrefix = "AUREON_MEDIA_FILE:";
+  const audioPrefix = "AUREON_AUDIO_FILE:";
+
+  if (rawBody?.startsWith(audioPrefix)) {
+    const path = rawBody.slice(audioPrefix.length);
+    if (!/^(private|groups)\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(webm|ogg|m4a|mp3|wav|aac)$/.test(path)) {
+      container.textContent = "Audio no válido.";
+      return;
+    }
+    const { data, error } = await supabase.storage.from(CHAT_AUDIO_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
+    if (error || !data?.signedUrl) {
+      container.textContent = "No se pudo cargar este audio.";
+      return;
+    }
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.preload = "metadata";
+    player.src = data.signedUrl;
+    player.className = "message-audio";
+    player.setAttribute("aria-label", "Mensaje de voz");
+    container.append(player);
+    return;
+  }
 
   if (rawBody?.startsWith(stickerPrefix)) {
     const emoji = rawBody.slice(stickerPrefix.length);
@@ -2942,6 +2980,112 @@ async function buildMessageBody(container, rawBody) {
   }
   container.textContent = rawBody || "";
 }
+
+function voiceRecordingUi(recording, message = "") {
+  const button = $("#record-voice-message");
+  const status = $("#voice-recording-status");
+  if (button) {
+    button.classList.toggle("is-recording", recording);
+    button.textContent = recording ? "■ Detener audio" : "🎙 Grabar audio";
+    button.setAttribute("aria-pressed", String(recording));
+    button.disabled = !currentChatTarget() && !recording;
+  }
+  if (status) status.textContent = message;
+}
+
+async function uploadAndSendVoiceMessage(blob, target) {
+  if (!blob || !target || !currentUser) return;
+  const rawType = (blob.type || "audio/webm").split(";")[0].toLowerCase();
+  const mime = CHAT_AUDIO_TYPES.has(rawType) ? rawType : "audio/webm";
+  const extension = CHAT_AUDIO_TYPES.get(mime) || "webm";
+  if (blob.size > CHAT_AUDIO_MAX_BYTES) {
+    showMessage($("#message-status"), "El audio supera los 5 MB. Graba un mensaje más corto.", true);
+    return;
+  }
+  if (!blob.size) {
+    showMessage($("#message-status"), "No se grabó ningún audio. Inténtalo otra vez.", true);
+    return;
+  }
+  const folder = target.type === "group" ? "groups" : "private";
+  const path = folder + "/" + target.id + "/" + currentUser.id + "/" + crypto.randomUUID() + "." + extension;
+  showMessage($("#message-status"), "Subiendo mensaje de voz...");
+  try {
+    const { error: uploadError } = await supabase.storage.from(CHAT_AUDIO_BUCKET).upload(path, blob, {
+      cacheControl: "3600", contentType: mime, upsert: false
+    });
+    if (uploadError) throw uploadError;
+    const sent = await sendChatBody("AUREON_AUDIO_FILE:" + path, target);
+    if (!sent) {
+      const { error: removeError } = await supabase.storage.from(CHAT_AUDIO_BUCKET).remove([path]);
+      if (removeError) console.warn("No se pudo limpiar el audio que no se envió:", removeError);
+    } else {
+      showMessage($("#message-status"), "Mensaje de voz enviado.");
+    }
+  } catch (error) {
+    console.error("No se pudo enviar el mensaje de voz:", error);
+    showMessage($("#message-status"), error?.message || "No se pudo enviar el audio.", true);
+  }
+}
+
+async function toggleVoiceRecording() {
+  if (voiceRecording) {
+    voiceRecorder?.stop();
+    return;
+  }
+  const target = currentChatTarget();
+  if (!currentUser || !target) {
+    showMessage($("#message-status"), "Abre primero una conversación o un grupo.", true);
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    showMessage($("#message-status"), "Este navegador no permite grabar audio. Actualiza Chrome o Safari.", true);
+    return;
+  }
+  try {
+    voiceRecordingTarget = target;
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]
+      .find(type => MediaRecorder.isTypeSupported?.(type));
+    voiceRecorder = preferredType ? new MediaRecorder(voiceStream, { mimeType: preferredType }) : new MediaRecorder(voiceStream);
+    voiceChunks = [];
+    voiceRecorder.ondataavailable = event => { if (event.data?.size) voiceChunks.push(event.data); };
+    voiceRecorder.onerror = event => {
+      console.error("Error al grabar el audio:", event.error);
+      showMessage($("#message-status"), "Ocurrió un error al grabar el audio.", true);
+    };
+    voiceRecorder.onstop = async () => {
+      const recorder = voiceRecorder;
+      const chunks = voiceChunks;
+      const savedTarget = voiceRecordingTarget;
+      const blob = new Blob(chunks, { type: recorder?.mimeType || chunks[0]?.type || "audio/webm" });
+      voiceStream?.getTracks().forEach(track => track.stop());
+      voiceStream = null; voiceRecorder = null; voiceChunks = []; voiceRecording = false;
+      if (voiceRecordTimer) window.clearTimeout(voiceRecordTimer);
+      voiceRecordTimer = null;
+      voiceRecordingUi(false, "Preparando mensaje de voz...");
+      await uploadAndSendVoiceMessage(blob, savedTarget);
+      voiceRecordingUi(false, "");
+    };
+    voiceRecorder.start(250);
+    voiceRecording = true;
+    voiceRecordingUi(true, "Grabando… pulsa «Detener audio» para enviarlo.");
+    voiceRecordTimer = window.setTimeout(() => {
+      if (voiceRecording && voiceRecorder?.state === "recording") {
+        voiceRecordingUi(true, "Límite de 2 minutos alcanzado; terminando grabación…");
+        voiceRecorder.stop();
+      }
+    }, 120000);
+  } catch (error) {
+    console.error("No se pudo iniciar la grabación:", error);
+    voiceStream?.getTracks().forEach(track => track.stop());
+    voiceStream = null; voiceRecorder = null; voiceRecording = false;
+    voiceRecordingUi(false, "");
+    showMessage($("#message-status"), error?.name === "NotAllowedError"
+      ? "Permite el acceso al micrófono para grabar un mensaje de voz."
+      : (error?.message || "No se pudo grabar el audio."), true);
+  }
+}
+$("#record-voice-message")?.addEventListener("click", toggleVoiceRecording);
 
 function initializeMessagePickers() {
   const picker = $("#message-picker");
@@ -3364,6 +3508,46 @@ let suppressedCallCloseEvents = 0;
 let callMiniLastTapAt = 0;
 let callFallbackPollTimer = null;
 const handledIncomingCallIds = new Set();
+const voiceActivityContexts = new WeakMap();
+function attachVoiceWaveform(stream, indicator) {
+  if (!stream || !indicator || voiceActivityContexts.has(indicator)) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass || !stream.getAudioTracks().length) return;
+  let context;
+  try {
+    context = new AudioContextClass();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    let frame = 0;
+    const state = { context, stop: () => { cancelAnimationFrame(frame); context.close().catch(() => {}); indicator.classList.remove("is-speaking"); } };
+    voiceActivityContexts.set(indicator, state);
+    const tick = () => {
+      if (!indicator.isConnected || !stream.getAudioTracks().some(track => track.readyState === "live")) {
+        state.stop();
+        voiceActivityContexts.delete(indicator);
+        return;
+      }
+      analyser.getByteTimeDomainData(samples);
+      let energy = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const delta = (samples[i] - 128) / 128;
+        energy += delta * delta;
+      }
+      const level = Math.min(1, Math.sqrt(energy / samples.length) * 5);
+      indicator.style.setProperty("--voice-level", level.toFixed(2));
+      indicator.classList.toggle("is-speaking", level > 0.075);
+      frame = requestAnimationFrame(tick);
+    };
+    context.resume().catch(() => {});
+    frame = requestAnimationFrame(tick);
+  } catch (error) {
+    console.warn("No se pudo activar el indicador de voz:", error);
+    context?.close().catch(() => {});
+  }
+}
 
 function setCallWindowMinimized(minimized) {
   if (!callDialog?.open) return;
@@ -3630,6 +3814,7 @@ async function prepareCallPeer() {
       callRemoteStream.addTrack(event.track);
     }
     remoteCallVideo.srcObject = callRemoteStream;
+    attachVoiceWaveform(callRemoteStream, $("#call-voice-waves"));
     try { await remoteCallVideo.play(); } catch (error) {
       callSubtitle.textContent = "Toca la pantalla del video para permitir la reproducción.";
     }
@@ -3944,7 +4129,10 @@ function makeGroupTile(userId,name,stream,local=false,profile=null){
     tile=document.createElement("div");tile.className="group-call-tile";tile.dataset.userId=userId;
     const media=document.createElement(activeGroupCall?.video?"video":"audio");media.autoplay=true;media.playsInline=true;media.srcObject=stream;if(local)media.muted=true;
     const avatar=createAvatar(profile||(local?currentProfile:null),"group-call-avatar"),title=document.createElement("strong");title.textContent=name;
-    tile.append(media,avatar,title);grid.append(tile);
+    const waves=document.createElement("span");waves.className="group-call-voice-waves";waves.setAttribute("aria-label","Actividad de voz");
+    for(let i=0;i<5;i++){const bar=document.createElement("i");waves.append(bar);}
+    tile.append(media,avatar,waves,title);grid.append(tile);
+    attachVoiceWaveform(stream,waves);
     const refresh=()=>{const live=Boolean(activeGroupCall?.video&&stream.getVideoTracks().some(t=>t.enabled&&t.readyState==="live"));avatar.hidden=live;tile.classList.toggle("has-live-video",live);};
     for(const track of stream.getVideoTracks()){track.addEventListener("mute",refresh);track.addEventListener("unmute",refresh);track.addEventListener("ended",refresh);}refresh();
   }else{const media=tile.querySelector("video,audio");if(media)media.srcObject=stream;const avatar=tile.querySelector(".group-call-avatar");if(avatar&&profile)renderAvatar(avatar,profile,"group-call-avatar");}
@@ -3963,6 +4151,8 @@ async function createGroupPeer(userId, makeOffer) {
     const stream = event.streams?.[0] || new MediaStream([event.track]);
     const profile = await fetchProfiles([userId]);
     makeGroupTile(userId, displayName(profile.get(userId)), stream, false, profile.get(userId));
+    const tile = $("#group-call-grid")?.querySelector('[data-user-id="' + userId + '"]');
+    attachVoiceWaveform(stream, tile?.querySelector(".group-call-voice-waves"));
     const media = $("#group-call-grid")?.querySelector('[data-user-id="' + userId + '"] video, [data-user-id="' + userId + '"] audio');
     media?.play().catch(() => {});
   };
