@@ -2621,7 +2621,7 @@ function displayName(profile) { return profile?.display_name?.trim() || "Usuario
 function renderAvatar(element, profile, extraClass = "") {
   if (!element) return;
   element.replaceChildren();
-  element.className = element.className.split(/\\s+/).filter(n => !n.startsWith("avatar-")).join(" ") + " avatar-frame " + extraClass;
+  element.className = element.className.split(/\s+/).filter(n => !n.startsWith("avatar-")).join(" ") + " avatar-frame " + extraClass;
   if (profile?.avatar_url) {
     const img = document.createElement("img"); img.src = profile.avatar_url; img.alt = ""; img.loading = "lazy";
     img.onerror = () => { img.remove(); element.classList.add("avatar-default"); const shape = document.createElement("span"); shape.className = "avatar-silhouette"; element.append(shape); };
