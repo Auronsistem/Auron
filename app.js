@@ -649,10 +649,6 @@ async function verifyGuardianCode() {
     });
     if (error) throw error;
     if (!data?.user || !data?.session) throw new Error("No se pudo verificar la cuenta del apoderado.");
-    await guardianClient.from("profiles").upsert({
-      id: data.user.id,
-      display_name: (guardianVerifiedEmail.split("@")[0] || "Apoderado").slice(0, 40)
-    }, { onConflict: "id" });
     $("#guardian-code-step").hidden = true;
     $("#guardian-link-step").hidden = false;
     $("#guardian-email").readOnly = true;
@@ -917,6 +913,7 @@ $("#guardian-send-code")?.addEventListener("click", sendGuardianVerificationCode
 $("#guardian-verify-code")?.addEventListener("click", verifyGuardianCode);
 $("#send-parental-request")?.addEventListener("click", requestChildSupervision);
 $("#parental-child-select")?.addEventListener("change", loadSelectedChildSettings);
+$("#refresh-parental-children")?.addEventListener("click", loadGuardianChildren);
 $("#parental-controls-form")?.addEventListener("submit", saveSelectedChildSettings);
 
 async function updateSession(session) {
@@ -1655,6 +1652,7 @@ function normalizePeerTubeVideo(video) {
 }
 
 async function searchPeerTube(query, start = 0, options = {}) {
+  if (parentalStatus.supervised) return [];
   const shortsOnly = Boolean(options.shortsOnly);
   const key = query.trim().toLowerCase() + "::" + start + (shortsOnly ? "::shorts" : "::all");
   const cached = peerTubeCache.get(key);
@@ -1853,11 +1851,24 @@ async function loadMorePeerTubeShorts() {
 async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
+  const communityCards = Array.from(shortsGrid.children);
   if (parentalStatus.supervised) {
-    showEmpty(shortsGrid, "Los Shorts externos sin clasificación de edad verificada están ocultos en esta cuenta.");
+    shortsGrid.replaceChildren();
+    const heading = document.createElement("h3");
+    heading.className = "shorts-section-heading";
+    heading.textContent = "Shorts con clasificación de AUREON";
+    const note = document.createElement("p");
+    note.className = "muted shorts-feed-status";
+    note.textContent = "Las recomendaciones externas sin clasificación de edad verificada están ocultas en esta cuenta.";
+    shortsGrid.append(heading, note, ...communityCards.filter(node => !node.matches("p.muted")));
+    if (!communityCards.some(node => !node.matches("p.muted"))) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Todavía no hay Shorts de AUREON dentro de la clasificación permitida.";
+      shortsGrid.append(empty);
+    }
     return;
   }
-  const communityCards = Array.from(shortsGrid.children);
   shortsGrid.replaceChildren();
   peerTubeShortOffset = 0;
   peerTubeShortSeen = new Set();
@@ -1894,6 +1905,10 @@ function communityCardsExist(grid) {
 youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const query = youtubeInput?.value.trim() || "";
+  if (parentalStatus.supervised) {
+    showEmpty(youtubeResults, "La búsqueda de videos externos está desactivada en esta cuenta porque no tienen una clasificación de edad verificada.");
+    return;
+  }
   if (query.length < 2 || query.length > 100) {
     showEmpty(youtubeResults, "Escribe entre 2 y 100 caracteres.");
     return;
