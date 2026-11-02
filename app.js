@@ -553,6 +553,7 @@ function updateHeader() {
 
 async function updateSession(session) {
   currentUser = session?.user || null;
+  if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
   updateHeader();
   subscribeToCallSignals();
@@ -1665,6 +1666,74 @@ const peopleResults = $("#people-results");
 const messageList = $("#message-list");
 const messageForm = $("#message-form");
 
+// PRESENCIA: actividad reciente de cada cuenta
+let presenceTimer = null;
+let presenceRefreshTimer = null;
+let presenceCache = new Map();
+function presenceLevel(lastSeen) {
+  if (!lastSeen) return "offline";
+  const age = Date.now() - new Date(lastSeen).getTime();
+  if (age <= 2 * 60 * 1000) return "online";
+  if (age <= 2 * 60 * 60 * 1000) return "recent";
+  return "offline";
+}
+function presenceLabel(level) {
+  return level === "online" ? "En línea" : level === "recent" ? "Activo hace poco" : "Desconectado";
+}
+function presenceDot(level) {
+  const dot = document.createElement("i");
+  dot.className = "presence-dot presence-" + level;
+  dot.setAttribute("aria-label", presenceLabel(level));
+  dot.title = presenceLabel(level);
+  return dot;
+}
+async function heartbeatPresence() {
+  if (!currentUser) return;
+  const { error } = await supabase.from("user_presence").upsert({
+    user_id: currentUser.id, last_seen: new Date().toISOString()
+  }, { onConflict: "user_id" });
+  if (error) console.warn("No se pudo actualizar la presencia:", error.message);
+}
+function startPresence() {
+  if (!currentUser) return;
+  if (presenceTimer) clearInterval(presenceTimer);
+  heartbeatPresence();
+  presenceTimer = window.setInterval(heartbeatPresence, 30000);
+}
+function stopPresence() {
+  if (presenceTimer) clearInterval(presenceTimer);
+  presenceTimer = null;
+}
+async function loadPresence(ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return presenceCache;
+  const { data, error } = await supabase.from("user_presence")
+    .select("user_id,last_seen").in("user_id", unique);
+  if (error) {
+    console.warn("Falta configurar la tabla user_presence en Supabase:", error.message);
+    return presenceCache;
+  }
+  for (const id of unique) presenceCache.delete(id);
+  for (const row of data || []) presenceCache.set(row.user_id, row.last_seen);
+  return presenceCache;
+}
+function renderPresenceLine(container, userId) {
+  const lastSeen = presenceCache.get(userId);
+  const level = presenceLevel(lastSeen);
+  const line = document.createElement("span");
+  line.className = "presence-line";
+  line.append(presenceDot(level), document.createTextNode(presenceLabel(level)));
+  container.append(line);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") heartbeatPresence();
+});
+window.addEventListener("pageshow", heartbeatPresence);
+window.addEventListener("pagehide", () => {
+  // El siguiente heartbeat expirará la presencia aunque el navegador cierre de golpe.
+});
+
+
 async function notifyAureonPush(action, details) {
   try {
     const { data, error } = await supabase.functions.invoke("call-push", {
@@ -1734,9 +1803,12 @@ async function searchPeople(query) {
   peopleResults.hidden = false;
   if (error) { showEmpty(peopleResults, "No se pudo buscar usuarios."); return; }
   if (!data?.length) { showEmpty(peopleResults, "No encontramos usuarios con ese nombre."); return; }
+  await loadPresence(data.map(profile => profile.id));
   for (const profile of data) {
     const button = document.createElement("button");
-    button.type = "button"; button.className = "people-result"; button.textContent = displayName(profile);
+    button.type = "button"; button.className = "people-result";
+    const name = document.createElement("strong"); name.textContent = displayName(profile);
+    button.append(name); renderPresenceLine(button, profile.id);
     button.addEventListener("click", () => startConversation(profile)); peopleResults.append(button);
   }
 }
@@ -2071,7 +2143,8 @@ async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peer
   });
   if (error) {
     console.error("No se pudo enviar señal de llamada:", error);
-    return;
+    if (type === "invite" && callSubtitle) callSubtitle.textContent = "No se pudo enviar la llamada. Revisa tu conexión e inténtalo otra vez.";
+    return false;
   }
   if (type === "invite") {
     const { error: pushError } = await supabase.functions.invoke("call-push", {
@@ -2083,8 +2156,9 @@ async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peer
         video: Boolean(payload.video)
       }
     });
-    if (pushError) console.warn("La invitación de llamada se envió, pero falló la notificación push:", pushError);
+    if (pushError) console.warn("La invitación se guardó, pero falló el aviso push:", pushError);
   }
+  return true;
 }
 async function callGetName(userId) {
   const profiles = await fetchProfiles([userId]);
@@ -2244,7 +2318,13 @@ function subscribeToCallSignals() {
       event: "INSERT", schema: "public", table: "call_signals",
       filter: "recipient_id=eq." + currentUser.id
     }, ({ new: signal }) => processCallSignal(signal).catch(error => console.error("Error procesando llamada:", error)))
-    .subscribe();
+    .subscribe((status, error) => {
+      if (status === "SUBSCRIBED") console.info("AUREON: recepción de llamadas conectada.");
+      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error("AUREON: no se pudo conectar el canal de llamadas:", error);
+        if (activeCall && !activeCall.incoming) callSubtitle.textContent = "Reconectando para recibir respuesta…";
+      }
+    });
 }
 function cleanupCall() {
   stopCallAlert();
@@ -2278,7 +2358,9 @@ async function beginCall(video) {
   callSubtitle.textContent = "Llamando a " + peerName + "…";
   callDisplay(false, true);
   startCallAlert();
-  await sendCallSignal("invite", { video });
+  const sent = await sendCallSignal("invite", { video });
+  if (sent) callSubtitle.textContent = "Llamando a " + peerName + "…";
+  else stopCallAlert();
 }
 $("#start-audio-call")?.addEventListener("click", () => beginCall(false));
 $("#start-video-call")?.addEventListener("click", () => beginCall(true));
