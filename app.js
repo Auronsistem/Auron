@@ -3485,8 +3485,15 @@ async function openUserInfo() {
   userInfoDialog?.showModal();
   const { data: friendship, error: friendshipError } = await supabase.from("friendships").select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
   if (friendshipError) {
-    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "La función de amigos aún necesita que se aplique la migración.";
-    if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+    // No bloquees el botón de enviar por un fallo al consultar amistades:
+    // el RPC de envío debe ejecutarse y mostrar su error real si también falla.
+    console.warn("AUREON: no se pudo consultar la amistad antes de enviar:", friendshipError);
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "No se pudo comprobar si ya son amigos. Puedes intentar enviar la solicitud.";
+    if (sendFriendRequestButton) {
+      sendFriendRequestButton.hidden = false;
+      sendFriendRequestButton.textContent = "Enviar solicitud de amigo";
+      sendFriendRequestButton.disabled = false;
+    }
     return;
   }
   if (friendship) {
@@ -3639,13 +3646,16 @@ $("#cancel-friend-request")?.addEventListener("click", async () => {
   }
 });
 
-sendFriendRequestButton?.addEventListener("click", async () => {
+sendFriendRequestButton?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
   const peerId = activePeerProfile?.id;
   if (!currentUser || !peerId || peerId === currentUser.id) {
     if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo identificar al usuario. Vuelve a abrir su información.";
     return;
   }
   sendFriendRequestButton.disabled = true;
+  sendFriendRequestButton.textContent = "Enviando…";
   if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
   try {
     const { data: result, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
