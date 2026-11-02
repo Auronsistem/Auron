@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "AUREON",
-  "short_name": "AUREON",
-  "description": "Mensajes y llamadas de AUREON",
+  "name": "AUREON PLAY",
+  "short_name": "AUREON PLAY",
+  "description": "Videos, Shorts, mensajes y llamadas de AUREON PLAY",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
