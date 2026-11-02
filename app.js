@@ -1678,7 +1678,7 @@ function presenceLevel(lastSeen) {
   return "offline";
 }
 function presenceLabel(level) {
-  return level === "online" ? "En línea" : level === "recent" ? "Activo hace poco" : "Desconectado";
+  return level === "online" ? "En línea" : level === "recent" ? "Activo hace menos de 2 h" : "Desconectado";
 }
 function presenceDot(level) {
   const dot = document.createElement("i");
@@ -1702,7 +1702,9 @@ function startPresence() {
 }
 function stopPresence() {
   if (presenceTimer) clearInterval(presenceTimer);
+  if (presenceRefreshTimer) clearInterval(presenceRefreshTimer);
   presenceTimer = null;
+  presenceRefreshTimer = null;
 }
 async function loadPresence(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -2356,7 +2358,7 @@ function cleanupCall() {
   if (localCallVideo) localCallVideo.srcObject = null;
   if (remoteCallVideo) remoteCallVideo.srcObject = null;
   if (callDialog?.open) callDialog.close();
-  $(".call-screen")?.classList.remove("is-video");
+  $(".call-screen")?.classList.remove("is-video", "is-connecting");
   activeCall = null;
 }
 async function beginCall(video) {
