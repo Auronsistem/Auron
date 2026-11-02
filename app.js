@@ -660,39 +660,21 @@ authForm?.addEventListener("submit", async (event) => {
   }
 });
 
-async function logout() {
-  stopPlayer();
-
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    alert("No se pudo cerrar sesión: " + error.message);
-  }
+async async function logout() {
+  stopPlayer(); const {error}=await supabase.auth.signOut();
+  if(error) alert("No se pudo cerrar sesión: "+error.message);
 }
-
 function updateHeader() {
-  const settingsLink = $("#open-settings-link");
-  if (settingsLink) settingsLink.hidden = false;
-  const mobileSettingsLink = $("#mobile-settings-link");
-  if (mobileSettingsLink) mobileSettingsLink.hidden = false;
-  const actions = $(".header-actions");
-  if (!actions) return;
-
-  actions.replaceChildren();
-
-  const button = document.createElement("button");
-  button.className = "button button-outline";
-
-  if (currentUser) {
-    button.textContent = "Cerrar sesión";
-    button.addEventListener("click", logout);
-  } else {
-    button.textContent = "Iniciar sesión";
-    button.addEventListener("click", openAuth);
-  }
-
-  actions.append(button);
+  const settingsLink=$("#open-settings-link"); if(settingsLink) settingsLink.hidden=false;
+  const mobileSettingsLink=$("#mobile-settings-link"); if(mobileSettingsLink) mobileSettingsLink.hidden=false;
+  const actions=$(".header-actions"); if(!actions) return; actions.replaceChildren();
+  const button=document.createElement("button"); button.type="button"; button.className="header-profile-button";
+  button.setAttribute("aria-label",currentUser?"Abrir configuración de perfil":"Iniciar sesión");
+  button.append(createAvatar(currentProfile,"header-profile-avatar"));
+  button.addEventListener("click",()=>currentUser?openSettings():openAuth()); actions.append(button);
+  const signout=$("#settings-signout"); if(signout) signout.hidden=!currentUser;
 }
+
 
 
 const guardianAuthOptions = {
@@ -1210,6 +1192,7 @@ async function updateSession(session) {
   }
   currentUser = nextUser;
   if (currentUser && !guardianClient) await restoreGuardianSession();
+  await loadCurrentProfile();
   applyTheme(readThemePreference());
   if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
@@ -2635,10 +2618,32 @@ function otherParticipant(conversation) {
   return conversation.participant_one === currentUser.id ? conversation.participant_two : conversation.participant_one;
 }
 function displayName(profile) { return profile?.display_name?.trim() || "Usuario de AUREON"; }
+function renderAvatar(element, profile, extraClass = "") {
+  if (!element) return;
+  element.replaceChildren();
+  element.className = element.className.split(/\\s+/).filter(n => !n.startsWith("avatar-")).join(" ") + " avatar-frame " + extraClass;
+  if (profile?.avatar_url) {
+    const img = document.createElement("img"); img.src = profile.avatar_url; img.alt = ""; img.loading = "lazy";
+    img.onerror = () => { img.remove(); element.classList.add("avatar-default"); const shape = document.createElement("span"); shape.className = "avatar-silhouette"; element.append(shape); };
+    element.classList.remove("avatar-default"); element.append(img);
+  } else {
+    element.classList.add("avatar-default"); const shape = document.createElement("span"); shape.className = "avatar-silhouette"; shape.setAttribute("aria-hidden","true"); element.append(shape);
+  }
+}
+function createAvatar(profile, extraClass = "") { const el = document.createElement("span"); el.className = "avatar-frame " + extraClass; renderAvatar(el, profile, extraClass); return el; }
+let currentProfile = null;
+async function loadCurrentProfile() {
+  if (!currentUser) { currentProfile = null; updateHeader(); return; }
+  const {data,error} = await supabase.from("profiles").select("id, display_name, avatar_url").eq("id",currentUser.id).maybeSingle();
+  if (error) { console.warn("No se pudo cargar el perfil:",error); currentProfile={id:currentUser.id,avatar_url:currentUser.user_metadata?.avatar_url||null}; }
+  else currentProfile=data||{id:currentUser.id,avatar_url:currentUser.user_metadata?.avatar_url||null};
+  const preview=$("#profile-settings-preview"); if(preview) renderAvatar(preview,currentProfile,"profile-settings-avatar");
+  updateHeader();
+}
 async function fetchProfiles(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return new Map();
-  const { data, error } = await supabase.from("profiles").select("id, display_name").in("id", unique);
+  const { data, error } = await supabase.from("profiles").select("id, display_name, avatar_url").in("id", unique);
   if (error) { console.error("No se pudieron cargar perfiles:", error); return new Map(); }
   return new Map((data || []).map(profile => [profile.id, profile]));
 }
@@ -3041,18 +3046,20 @@ async function loadMessages(conversationId, quiet = false) {
   const { data, error } = await supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
     .eq("conversation_id", conversationId).order("created_at", { ascending: true }).limit(300);
   if (error) { if (!quiet) showEmpty(messageList, "No se pudieron cargar los mensajes."); console.error(error); return; }
-  const messages = data || [];
-  const signature = messages.map(m => m.id + ":" + (m.read_at || "")).join("|");
-  if (quiet && messageList.dataset.signature === signature) return;
-  messageList.replaceChildren(); messageList.dataset.signature = signature;
-  if (!messages.length) { showEmpty(messageList, "Todavía no hay mensajes. ¡Saluda para comenzar!"); return; }
-  for (const message of messages) {
-    const bubble = document.createElement("article");
-    bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
-    const body = document.createElement("div"); body.className = "message-body"; await buildMessageBody(body, message.body);
-    const time = document.createElement("time"); time.dateTime = message.created_at;
-    time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-    bubble.append(body, time); messageList.append(bubble);
+  const messages=data||[], signature=messages.map(m=>m.id+":"+(m.read_at||"")).join("|");
+  if(quiet&&messageList.dataset.signature===signature)return;
+  messageList.replaceChildren();messageList.dataset.signature=signature;
+  if(!messages.length){showEmpty(messageList,"Todavía no hay mensajes. ¡Saluda para comenzar!");return;}
+  const profiles=await fetchProfiles(messages.map(m=>m.sender_id));
+  for(const message of messages){
+    const profile=message.sender_id===currentUser.id?(currentProfile||profiles.get(message.sender_id)):profiles.get(message.sender_id);
+    const row=document.createElement("div");row.className="message-row"+(message.sender_id===currentUser.id?" mine":"");
+    const avatar=createAvatar(profile,"message-avatar"),bubble=document.createElement("article");
+    bubble.className="message-bubble"+(message.sender_id===currentUser.id?" mine":"");
+    const body=document.createElement("div");body.className="message-body";await buildMessageBody(body,message.body);
+    const time=document.createElement("time");time.dateTime=message.created_at;
+    time.textContent=new Date(message.created_at).toLocaleString("es-PE",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    bubble.append(body,time);if(message.sender_id===currentUser.id)row.append(bubble,avatar);else row.append(avatar,bubble);messageList.append(row);
   }
   messageList.scrollTop = messageList.scrollHeight;
   const unread = messages.filter(m => m.sender_id !== currentUser.id && !m.read_at).map(m => m.id);
@@ -3067,6 +3074,23 @@ messageForm?.addEventListener("submit", async event => {
   const sent = await sendChatBody(body, target);
   if (sent && input?.value.trim() === body) input.value = "";
 });
+$("#profile-picture-input")?.addEventListener("change", async event => {
+  const file=event.target.files?.[0]; if(!file||!currentUser) return;
+  const status=$("#profile-picture-status");
+  if(!["image/jpeg","image/png","image/webp"].includes(file.type)){showMessage(status,"Usa una imagen JPG, PNG o WEBP.",true);event.target.value="";return;}
+  if(file.size>5*1024*1024){showMessage(status,"La imagen debe pesar 5 MB o menos.",true);event.target.value="";return;}
+  showMessage(status,"Subiendo foto de perfil...");
+  const ext=file.type==="image/png"?"png":file.type==="image/webp"?"webp":"jpg";
+  const path=currentUser.id+"/profile-"+Date.now()+"."+ext;
+  const {error:uploadError}=await supabase.storage.from("avatars").upload(path,file,{upsert:true,contentType:file.type,cacheControl:"3600"});
+  if(uploadError){console.error(uploadError);showMessage(status,"No se pudo subir la foto. Inténtalo otra vez.",true);return;}
+  const {data:publicData}=supabase.storage.from("avatars").getPublicUrl(path);
+  const avatarUrl=publicData?.publicUrl?publicData.publicUrl+"?v="+Date.now():"";
+  const {data:savedProfile,error:saveError}=await supabase.from("profiles").upsert({id:currentUser.id,avatar_url:avatarUrl},{onConflict:"id"}).select("id,display_name,avatar_url").single();
+  if(saveError){console.error(saveError);showMessage(status,"La foto se subió, pero no se pudo guardar en el perfil.",true);return;}
+  currentProfile=savedProfile; await loadCurrentProfile(); showMessage(status,"¡Foto de perfil actualizada!"); event.target.value="";
+});
+$("#settings-signout")?.addEventListener("click",logout);
 $("#open-settings-link")?.addEventListener("click", openSettings);
 $("#mobile-settings-link")?.addEventListener("click", openSettings);
 $("#close-settings")?.addEventListener("click", closeSettings);
@@ -3205,20 +3229,17 @@ async function loadGroupMessages(groupId, quiet = false) {
   if (quiet && messageList.dataset.signature === "group:" + signature) return;
   messageList.replaceChildren(); messageList.dataset.signature = "group:" + signature;
   if (!messages.length) { showEmpty(messageList, "Este grupo está listo. ¡Envía el primer mensaje!"); return; }
-  const profiles = await fetchProfiles(messages.map(m => m.sender_id));
-  for (const message of messages) {
-    const bubble = document.createElement("article");
-    bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
-    if (message.sender_id !== currentUser.id) {
-      const sender = document.createElement("strong");
-      sender.className = "group-sender";
-      sender.textContent = displayName(profiles.get(message.sender_id));
-      bubble.append(sender);
-    }
-    const body = document.createElement("div"); body.className = "message-body"; await buildMessageBody(body, message.body);
-    const time = document.createElement("time"); time.dateTime = message.created_at;
-    time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-    bubble.append(body, time); messageList.append(bubble);
+  const profiles=await fetchProfiles(messages.map(m=>m.sender_id));
+  for(const message of messages){
+    const profile=message.sender_id===currentUser.id?(currentProfile||profiles.get(message.sender_id)):profiles.get(message.sender_id);
+    const row=document.createElement("div");row.className="message-row"+(message.sender_id===currentUser.id?" mine":"");
+    const avatar=createAvatar(profile,"message-avatar"),bubble=document.createElement("article");
+    bubble.className="message-bubble"+(message.sender_id===currentUser.id?" mine":"");
+    if(message.sender_id!==currentUser.id){const sender=document.createElement("strong");sender.className="group-sender";sender.textContent=displayName(profile);bubble.append(sender);}
+    const body=document.createElement("div");body.className="message-body";await buildMessageBody(body,message.body);
+    const time=document.createElement("time");time.dateTime=message.created_at;
+    time.textContent=new Date(message.created_at).toLocaleString("es-PE",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    bubble.append(body,time);if(message.sender_id===currentUser.id)row.append(bubble,avatar);else row.append(avatar,bubble);messageList.append(row);
   }
   messageList.scrollTop = messageList.scrollHeight;
 }
@@ -3512,8 +3533,14 @@ function callDisplay(showIncoming = false, showActive = false) {
   $("#active-call-actions").hidden = !showActive;
   const videoMode = Boolean(activeCall?.video || activeGroupCall?.video);
   $(".call-screen")?.classList.toggle("is-video", videoMode);
-  const avatar = $("#call-avatar");
-  if (avatar) avatar.textContent = (callTitle?.textContent || "A").trim().charAt(0).toUpperCase();
+  const avatar=$("#call-avatar");
+  if(avatar){
+    const peerId=activeCall?.peerId||activeGroupCall?.peerId||activeGroupCall?.hostId||currentUser?.id;
+    renderAvatar(avatar,peerId===currentUser?.id?currentProfile:null,"call-avatar-image");
+    if(peerId&&peerId!==currentUser?.id) void fetchProfiles([peerId]).then(profiles=>{
+      if(callDialog?.open&&(activeCall?.peerId===peerId||activeGroupCall?.peerId===peerId||activeGroupCall?.hostId===peerId)) renderAvatar(avatar,profiles.get(peerId),"call-avatar-image");
+    });
+  }
 }
 async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peerId) {
   if (!activeCall || !recipientId || !currentUser) return;
@@ -3899,20 +3926,17 @@ async function sendGroupCallSignal(type, payload = {}, recipientId, call = activ
   }
   return true;
 }
-function makeGroupTile(userId, name, stream, local = false) {
-  const grid = $("#group-call-grid");
-  if (!grid) return;
-  let tile = grid.querySelector('[data-user-id="' + userId + '"]');
-  if (!tile) {
-    tile = document.createElement("div"); tile.className = "group-call-tile"; tile.dataset.userId = userId;
-    const media = document.createElement(activeGroupCall?.video ? "video" : "audio");
-    media.autoplay = true; media.playsInline = true; media.srcObject = stream;
-    if (local) media.muted = true;
-    const title = document.createElement("strong"); title.textContent = name;
-    tile.append(media, title); grid.append(tile);
-  } else {
-    const media = tile.querySelector("video,audio"); if (media) media.srcObject = stream;
-  }
+function makeGroupTile(userId,name,stream,local=false,profile=null){
+  const grid=$("#group-call-grid");if(!grid)return;
+  let tile=grid.querySelector('[data-user-id="'+userId+'"]');
+  if(!tile){
+    tile=document.createElement("div");tile.className="group-call-tile";tile.dataset.userId=userId;
+    const media=document.createElement(activeGroupCall?.video?"video":"audio");media.autoplay=true;media.playsInline=true;media.srcObject=stream;if(local)media.muted=true;
+    const avatar=createAvatar(profile||(local?currentProfile:null),"group-call-avatar"),title=document.createElement("strong");title.textContent=name;
+    tile.append(media,avatar,title);grid.append(tile);
+    const refresh=()=>{const live=Boolean(activeGroupCall?.video&&stream.getVideoTracks().some(t=>t.enabled&&t.readyState==="live"));avatar.hidden=live;tile.classList.toggle("has-live-video",live);};
+    for(const track of stream.getVideoTracks()){track.addEventListener("mute",refresh);track.addEventListener("unmute",refresh);track.addEventListener("ended",refresh);}refresh();
+  }else{const media=tile.querySelector("video,audio");if(media)media.srcObject=stream;const avatar=tile.querySelector(".group-call-avatar");if(avatar&&profile)renderAvatar(avatar,profile,"group-call-avatar");}
 }
 async function createGroupPeer(userId, makeOffer) {
   if (!activeGroupCall || !callLocalStream || groupCallPeers.has(userId)) return;
@@ -3927,7 +3951,7 @@ async function createGroupPeer(userId, makeOffer) {
   pc.ontrack = async event => {
     const stream = event.streams?.[0] || new MediaStream([event.track]);
     const profile = await fetchProfiles([userId]);
-    makeGroupTile(userId, displayName(profile.get(userId)), stream, false);
+    makeGroupTile(userId, displayName(profile.get(userId)), stream, false, profile.get(userId));
     const media = $("#group-call-grid")?.querySelector('[data-user-id="' + userId + '"] video, [data-user-id="' + userId + '"] audio');
     media?.play().catch(() => {});
   };
@@ -4116,7 +4140,7 @@ async function beginGroupCall(video) {
     callLocalStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:video ? { facingMode:{ideal:"user"}, width:{ideal:640}, height:{ideal:480} } : false });
     remoteCallVideo.hidden = true; localCallVideo.hidden = true;
     const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
-    makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    makeGroupTile(currentUser.id, "Tú", callLocalStream, true, currentProfile);
     const { error: joinError } = await supabase.from("chat_group_call_participants").insert({ call_id: activeGroupCall.id, group_id: activeGroup.id, user_id: currentUser.id });
     if (joinError) throw joinError;
     await syncGroupCallPeers();
@@ -4140,7 +4164,7 @@ async function acceptGroupCall() {
     callLocalStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:activeGroupCall.video ? { facingMode:{ideal:"user"}, width:{ideal:640}, height:{ideal:480} } : false });
     remoteCallVideo.hidden = true; localCallVideo.hidden = true;
     const grid = $("#group-call-grid"); grid.hidden = false; grid.replaceChildren();
-    makeGroupTile(currentUser.id, "Tú", callLocalStream, true);
+    makeGroupTile(currentUser.id, "Tú", callLocalStream, true, currentProfile);
     const { error: joinError } = await supabase.from("chat_group_call_participants").insert({ call_id: activeGroupCall.id, group_id: activeGroupCall.groupId, user_id: currentUser.id });
     if (joinError) throw joinError;
     const { data: rows } = await supabase.from("chat_group_members").select("user_id").eq("group_id", activeGroupCall.groupId);
