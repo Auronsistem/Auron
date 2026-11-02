@@ -40,6 +40,68 @@ function showMessage(element, message, error = false) {
 }
 
 
+function themeStorageKey() {
+  return "aureon-theme:" + (currentUser?.id || "guest");
+}
+
+function readThemePreference() {
+  try {
+    return localStorage.getItem(themeStorageKey()) === "light" ? "light" : "dark";
+  } catch (_) {
+    return "dark";
+  }
+}
+
+function applyTheme(theme, persist = true) {
+  const selected = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selected;
+  $("#theme-light")?.setAttribute("aria-pressed", String(selected === "light"));
+  $("#theme-dark")?.setAttribute("aria-pressed", String(selected === "dark"));
+  if (persist) {
+    try { localStorage.setItem(themeStorageKey(), selected); }
+    catch (error) { console.warn("No se pudo guardar el tema de AUREON:", error); }
+  }
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.content = selected === "light" ? "#f3f6fb" : "#090d18";
+}
+
+function initializeThemeSettings() {
+  applyTheme(readThemePreference(), false);
+  $("#theme-light")?.addEventListener("click", () => {
+    applyTheme("light");
+    showMessage($("#theme-settings-status"), "Tema claro activado.");
+  });
+  $("#theme-dark")?.addEventListener("click", () => {
+    applyTheme("dark");
+    showMessage($("#theme-settings-status"), "Tema oscuro activado.");
+  });
+}
+
+function setSettingsVisibility(isOpen) {
+  const section = $("#configuracion");
+  if (!section) return;
+  section.hidden = !isOpen;
+  document.body.classList.toggle("settings-open", Boolean(isOpen));
+}
+
+function openSettings() {
+  if (!currentUser) { openAuth(); return; }
+  const section = $("#configuracion");
+  if (!section) return;
+  const parentalPanel = $("#parental-settings-panel");
+  if (parentalPanel) parentalPanel.hidden = Boolean(parentalStatus.supervised);
+  setSettingsVisibility(true);
+  showSection("configuracion");
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeSettings() {
+  setSettingsVisibility(false);
+  showSection("inicio");
+}
+
+initializeThemeSettings();
+
 function urlBase64ToUint8Array(value) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -583,7 +645,9 @@ async function logout() {
 
 function updateHeader() {
   const settingsLink = $("#open-settings-link");
-  if (settingsLink) settingsLink.hidden = !currentUser || parentalStatus.supervised;
+  if (settingsLink) settingsLink.hidden = false;
+  const mobileSettingsLink = $("#mobile-settings-link");
+  if (mobileSettingsLink) mobileSettingsLink.hidden = false;
   const actions = $(".header-actions");
   if (!actions) return;
 
@@ -926,8 +990,10 @@ async function refreshParentalState() {
     if (parentalMinuteTimer) window.clearInterval(parentalMinuteTimer);
     parentalMinuteTimer = null;
     setParentalScreenBlock(false);
-    if ($("#open-settings-link")) $("#open-settings-link").hidden = true;
-    if ($("#configuracion")) $("#configuracion").hidden = true;
+    if ($("#open-settings-link")) $("#open-settings-link").hidden = false;
+    if ($("#mobile-settings-link")) $("#mobile-settings-link").hidden = false;
+    setSettingsVisibility(false);
+    if ($("#parental-settings-panel")) $("#parental-settings-panel").hidden = true;
     if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
     return;
   }
@@ -942,8 +1008,12 @@ async function refreshParentalState() {
 
   const settingsSection = $("#configuracion");
   const settingsLink = $("#open-settings-link");
-  if (settingsSection) settingsSection.hidden = supervisedByAdult;
-  if (settingsLink) settingsLink.hidden = supervisedByAdult;
+  const mobileSettingsLink = $("#mobile-settings-link");
+  if (settingsSection) settingsSection.hidden = !document.body.classList.contains("settings-open");
+  if (settingsLink) settingsLink.hidden = false;
+  if (mobileSettingsLink) mobileSettingsLink.hidden = false;
+  const parentalPanel = $("#parental-settings-panel");
+  if (parentalPanel) parentalPanel.hidden = supervisedByAdult || Boolean(parentalStatus.supervised);
   if (supervisedByAdult) {
     if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
   } else {
@@ -1040,6 +1110,7 @@ async function updateSession(session) {
     }
   }
   currentUser = nextUser;
+  applyTheme(readThemePreference());
   if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
   updateHeader();
@@ -1652,8 +1723,11 @@ playerDialog?.addEventListener(
 );
 
 // NAVEGACIÓN DE SECCIONES
-// El HTML usa #inicio, #videos, #mensajes, #shorts y #cuenta.
+// Configuración se mantiene oculta hasta abrirla desde el menú.
 function showSection(sectionName) {
+  if (sectionName !== "configuracion" && document.body.classList.contains("settings-open")) {
+    setSettingsVisibility(false);
+  }
   const sectionIds = {
     home: "#inicio",
     inicio: "#inicio",
@@ -1689,6 +1763,12 @@ document.querySelectorAll(".side-link[href^='#']").forEach((link) => {
     document.querySelectorAll(".side-link").forEach((item) => {
       item.classList.toggle("active", item === link);
     });
+  });
+});
+
+document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
+  link.addEventListener("click", () => {
+    if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
   });
 });
 
@@ -2838,6 +2918,10 @@ messageForm?.addEventListener("submit", async event => {
   const sent = await sendChatBody(body, target);
   if (sent && input?.value.trim() === body) input.value = "";
 });
+$("#open-settings-link")?.addEventListener("click", openSettings);
+$("#mobile-settings-link")?.addEventListener("click", openSettings);
+$("#close-settings")?.addEventListener("click", closeSettings);
+
 $("#new-conversation")?.addEventListener("click", () => peopleSearch?.focus());
 peopleSearch?.addEventListener("input", () => {
   if (peopleSearchTimer) window.clearTimeout(peopleSearchTimer);
