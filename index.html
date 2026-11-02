@@ -6,18 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090d18">
   <link rel="manifest" href="./manifest.json">
-  <link rel="apple-touch-icon" href="./icons/aureon.svg">
+  <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=26">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%23090d18%27/%3E%3Cpath d=%27M35 25 L75 50 L35 75 Z%27 fill=%27%2320d9ed%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
 
   <!-- CABECERA -->
   <header class="topbar">
     <a class="brand" href="#inicio">
-      <span class="brand-icon">▶</span>
+      <img class="brand-icon" src="./icons/aureon.svg?v=2" alt="">
       AUREON <b>PLAY</b>
     </a>
 
@@ -48,9 +48,9 @@
     <a href="#cuenta" class="side-link">
       <span>◉</span> Mi canal
     </a>
-    <a href="#configuracion" class="side-link" id="open-settings-link" hidden>
+    <button type="button" class="side-link settings-nav-button" id="open-settings-link">
       <span>⚙</span> Configuración
-    </a>
+    </button>
   </aside>
 
   <!-- CONTENIDO PRINCIPAL -->
@@ -223,15 +223,26 @@
       </div>
     </section>
 
-    <!-- CONFIGURACIÓN Y CONTROLES PARENTALES -->
-    <section class="section" id="configuracion" hidden>
-      <div class="section-head">
+    <!-- CONFIGURACIÓN: solo se abre desde el botón del menú -->
+    <section class="section settings-section" id="configuracion" hidden>
+      <div class="section-head settings-section-head">
         <div>
-          <p class="eyebrow">SEGURIDAD DE LA CUENTA</p>
+          <p class="eyebrow">PREFERENCIAS PRIVADAS</p>
           <h2>Configuración</h2>
         </div>
+        <button id="close-settings" class="button button-outline" type="button">← Volver</button>
       </div>
-      <div class="content-panel parental-panel">
+      <div class="content-panel appearance-panel" id="appearance-settings-panel">
+        <p class="eyebrow">PERSONALIZA AUREON PLAY</p>
+        <h3>🎨 Apariencia</h3>
+        <p class="muted">Elige cómo quieres ver AUREON PLAY. Este cambio se guarda para tu cuenta en este dispositivo.</p>
+        <div class="theme-options" role="group" aria-label="Seleccionar tema">
+          <button id="theme-light" class="theme-option" type="button" aria-pressed="false"><span aria-hidden="true">☀️</span> Claro</button>
+          <button id="theme-dark" class="theme-option" type="button" aria-pressed="true"><span aria-hidden="true">🌙</span> Oscuro</button>
+        </div>
+        <p id="theme-settings-status" class="notice" aria-live="polite"></p>
+      </div>
+      <div class="content-panel parental-panel" id="parental-settings-panel">
         <p class="eyebrow">FAMILIA Y SEGURIDAD</p>
         <h3>🛡️ Controles parentales</h3>
         <p class="muted">El apoderado verifica su correo con un código de 6 dígitos y después indica el correo de la cuenta AUREON que desea supervisar. No se pide ni se guarda la contraseña de Gmail. El apoderado debe tener una cuenta AUREON registrada.</p>
@@ -310,6 +321,7 @@
     <button id="mobile-upload"><span>＋</span><small>Publicar</small></button>
     <a href="#shorts"><span>▣</span><small>Shorts</small></a>
     <a href="#cuenta"><span>◉</span><small>Canal</small></a>
+    <button id="mobile-settings-link" type="button"><span>⚙</span><small>Config.</small></button>
   </nav>
 
   <!-- VENTANA DE PUBLICACIÓN -->
@@ -449,6 +461,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=50"></script>
+  <script type="module" src="app.js?v=51"></script>
 </body>
 </html>
