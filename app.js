@@ -3240,6 +3240,7 @@ async function loadGroupMessages(groupId, quiet = false) {
 
 let messageRealtimeChannel = null;
 let messageRealtimeUserId = null;
+let messageReconnectTimer = null;
 
 async function handleIncomingMessageEvent(kind, row) {
   if (!currentUser || !row || row.sender_id === currentUser.id) return;
@@ -3313,6 +3314,12 @@ function subscribeToMessageEvents() {
       if (status === "SUBSCRIBED") console.info("AUREON: recepción de mensajes en tiempo real conectada.");
       else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.error("AUREON: no se pudo conectar el canal de mensajes en tiempo real:", error);
+        messageRealtimeUserId = null;
+        if (messageReconnectTimer) window.clearTimeout(messageReconnectTimer);
+        messageReconnectTimer = window.setTimeout(() => {
+          messageReconnectTimer = null;
+          if (currentUser?.id === requestedUserId) subscribeToMessageEvents();
+        }, 2500);
       }
     });
 
@@ -3337,6 +3344,7 @@ const remoteCallVideo = $("#remote-call-video");
 const localCallVideo = $("#local-call-video");
 let callChannel = null;
 let callChannelUserId = null;
+let callReconnectTimer = null;
 let activeCall = null;
 let callPeer = null;
 let callLocalStream = null;
@@ -3724,6 +3732,12 @@ function subscribeToCallSignals() {
       else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.error("AUREON: no se pudo conectar el canal de llamadas:", error);
         if (activeCall && !activeCall.incoming) callSubtitle.textContent = "Reconectando para recibir respuesta…";
+        callChannelUserId = null;
+        if (callReconnectTimer) window.clearTimeout(callReconnectTimer);
+        callReconnectTimer = window.setTimeout(() => {
+          callReconnectTimer = null;
+          if (currentUser?.id === requestedUserId) subscribeToCallSignals();
+        }, 2500);
       }
     });
   callChannelUserId = requestedUserId;
@@ -3863,6 +3877,7 @@ document.addEventListener("visibilitychange", () => {
 // VIDEOLLAMADAS Y LLAMADAS GRUPALES (hasta 6 participantes conectados)
 let groupCallChannel = null;
 let groupCallChannelUserId = null;
+let groupCallReconnectTimer = null;
 let groupCallSubscriptionQueue = Promise.resolve();
 let activeGroupCall = null;
 const groupCallPeers = new Map();
@@ -4038,6 +4053,14 @@ function subscribeToGroupCallSignals() {
         .subscribe((status, error) => {
           if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             console.error("AUREON: no se pudo conectar el canal de llamadas grupales:", error);
+            groupCallChannelUserId = null;
+            if (groupCallReconnectTimer) window.clearTimeout(groupCallReconnectTimer);
+            groupCallReconnectTimer = window.setTimeout(() => {
+              groupCallReconnectTimer = null;
+              if (currentUser?.id === requestedUserId) {
+                subscribeToGroupCallSignals().catch(reconnectError => console.error("AUREON: no se pudo reintentar el canal grupal:", reconnectError));
+              }
+            }, 2500);
           }
         });
 
