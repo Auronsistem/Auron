@@ -2984,10 +2984,13 @@ async function buildMessageBody(container, rawBody) {
 function voiceRecordingUi(recording, message = "") {
   const button = $("#record-voice-message");
   const status = $("#voice-recording-status");
+  const touch = window.matchMedia?.("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   if (button) {
     button.classList.toggle("is-recording", recording);
-    button.textContent = recording ? "■ Detener audio" : "🎙 Grabar audio";
+    button.textContent = recording ? "●" : "🎙";
     button.setAttribute("aria-pressed", String(recording));
+    button.setAttribute("aria-label", recording ? (touch ? "Grabando; suelta para enviar" : "Detener grabación y enviar") : (touch ? "Mantén pulsado para grabar audio" : "Clic para grabar audio"));
+    button.title = recording ? (touch ? "Suelta para enviar el audio" : "Haz clic otra vez para enviar el audio") : (touch ? "Mantén pulsado para grabar y suelta para enviar" : "Clic para empezar; clic otra vez para enviar");
     button.disabled = !currentChatTarget() && !recording;
   }
   if (status) status.textContent = message;
@@ -3068,7 +3071,11 @@ async function toggleVoiceRecording() {
     };
     voiceRecorder.start(250);
     voiceRecording = true;
-    voiceRecordingUi(true, "Grabando… pulsa «Detener audio» para enviarlo.");
+    voiceRecordingUi(true, isTouchVoiceControl() ? "Grabando… suelta el botón para enviar." : "Grabando… vuelve a hacer clic para enviar.");
+    if (voiceStopAfterStart || (isTouchVoiceControl() && !voiceHoldActive)) {
+      voiceStopAfterStart = false;
+      queueMicrotask(() => { if (voiceRecorder?.state === "recording") voiceRecorder.stop(); });
+    }
     voiceRecordTimer = window.setTimeout(() => {
       if (voiceRecording && voiceRecorder?.state === "recording") {
         voiceRecordingUi(true, "Límite de 2 minutos alcanzado; terminando grabación…");
@@ -3085,7 +3092,38 @@ async function toggleVoiceRecording() {
       : (error?.message || "No se pudo grabar el audio."), true);
   }
 }
-$("#record-voice-message")?.addEventListener("click", toggleVoiceRecording);
+const voiceRecordButton = $("#record-voice-message");
+let voiceHoldActive = false;
+let voiceStopAfterStart = false;
+const isTouchVoiceControl = () => Boolean(window.matchMedia?.("(pointer: coarse)").matches || navigator.maxTouchPoints > 0);
+voiceRecordButton?.addEventListener("pointerdown", event => {
+  if (!isTouchVoiceControl() || event.button !== 0) return;
+  event.preventDefault();
+  voiceHoldActive = true;
+  voiceStopAfterStart = false;
+  voiceRecordButton.setPointerCapture?.(event.pointerId);
+  if (!voiceRecording) toggleVoiceRecording();
+});
+const releaseVoiceHold = event => {
+  if (!isTouchVoiceControl() || !voiceHoldActive) return;
+  event.preventDefault();
+  voiceHoldActive = false;
+  if (voiceRecording && voiceRecorder?.state === "recording") voiceRecorder.stop();
+  else voiceStopAfterStart = true;
+};
+voiceRecordButton?.addEventListener("pointerup", releaseVoiceHold);
+voiceRecordButton?.addEventListener("pointercancel", releaseVoiceHold);
+voiceRecordButton?.addEventListener("lostpointercapture", () => {
+  if (isTouchVoiceControl() && voiceHoldActive) {
+    voiceHoldActive = false;
+    if (voiceRecording && voiceRecorder?.state === "recording") voiceRecorder.stop();
+    else voiceStopAfterStart = true;
+  }
+});
+voiceRecordButton?.addEventListener("click", event => {
+  if (isTouchVoiceControl()) { event.preventDefault(); return; }
+  toggleVoiceRecording();
+});
 
 function initializeMessagePickers() {
   const picker = $("#message-picker");
@@ -3537,9 +3575,9 @@ function attachVoiceWaveform(stream, indicator) {
         const delta = (samples[i] - 128) / 128;
         energy += delta * delta;
       }
-      const level = Math.min(1, Math.sqrt(energy / samples.length) * 5);
+      const level = Math.min(1, Math.sqrt(energy / samples.length) * 12);
       indicator.style.setProperty("--voice-level", level.toFixed(2));
-      indicator.classList.toggle("is-speaking", level > 0.075);
+      indicator.classList.toggle("is-speaking", level > 0.018);
       frame = requestAnimationFrame(tick);
     };
     context.resume().catch(() => {});
@@ -3840,6 +3878,8 @@ async function prepareCallPeer() {
     });
   }
   await attachLocalCallPreview(callLocalStream);
+  attachVoiceWaveform(callLocalStream, $("#call-voice-waves"));
+  attachVoiceWaveform(callLocalStream, $("#call-video-voice-waves"));
   if (activeCall.video) callSubtitle.textContent = "Cámara activa";
   callLocalStream.getTracks().forEach(track => callPeer.addTrack(track, callLocalStream));
 }
