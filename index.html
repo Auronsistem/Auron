@@ -264,20 +264,29 @@
   <!-- LLAMADAS PRIVADAS -->
   <dialog id="call-dialog" class="call-dialog">
     <div class="call-screen">
-      <p class="eyebrow" id="call-state">LLAMADA SOCORA PLAY</p>
-      <h2 id="call-title">Llamada</h2>
-      <p id="call-subtitle" class="muted">Conectando…</p>
-      <video id="remote-call-video" autoplay playsinline></video>
-      <video id="local-call-video" autoplay muted playsinline></video>
-      <div id="group-call-grid" class="group-call-grid" hidden></div>
-      <div id="incoming-call-actions" class="call-actions" hidden>
-        <button id="accept-call" class="button" type="button">Aceptar</button>
-        <button id="reject-call" class="button button-outline" type="button">Rechazar</button>
+      <header class="call-topbar">
+        <span class="call-brand">AUREON</span>
+        <span class="call-live-indicator"><i></i> <span id="call-state">LLAMADA</span></span>
+      </header>
+      <section class="call-person">
+        <div id="call-avatar" class="call-avatar" aria-hidden="true">A</div>
+        <h2 id="call-title">Llamada</h2>
+        <p id="call-subtitle" class="muted" aria-live="polite">Conectando…</p>
+      </section>
+      <section class="call-media" aria-label="Video de la llamada">
+        <video id="remote-call-video" autoplay playsinline></video>
+        <video id="local-call-video" autoplay muted playsinline></video>
+        <div id="group-call-grid" class="group-call-grid" hidden></div>
+      </section>
+      <div id="incoming-call-actions" class="call-actions call-incoming-actions" hidden>
+        <button id="accept-call" class="call-control call-accept" type="button"><span>✓</span><small>Aceptar</small></button>
+        <button id="reject-call" class="call-control call-reject" type="button"><span>✕</span><small>Rechazar</small></button>
       </div>
-      <div id="active-call-actions" class="call-actions" hidden>
-        <button id="toggle-call-mic" class="button button-outline" type="button">Silenciar</button>
-        <button id="toggle-call-camera" class="button button-outline" type="button">Apagar cámara</button><button id="switch-call-camera" class="button button-outline" type="button">Cambiar cámara</button>
-        <button id="end-call" class="button" type="button">Finalizar</button>
+      <div id="active-call-actions" class="call-actions call-active-actions" hidden>
+        <button id="toggle-call-mic" class="call-control" type="button"><span>🎙</span><small>Silenciar</small></button>
+        <button id="toggle-call-camera" class="call-control" type="button"><span>▣</span><small>Cámara</small></button>
+        <button id="switch-call-camera" class="call-control" type="button"><span>↻</span><small>Girar</small></button>
+        <button id="end-call" class="call-control call-end" type="button"><span>☎</span><small>Colgar</small></button>
       </div>
     </div>
   </dialog>
