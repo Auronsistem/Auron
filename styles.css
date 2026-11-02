@@ -2307,3 +2307,6 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   font-size:11px;
   text-align:center;
 }
+
+/* El botón secundario solo aparece cuando existe una solicitud pendiente enviada por esta cuenta. */
+#cancel-friend-request[hidden] { display:none !important; }
