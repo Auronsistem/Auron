@@ -947,10 +947,18 @@ async function refreshParentalState() {
       if (!currentUser || !parentalStatus.supervised || document.visibilityState !== "visible") return;
       if (parentalScreenBlocked) {
         const previousMaturity = Number(parentalStatus.maturity_level ?? 0);
+        const wasSupervised = Boolean(parentalStatus.supervised);
         const { data, error: statusError } = await supabase.rpc("get_parental_status");
         if (!statusError && data) {
           parentalStatus = data;
           setParentalScreenBlock(Boolean(data.blocked));
+          if (wasSupervised && data.supervised === false) {
+            await refreshParentalState();
+            await loadVideos();
+            await loadRecommendedYouTube();
+            await loadRecommendedShorts();
+            return;
+          }
           if (Number(data.maturity_level ?? 0) !== previousMaturity) {
             await loadVideos();
             await loadRecommendedShorts();
