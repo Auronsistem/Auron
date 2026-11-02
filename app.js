@@ -1,7 +1,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// SOCORA PLAY / AUREON
+// AUREON PLAY
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
 const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
 const YOUTUBE_FUNCTION = "smooth-action";
@@ -193,7 +193,7 @@ function createLockScreen() {
   content.style.maxWidth = "450px";
 
   const logo = document.createElement("h1");
-  logo.textContent = "▶ SOCORA PLAY";
+  logo.textContent = "▶ AUREON PLAY";
   logo.style.color = "#20d9ed";
 
   const title = document.createElement("h2");
@@ -2375,7 +2375,7 @@ function clearMessaging() {
 function otherParticipant(conversation) {
   return conversation.participant_one === currentUser.id ? conversation.participant_two : conversation.participant_one;
 }
-function displayName(profile) { return profile?.display_name?.trim() || "Usuario de SOCORA"; }
+function displayName(profile) { return profile?.display_name?.trim() || "Usuario de AUREON"; }
 async function fetchProfiles(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return new Map();
@@ -3307,7 +3307,7 @@ async function beginCall(video) {
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-    showMessage($("#message-status"), "Este navegador no permite llamadas. Abre SOCORA PLAY en Safari o Chrome actualizado y usa HTTPS.", true);
+    showMessage($("#message-status"), "Este navegador no permite llamadas. Abre AUREON PLAY en Safari o Chrome actualizado y usa HTTPS.", true);
     return;
   }
   const peerId = otherParticipant(activeConversation);
