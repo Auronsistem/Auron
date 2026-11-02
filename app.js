@@ -1836,9 +1836,20 @@ async function openConversation(conversation, profile = null) {
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
   $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
+  const peerId = otherParticipant(conversation);
+  const chatPresence = $("#chat-presence");
+  const refreshChatPresence = async () => {
+    await loadPresence([peerId]);
+    if (!chatPresence || activeConversation?.id !== conversation.id) return;
+    chatPresence.replaceChildren();
+    renderPresenceLine(chatPresence, peerId);
+  };
+  await refreshChatPresence();
   await loadMessages(conversation.id); await loadConversations();
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
+  if (presenceRefreshTimer) window.clearInterval(presenceRefreshTimer);
   messageRefreshTimer = window.setInterval(() => { if (activeConversation?.id === conversation.id) loadMessages(conversation.id, true); }, 5000);
+  presenceRefreshTimer = window.setInterval(refreshChatPresence, 30000);
 }
 async function loadMessages(conversationId, quiet = false) {
   if (!currentUser || !messageList) return;
