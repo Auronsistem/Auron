@@ -98,6 +98,7 @@ async function enableAureonPushNotifications() {
     }, { onConflict: "endpoint" });
     if (saveError) throw saveError;
     say("¡Notificaciones activadas en este dispositivo! Haz una prueba con otra cuenta.");
+    if (button) button.textContent = "Actualizar notificaciones";
   } catch (error) {
     console.error("No se pudieron activar las notificaciones de AUREON:", error);
     say(error?.message || "No se pudieron activar las notificaciones. Inténtalo de nuevo.", true);
@@ -105,6 +106,41 @@ async function enableAureonPushNotifications() {
     if (button) button.disabled = false;
   }
 }
+
+async function syncExistingAureonPushSubscription() {
+  const userId = currentUser?.id;
+  if (!userId || !("serviceWorker" in navigator) || !("PushManager" in window) ||
+      !("Notification" in window) || Notification.permission !== "granted") {
+    return;
+  }
+
+  try {
+    // Recupera únicamente una suscripción existente; nunca solicita permiso ni crea otra.
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return;
+
+    const serialized = subscription.toJSON();
+    if (!serialized?.endpoint || currentUser?.id !== userId) return;
+
+    const { error } = await supabase.from("push_subscriptions").upsert({
+      user_id: userId,
+      endpoint: serialized.endpoint,
+      subscription: serialized,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "endpoint" });
+
+    if (error) throw error;
+    if (currentUser?.id !== userId) return;
+
+    const button = $("#enable-call-notifications");
+    if (button) button.textContent = "Actualizar notificaciones";
+    showMessage($("#call-notification-status"), "Notificaciones activas en este dispositivo.");
+  } catch (error) {
+    console.warn("AUREON: no se pudo sincronizar la suscripción existente:", error);
+  }
+}
+
 $("#enable-call-notifications")?.addEventListener("click", enableAureonPushNotifications);
 
 function showEmpty(container, message) {
@@ -562,6 +598,7 @@ async function updateSession(session) {
 
   if (currentUser) {
     removeLockScreen();
+    void syncExistingAureonPushSubscription();
     await loadVideos();
     await loadConversations();
     await loadRecommendedYouTube();
