@@ -3201,6 +3201,10 @@ function setCallWindowMinimized(minimized) {
 $("#toggle-call-window")?.addEventListener("click", () => {
   setCallWindowMinimized(!callWindowMinimized);
 });
+callDialog?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  if (!callWindowMinimized) setCallWindowMinimized(true);
+});
 
 function resetCallWindow() {
   callWindowMinimized = false;
