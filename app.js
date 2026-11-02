@@ -2743,22 +2743,32 @@ navigator.serviceWorker?.addEventListener("message", (event) => {
   }
 });
 function processPendingNotificationCallAction() {
-  if (!pendingNotificationCallAction || !activeCall?.incoming || activeCall.id !== pendingNotificationCallAction.callId) return;
+  if (!pendingNotificationCallAction) return;
+  const privateMatch = Boolean(activeCall?.incoming && activeCall.id === pendingNotificationCallAction.callId);
+  const groupMatch = Boolean(activeGroupCall?.incoming && activeGroupCall.id === pendingNotificationCallAction.callId);
+  if (!privateMatch && !groupMatch) return;
   const action = pendingNotificationCallAction.action;
   pendingNotificationCallAction = null;
   const button = action === "accept" ? $("#accept-call") : $("#reject-call");
   if (button) window.setTimeout(() => button.click(), 250);
 }
 async function loadPendingNotificationCall() {
-  if (!currentUser || !pendingNotificationCallId || activeCall) return;
+  if (!currentUser || !pendingNotificationCallId || activeCall || activeGroupCall) return;
   const callId = pendingNotificationCallId;
-  const { data, error } = await supabase.from("call_signals").select("*")
+  const cutoff = new Date(Date.now() - 120000).toISOString();
+  const { data: privateInvite, error: privateError } = await supabase.from("call_signals").select("*")
     .eq("call_id", callId).eq("recipient_id", currentUser.id)
-    .eq("signal_type", "invite")
-    .gte("created_at", new Date(Date.now() - 120000).toISOString())
-    .maybeSingle();
-  if (error) { console.warn("No se pudo recuperar la invitación desde la notificación:", error); return; }
-  if (data && !activeCall) await processCallSignal(data);
+    .eq("signal_type", "invite").gte("created_at", cutoff).maybeSingle();
+  if (privateError) console.warn("No se pudo recuperar la invitación privada:", privateError);
+  if (privateInvite && !activeCall && !activeGroupCall) {
+    await processCallSignal(privateInvite);
+    return;
+  }
+  const { data: groupInvite, error: groupError } = await supabase.from("chat_group_call_signals").select("*")
+    .eq("call_id", callId).eq("recipient_id", currentUser.id)
+    .eq("signal_type", "invite").gte("created_at", cutoff).maybeSingle();
+  if (groupError) console.warn("No se pudo recuperar la invitación grupal:", groupError);
+  if (groupInvite && !activeCall && !activeGroupCall) await processGroupCallSignal(groupInvite);
 }
 
 function startCallAlert() {
@@ -3113,12 +3123,28 @@ async function syncGroupCallPeers() {
 }
 
 async function sendGroupCallSignal(type, payload = {}, recipientId, call = activeGroupCall) {
-  if (!call || !recipientId || !currentUser) return;
+  if (!call || !recipientId || !currentUser) return false;
   const { error } = await supabase.from("chat_group_call_signals").insert({
     group_id: call.groupId, call_id: call.id, sender_id: currentUser.id,
     recipient_id: recipientId, signal_type: type, payload
   });
-  if (error) console.error("No se pudo enviar señal grupal:", error);
+  if (error) {
+    console.error("No se pudo enviar señal grupal:", error);
+    return false;
+  }
+  if (type === "invite") {
+    const { error: pushError } = await supabase.functions.invoke("call-push", {
+      body: {
+        action: "group-call",
+        groupId: call.groupId,
+        callId: call.id,
+        recipientId,
+        video: Boolean(payload.video)
+      }
+    });
+    if (pushError) console.warn("La invitación grupal se guardó, pero no se pudo enviar la notificación push:", pushError);
+  }
+  return true;
 }
 function makeGroupTile(userId, name, stream, local = false) {
   const grid = $("#group-call-grid");
@@ -3184,7 +3210,10 @@ async function processGroupCallSignal(signal) {
     callState.textContent = activeGroupCall.video ? "VIDEOLLAMADA GRUPAL ENTRANTE" : "LLAMADA GRUPAL ENTRANTE";
     callSubtitle.textContent = displayName(profile.get(signal.sender_id)) + " te invita a una llamada grupal";
     remoteCallVideo.hidden = true; localCallVideo.hidden = true; $("#group-call-grid").hidden = true;
-    callDisplay(true, false); startCallAlert(); return;
+    callDisplay(true, false);
+    startCallAlert();
+    processPendingNotificationCallAction();
+    return;
   }
   if (!activeGroupCall || signal.call_id !== activeGroupCall.id || signal.group_id !== activeGroupCall.groupId) return;
   if (signal.signal_type === "accept") {
