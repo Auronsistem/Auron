@@ -942,10 +942,12 @@ async function saveSelectedChildSettings(event) {
 
 
 async function permanentlyUnlinkSelectedChild() {
-  if (!guardianClient || !guardianUserId) {
-    parentalStatusMessage("Verifica primero el correo del apoderado.", true);
+  if (!guardianClient) await restoreGuardianSession();
+  if (!guardianClient) {
+    parentalStatusMessage("La sesión del apoderado no está activa en este dispositivo. Vuelve a verificar su correo y luego intenta desvincular.", true);
     return;
   }
+
   const childId = $("#parental-child-select")?.value || "";
   const select = $("#parental-child-select");
   const childName = select?.selectedOptions?.[0]?.textContent || "esta cuenta";
@@ -953,25 +955,39 @@ async function permanentlyUnlinkSelectedChild() {
     parentalStatusMessage("Selecciona primero una cuenta supervisada.", true);
     return;
   }
-  const confirmed = window.confirm(
-    "¿Desvincular permanentemente " + childName + "?\n\n" +
-    "Se quitarán sus límites de tiempo y madurez. La cuenta recuperará su propia configuración. " +
-    "Este apoderado no podrá volver a vincular esa misma cuenta."
-  );
-  if (!confirmed) return;
 
   const button = $("#parental-unlink-child");
   if (button) button.disabled = true;
   try {
+    const { data: sessionData, error: sessionError } = await guardianClient.auth.getSession();
+    if (sessionError) throw sessionError;
+    const authenticatedGuardianId = sessionData?.session?.user?.id;
+    if (!authenticatedGuardianId) {
+      guardianClient = null;
+      guardianUserId = null;
+      throw new Error("La sesión del apoderado venció. Verifica su correo otra vez para continuar.");
+    }
+    guardianUserId = authenticatedGuardianId;
+
+    const confirmed = window.confirm(
+      "¿Desvincular permanentemente " + childName + "?\n\n" +
+      "Se quitarán sus límites de tiempo y madurez. La cuenta recuperará su propia configuración. " +
+      "Este apoderado no podrá volver a vincular esa misma cuenta."
+    );
+    if (!confirmed) return;
+
     const { data, error } = await guardianClient.rpc("unlink_parental_account", {
       p_child_id: childId
     });
     if (error) throw error;
+    if (!data?.ok) throw new Error(data?.message || "Supabase no confirmó la desvinculación.");
+
     $("#parental-controls-form").hidden = true;
-    parentalStatusMessage(data?.message || "Cuenta desvinculada permanentemente. Ya no tiene controles parentales de este apoderado.");
+    parentalStatusMessage(data.message || "Cuenta desvinculada permanentemente. Sus límites parentales ya fueron retirados.");
     await loadGuardianChildren();
   } catch (error) {
-    parentalStatusMessage(error.message || "No se pudo desvincular la cuenta.", true);
+    console.error("Error al desvincular controles parentales:", error);
+    parentalStatusMessage(error.message || "No se pudo desvincular la cuenta. Comprueba la sesión del apoderado e inténtalo otra vez.", true);
   } finally {
     if (button) button.disabled = false;
   }
