@@ -12,7 +12,7 @@
   "theme_color": "#090d18",
   "icons": [
     {
-      "src": "./icons/aureon.svg",
+      "src": "./icons/aureon.svg?v=2",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
