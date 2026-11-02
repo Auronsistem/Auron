@@ -1985,3 +1985,49 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 .call-video-voice-waves.is-speaking i:nth-child(5) { animation-delay:290ms; }
 .call-screen.is-video #call-voice-waves { display:none !important; }
 .call-screen:not(.is-video) #call-video-voice-waves { display:none !important; }
+
+
+/* Grabación tipo WhatsApp: botón junto a Enviar */
+.message-form { display:flex; align-items:flex-end; gap:8px; }
+.message-form textarea { flex:1; min-width:0; }
+.message-form .voice-record-button {
+  flex:0 0 44px; width:44px; min-width:44px; height:44px;
+  padding:0; border-radius:50%; display:grid; place-items:center;
+  touch-action:none; user-select:none; -webkit-user-select:none;
+}
+.message-form .voice-record-button.is-recording {
+  color:#fff; background:#dc3545; border-color:#dc3545;
+  box-shadow:0 0 0 5px rgba(220,53,69,.16);
+}
+.message-form button[type="submit"] { flex:0 0 auto; }
+.voice-recording-status { margin:4px 0 0; min-height:1.1em; }
+@media(max-width:600px) {
+  .message-form { gap:6px; }
+  .message-form .voice-record-button { flex-basis:42px; width:42px; min-width:42px; height:42px; }
+  .message-form button[type="submit"] { padding:11px 13px; }
+}
+
+/* Ondas verdes de tres barras: la altura sigue el volumen real del micrófono */
+.call-voice-waves,.call-video-voice-waves,.group-call-voice-waves {
+  color:#20e07a !important;
+  --voice-level:0;
+  gap:4px;
+}
+.call-voice-waves i,.call-video-voice-waves i,.group-call-voice-waves i {
+  width:4px !important; height:calc(4px + var(--voice-level,0) * 24px) !important;
+  min-height:4px; border-radius:99px; background:#20e07a !important;
+  opacity:1 !important; transform:none !important; animation:none !important;
+  transition:height 65ms linear;
+}
+.call-voice-waves i:nth-child(1),.call-video-voice-waves i:nth-child(1),.group-call-voice-waves i:nth-child(1) {
+  height:calc(4px + var(--voice-level,0) * 9px) !important;
+}
+.call-voice-waves i:nth-child(2),.call-video-voice-waves i:nth-child(2),.group-call-voice-waves i:nth-child(2) {
+  height:calc(5px + var(--voice-level,0) * 20px) !important;
+}
+.call-voice-waves i:nth-child(3),.call-video-voice-waves i:nth-child(3),.group-call-voice-waves i:nth-child(3) {
+  height:calc(4px + var(--voice-level,0) * 13px) !important;
+}
+.call-voice-waves i:nth-child(4),.call-video-voice-waves i:nth-child(4),.group-call-voice-waves i:nth-child(4),
+.call-voice-waves i:nth-child(5),.call-video-voice-waves i:nth-child(5),.group-call-voice-waves i:nth-child(5) { display:none !important; }
+.call-voice-waves.is-speaking,.call-video-voice-waves.is-speaking,.group-call-voice-waves.is-speaking { display:flex !important; align-items:center; }
