@@ -2449,6 +2449,7 @@ friendRequestsList?.addEventListener("click", async event => {
     return;
   }
   statusNotice(action === "accept" ? "¡Solicitud aceptada! Ya son amigos." : "Solicitud rechazada.");
+  await loadFriendRequestsOnly();
   await loadFriendsStatuses();
   if (action === "accept" && activeConversation) {
     const activePeerId = otherParticipant(activeConversation);
