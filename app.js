@@ -92,6 +92,7 @@ function openSettings() {
   const parentalPanel = $("#parental-settings-panel");
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
   setSettingsVisibility(true);
+  loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error));
   showSection("configuracion");
   section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -3341,20 +3342,125 @@ async function loadGroupConversations(append = false) {
     return;
   }
   const { data: groups, error: groupError } = await supabase.from("chat_groups")
-    .select("id, name, created_by, created_at").in("id", ids).order("created_at", { ascending: false });
+    .select("id, name, created_by, created_at, avatar_url").in("id", ids).order("created_at", { ascending: false });
   if (groupError) { console.error("No se pudieron cargar los grupos:", groupError); return; }
   groupCache = groups || [];
   for (const group of groupCache) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "conversation-item group-conversation" + (activeGroup?.id === group.id ? " active" : "");
-    const name = document.createElement("strong"); name.textContent = "👥 " + group.name;
+    button.append(createAvatar({ avatar_url: group.avatar_url }, "conversation-avatar group-avatar"));
+    const copy = document.createElement("span"); copy.className = "conversation-copy";
+    const name = document.createElement("strong"); name.textContent = group.name;
     const preview = document.createElement("span"); preview.textContent = "Chat grupal";
-    button.append(name, preview);
+    copy.append(name, preview);
+    button.append(copy);
     button.addEventListener("click", () => openGroup(group));
     conversationList.append(button);
   }
 }
+
+async function loadGroupAvatarSettings() {
+  const list = $("#group-avatar-settings-list");
+  if (!list) return;
+  if (!currentUser) {
+    list.replaceChildren();
+    showEmpty(list, "Inicia sesión para administrar las fotos de tus grupos.");
+    return;
+  }
+  list.replaceChildren();
+  const { data: memberships, error: membershipError } = await supabase.from("chat_group_members")
+    .select("group_id").eq("user_id", currentUser.id);
+  if (membershipError) {
+    console.error("No se pudieron cargar los grupos de Configuración:", membershipError);
+    showEmpty(list, "No se pudieron cargar tus grupos. Inténtalo de nuevo.");
+    return;
+  }
+  const ids = [...new Set((memberships || []).map(row => row.group_id).filter(Boolean))];
+  if (!ids.length) {
+    showEmpty(list, "Los grupos nuevos en los que participes aparecerán aquí automáticamente.");
+    return;
+  }
+  const { data: groups, error: groupsError } = await supabase.from("chat_groups")
+    .select("id, name, created_by, created_at, avatar_url").in("id", ids).order("created_at", { ascending: false });
+  if (groupsError) {
+    console.error("No se pudieron cargar los detalles de grupos:", groupsError);
+    showEmpty(list, "No se pudieron cargar las fotos de los grupos.");
+    return;
+  }
+  groupCache = groups || [];
+  for (const group of groupCache) {
+    const item = document.createElement("div");
+    item.className = "group-avatar-setting";
+    const avatar = createAvatar({ avatar_url: group.avatar_url }, "group-settings-avatar");
+    const details = document.createElement("div");
+    details.className = "group-avatar-setting-details";
+    const title = document.createElement("strong");
+    title.textContent = group.name;
+    const help = document.createElement("p");
+    help.className = "muted";
+    help.textContent = "Todos los integrantes pueden cambiar esta foto.";
+    const uploadLabel = document.createElement("label");
+    uploadLabel.className = "button button-outline profile-upload-label";
+    uploadLabel.textContent = "Cambiar foto del grupo";
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.hidden = true;
+    input.setAttribute("aria-label", "Elegir nueva foto para " + group.name);
+    const status = document.createElement("p");
+    status.className = "notice group-avatar-setting-status";
+    status.setAttribute("aria-live", "polite");
+    uploadLabel.htmlFor = "group-avatar-file-" + group.id;
+    input.id = uploadLabel.htmlFor;
+    input.addEventListener("change", async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        showMessage(status, "Usa una imagen JPG, PNG o WEBP.", true);
+        input.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showMessage(status, "La imagen debe pesar 5 MB o menos.", true);
+        input.value = "";
+        return;
+      }
+      uploadLabel.setAttribute("aria-disabled", "true");
+      showMessage(status, "Subiendo foto del grupo...");
+      const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+      const path = group.id + "/" + currentUser.id + "/group-" + Date.now() + "." + ext;
+      try {
+        const { error: uploadError } = await supabase.storage.from("group-avatars")
+          .upload(path, file, { upsert: true, contentType: file.type, cacheControl: "3600" });
+        if (uploadError) throw uploadError;
+        const { data: publicData } = supabase.storage.from("group-avatars").getPublicUrl(path);
+        const avatarUrl = publicData?.publicUrl ? publicData.publicUrl + "?v=" + Date.now() : "";
+        if (!avatarUrl) throw new Error("No se pudo generar el enlace de la foto.");
+        const { data: savedGroup, error: updateError } = await supabase.from("chat_groups")
+          .update({ avatar_url: avatarUrl }).eq("id", group.id)
+          .select("id, name, created_by, created_at, avatar_url").single();
+        if (updateError) throw updateError;
+        Object.assign(group, savedGroup);
+        if (activeGroup?.id === group.id) activeGroup = savedGroup;
+        renderAvatar(avatar, { avatar_url: avatarUrl }, "group-settings-avatar");
+        showMessage(status, "¡Foto del grupo actualizada para todos sus integrantes!");
+        await loadConversations();
+        await loadGroupAvatarSettings();
+      } catch (error) {
+        console.error("No se pudo cambiar la foto del grupo:", error);
+        showMessage(status, error?.message || "No se pudo cambiar la foto del grupo.", true);
+      } finally {
+        uploadLabel.removeAttribute("aria-disabled");
+        input.value = "";
+      }
+    });
+    details.append(title, help, uploadLabel, input, status);
+    item.append(avatar, details);
+    list.append(item);
+  }
+}
+
 async function searchGroupMembers(query) {
   if (!currentUser || !groupMemberResults) return;
   const clean = query.trim();
@@ -3406,7 +3512,7 @@ createGroupForm?.addEventListener("submit", async event => {
   showMessage(groupCreateStatus, "Creando grupo...");
   try {
     const { data: group, error } = await supabase.from("chat_groups")
-      .insert({ name, created_by: currentUser.id }).select("id, name, created_by, created_at").single();
+      .insert({ name, created_by: currentUser.id }).select("id, name, created_by, created_at, avatar_url").single();
     if (error) throw error;
     const members = [currentUser.id, ...selectedGroupUsers.keys()].map(user_id => ({ group_id: group.id, user_id }));
     const { error: memberError } = await supabase.from("chat_group_members").insert(members);
