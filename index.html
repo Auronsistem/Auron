@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icons/aureon.svg">
   <title>SOCORA PLAY</title>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%23090d18%27/%3E%3Cpath d=%27M35 25 L75 50 L35 75 Z%27 fill=%27%2320d9ed%27/%3E%3C/svg%3E">
 </head>
 <body>
@@ -46,6 +46,9 @@
     </a>
     <a href="#cuenta" class="side-link">
       <span>◉</span> Mi canal
+    </a>
+    <a href="#configuracion" class="side-link" id="open-settings-link" hidden>
+      <span>⚙</span> Configuración
     </a>
   </aside>
 
@@ -147,6 +150,26 @@
               <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button><button id="group-audio-call" class="button button-outline" type="button" hidden>☎ Llamada grupal</button><button id="group-video-call" class="button" type="button" hidden>▣ Video grupal</button></div>
             </header>
             <div id="message-list" class="message-list" aria-live="polite"></div>
+            <div class="message-tools" aria-label="Contenido para enviar">
+              <button id="open-stickers" class="button button-outline" type="button">😀 Stickers</button>
+              <button id="open-gif" class="button button-outline" type="button">GIF</button>
+            </div>
+            <section id="sticker-picker" class="message-picker" hidden>
+              <p class="eyebrow">STICKERS</p>
+              <div id="sticker-grid" class="sticker-grid"></div>
+            </section>
+            <section id="gif-picker" class="message-picker" hidden>
+              <p class="eyebrow">GIF</p>
+              <label for="gif-search">Buscar un GIF en Tenor</label>
+              <div class="gif-search-row">
+                <input id="gif-search" type="search" maxlength="80" placeholder="Ej. celebración, gato, gaming...">
+                <button id="search-gif" class="button button-outline" type="button">Buscar</button>
+              </div>
+              <label for="gif-url">Enlace directo del GIF</label>
+              <input id="gif-url" type="url" placeholder="https://media.tenor.com/...gif">
+              <button id="send-gif-link" class="button" type="button">Enviar GIF</button>
+              <p class="muted">Busca en Tenor, copia el enlace directo .gif y pégalo aquí. También admite enlaces directos de Giphy.</p>
+            </section>
             <form id="message-form" class="message-form">
               <label class="sr-only" for="message-input">Escribe un mensaje</label>
               <textarea id="message-input" maxlength="4000" rows="2" placeholder="Escribe un mensaje..." required></textarea>
@@ -197,6 +220,78 @@
       </div>
     </section>
 
+    <!-- CONFIGURACIÓN Y CONTROLES PARENTALES -->
+    <section class="section" id="configuracion" hidden>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SEGURIDAD DE LA CUENTA</p>
+          <h2>Configuración</h2>
+        </div>
+      </div>
+      <div class="content-panel parental-panel">
+        <p class="eyebrow">FAMILIA Y SEGURIDAD</p>
+        <h3>🛡️ Controles parentales</h3>
+        <p class="muted">El apoderado verifica su correo con un código de 6 dígitos y después indica el correo de la cuenta AUREON que desea supervisar. No se pide ni se guarda la contraseña de Gmail. El apoderado debe tener una cuenta AUREON registrada.</p>
+
+        <label for="guardian-email">Correo Gmail del apoderado</label>
+        <input id="guardian-email" type="email" autocomplete="email" placeholder="apoderado@gmail.com">
+        <button id="guardian-send-code" class="button" type="button">Enviar código al apoderado</button>
+
+        <div id="guardian-code-step" hidden>
+          <label for="guardian-code">Código de 6 dígitos recibido por el apoderado</label>
+          <input id="guardian-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
+          <button id="guardian-verify-code" class="button" type="button">Verificar correo</button>
+        </div>
+
+        <div id="guardian-link-step" hidden>
+          <label for="child-account-email">Correo de la cuenta AUREON que recibirá los controles</label>
+          <input id="child-account-email" type="email" autocomplete="off" placeholder="cuenta.supervisada@correo.com">
+          <button id="send-parental-request" class="button" type="button">Vincular cuenta</button>
+        </div>
+
+        <div class="parental-manager">
+          <h3>Administrar cuentas vinculadas</h3>
+          <label for="parental-child-select">Cuenta supervisada</label>
+          <select id="parental-child-select">
+            <option value="">Verifica primero el correo del apoderado</option>
+          </select>
+          <form id="parental-controls-form" hidden>
+            <label for="parental-screen-time">Tiempo diario dentro de AUREON</label>
+            <select id="parental-screen-time">
+              <option value="30">30 minutos</option>
+              <option value="60">1 hora</option>
+              <option value="90">1 hora y 30 minutos</option>
+              <option value="120" selected>2 horas</option>
+              <option value="180">3 horas</option>
+              <option value="240">4 horas</option>
+              <option value="360">6 horas</option>
+              <option value="480">8 horas</option>
+              <option value="720">12 horas</option>
+            </select>
+            <label for="parental-maturity">Madurez máxima de los videos de AUREON</label>
+            <select id="parental-maturity">
+              <option value="0">Todos los públicos</option>
+              <option value="1">7+ · Contenido leve</option>
+              <option value="2">13+ · Contenido moderado</option>
+              <option value="3">16+ · Contenido maduro</option>
+            </select>
+            <button id="parental-save-settings" class="button" type="submit">Guardar controles</button>
+          </form>
+          <p class="muted">Los cambios se guardan para la cuenta seleccionada, no para las demás cuentas.</p>
+        </div>
+        <p id="parental-status" class="notice" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="parental-child-panel" class="section" hidden>
+      <div class="content-panel">
+        <p class="eyebrow">SOLICITUD DE SUPERVISIÓN</p>
+        <h3>Un apoderado quiere vincular esta cuenta</h3>
+        <p class="muted">Revisa la solicitud. Solo al aceptarla se activarán los controles parentales para esta cuenta.</p>
+        <div id="parental-pending-requests"></div>
+      </div>
+    </section>
+
   </main>
 
   <!-- BARRA INFERIOR PARA CELULAR -->
@@ -229,6 +324,15 @@
         <option value="video">Video normal</option>
         <option value="short">Short</option>
       </select>
+
+      <label for="upload-maturity">Clasificación de edad del video</label>
+      <select id="upload-maturity" required>
+        <option value="0">Todos los públicos</option>
+        <option value="1">7+ · Contenido leve</option>
+        <option value="2">13+ · Contenido moderado</option>
+        <option value="3">16+ · Contenido maduro</option>
+      </select>
+      <p class="muted">Selecciona una clasificación honesta. Los apoderados podrán filtrar los videos de AUREON con esta etiqueta.</p>
 
       <label for="upload-file">Archivo de video</label>
       <input
@@ -336,6 +440,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=38"></script>
+  <script type="module" src="app.js?v=39"></script>
 </body>
 </html>
