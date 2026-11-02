@@ -2122,11 +2122,12 @@ function playAureonTone(kind = "message") {
     for (const note of notes) {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = "sine";
+      oscillator.type = kind === "bird" ? "triangle" : "sine";
       oscillator.frequency.setValueAtTime(note.from, now + note.start);
       oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
       gain.gain.setValueAtTime(0.0001, now + note.start);
-      gain.gain.exponentialRampToValueAtTime(kind === "call" ? 0.30 : 0.20, now + note.start + 0.018);
+      const peakGain = kind === "call" ? 0.42 : kind === "bird" ? 0.26 : 0.18;
+      gain.gain.exponentialRampToValueAtTime(peakGain, now + note.start + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
       oscillator.connect(gain);
       gain.connect(context.destination);
@@ -2178,9 +2179,9 @@ async function loadPendingNotificationCall() {
 
 function startCallAlert() {
   stopCallAlert();
-  // AUREON usa el mismo canto corto de pájaro para llamadas y mensajes.
-  playAureonTone("bird");
-  callRingTimer = window.setInterval(() => playAureonTone("bird"), 3200);
+  // Las llamadas usan un tono doble más marcado; los mensajes conservan el canto de pájaro.
+  playAureonTone("call");
+  callRingTimer = window.setInterval(() => playAureonTone("call"), 2600);
 }
 function callDisplay(showIncoming = false, showActive = false) {
   if (callDialog && !callDialog.open) callDialog.showModal();
