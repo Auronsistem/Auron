@@ -1568,9 +1568,11 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 :root[data-theme="light"] .chat-presence { color:#5d6a7f; }
 
 @media (max-width:650px) {
-  .mobile-nav { gap:0; }
-  .mobile-nav a,.mobile-nav button { flex:1 1 0; min-width:0; justify-content:center; }
-  .mobile-nav small { font-size:9px; white-space:nowrap; }
+  .mobile-nav { gap:0; width:100%; padding-left:2px; padding-right:2px; }
+  .mobile-nav a,.mobile-nav button { flex:1 1 0; min-width:0; max-width:none; justify-content:center; padding:0 1px; }
+  .mobile-nav span { font-size:19px; line-height:1.1; }
+  .mobile-nav small { display:block; font-size:clamp(8px,2.25vw,10px); white-space:nowrap; letter-spacing:-.2px; }
+  .mobile-nav #mobile-states-link { display:flex !important; visibility:visible !important; opacity:1 !important; }
   .settings-section { padding-bottom:24px; }
   .settings-section-head { flex-direction:row; align-items:center; }
   .settings-section-head h2 { font-size:24px; }
