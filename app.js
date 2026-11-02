@@ -2223,6 +2223,11 @@ friendRequestsList?.addEventListener("click", async event => {
   }
   statusNotice(action === "accept" ? "¡Solicitud aceptada! Ya son amigos." : "Solicitud rechazada.");
   await loadFriendsStatuses();
+  if (action === "accept" && activeConversation) {
+    const activePeerId = otherParticipant(activeConversation);
+    await refreshPrivateChatIdentity(activePeerId, activePeerProfile);
+    await refreshUserInfoBadges(activePeerId);
+  }
 });
 
 statusForm?.addEventListener("submit", async event => {
@@ -3373,6 +3378,8 @@ async function openConversation(conversation, profile = null) {
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
   $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
   $("#open-user-info").hidden = false;
+  $("#chat-peer-avatar").hidden = false;
+  $("#chat-friend-badge").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
   const peerId = otherParticipant(conversation);
   await refreshPrivateChatIdentity(peerId, profile);
@@ -4174,6 +4181,11 @@ async function openGroup(group) {
   $("#chat-empty").hidden = true;
   $("#chat-active").hidden = false;
   $("#chat-title").textContent = group.name;
+  $("#open-user-info").hidden = true;
+  $("#chat-peer-avatar").hidden = true;
+  $("#chat-friend-badge").hidden = true;
+  activeDirectChatBlockStatus = {blockedByMe:false,blockedMe:false};
+  updatePrivateChatControls();
   const eyebrow = $("#chat-kind");
   if (eyebrow) eyebrow.textContent = "CHAT GRUPAL";
   $("#group-audio-call").hidden = false;
