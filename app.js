@@ -93,6 +93,7 @@ function openSettings() {
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
   setSettingsVisibility(true);
   loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error));
+  loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar las solicitudes y estados:", error));
   showSection("configuracion");
   section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1214,6 +1215,15 @@ async function updateSession(session) {
     await refreshParentalState();
     await loadVideos();
     await loadConversations();
+    await loadFriendsStatuses();
+    const notificationRoute = new URLSearchParams(window.location.search).get("openSettings");
+    if (notificationRoute === "friend-requests") {
+      openSettings();
+      $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"});
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("openSettings");
+      window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.hash);
+    }
     await loadRecommendedYouTube();
     await loadRecommendedShorts();
   } else {
@@ -1828,6 +1838,7 @@ function showSection(sectionName) {
     inicio: "#inicio",
     videos: "#videos",
     mensajes: "#mensajes",
+    estados: "#estados",
     shorts: "#shorts",
     cuenta: "#cuenta",
     youtube: "#youtube"
@@ -1866,6 +1877,426 @@ document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
   link.addEventListener("click", () => {
     if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
   });
+});
+
+
+/* AUREON FRIENDS + WHATSAPP-STYLE STATUSES */
+const statusForm = $("#status-publish-form");
+const statusFeedback = $("#status-publish-feedback");
+const statusFeed = $("#status-friends-feed");
+const statusStoriesStrip = $("#status-stories-strip");
+const friendRequestsList = $("#friend-requests-list");
+const statusViewerDialog = $("#status-viewer-dialog");
+const statusViewerContent = $("#status-viewer-content");
+let statusStoryGroups = [];
+let activeStatusGroupIndex = -1;
+let activeStatusPostIndex = 0;
+let statusViewerRenderToken = 0;
+
+function statusNotice(message, error = false) {
+  if (!statusFeedback) return;
+  statusFeedback.textContent = message || "";
+  statusFeedback.style.color = error ? "#ff7777" : "";
+}
+function statusText(value) {
+  return String(value ?? "").trim();
+}
+function statusTimeLabel(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleString("es-PE", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" });
+}
+async function getStatusMediaUrl(path) {
+  if (!path) return "";
+  const { data, error } = await supabase.storage.from("aureon-statuses").createSignedUrl(path, 60 * 60);
+  if (error || !data?.signedUrl) {
+    console.warn("No se pudo generar el enlace privado del estado:", error);
+    return "";
+  }
+  return data.signedUrl;
+}
+function createStatusStoryButton(profile, posts, isOwn = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "status-story-button" + (posts.length ? " has-stories" : " no-stories");
+  button.setAttribute("aria-label", isOwn ? "Abrir mi estado" : "Ver estados de " + displayName(profile));
+  const avatar = createAvatar(profile, "status-story-avatar");
+  const label = document.createElement("span");
+  label.className = "status-story-label";
+  label.textContent = isOwn ? "Mi estado" : displayName(profile);
+  button.append(avatar, label);
+  if (isOwn && !posts.length) {
+    const plus = document.createElement("span");
+    plus.className = "status-story-plus";
+    plus.textContent = "+";
+    button.append(plus);
+  }
+  button.addEventListener("click", () => {
+    if (!posts.length) {
+      $("#status-caption")?.focus();
+      statusNotice("Escribe un estado o elige una foto o video para publicarlo.");
+      return;
+    }
+    const groupIndex = statusStoryGroups.findIndex(group => group.userId === profile.id);
+    if (groupIndex >= 0) openStatusStory(groupIndex, 0);
+  });
+  return button;
+}
+function appendFriendRequestRow(request, profile) {
+  const row = document.createElement("article");
+  row.className = "friend-request-row";
+  const identity = document.createElement("div");
+  identity.className = "friend-request-identity";
+  identity.append(createAvatar(profile, "friend-request-avatar"));
+  const copy = document.createElement("div");
+  const name = document.createElement("strong");
+  name.textContent = displayName(profile);
+  const username = document.createElement("p");
+  username.className = "muted";
+  username.textContent = "Quiere agregarte como amigo";
+  copy.append(name, username);
+  identity.append(copy);
+  const actions = document.createElement("div");
+  actions.className = "friend-request-actions";
+  for (const action of ["accept", "reject"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = action === "accept" ? "button" : "button button-outline";
+    button.dataset.friendAction = action;
+    button.dataset.requestId = request.id;
+    button.textContent = action === "accept" ? "Aceptar" : "Rechazar";
+    actions.append(button);
+  }
+  row.append(identity, actions);
+  return row;
+}
+async function loadFriendsStatuses() {
+  if (!statusFeed || !friendRequestsList || !statusStoriesStrip) return;
+  if (!currentUser) {
+    showEmpty(statusFeed, "Inicia sesión para ver los estados de tus amigos.");
+    showEmpty(friendRequestsList, "Inicia sesión para ver tus solicitudes.");
+    showEmpty(statusStoriesStrip, "Inicia sesión para ver los estados.");
+    statusStoryGroups = [];
+    return;
+  }
+
+  friendRequestsList.replaceChildren();
+  const { data: requests, error: requestError } = await supabase
+    .from("friend_requests")
+    .select("id,sender_id,created_at")
+    .eq("recipient_id", currentUser.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (requestError) {
+    showEmpty(friendRequestsList, "No se pudieron cargar las solicitudes. Comprueba la actualización de Amigos.");
+    console.warn("Error al cargar solicitudes de amistad:", requestError);
+  } else if (!requests?.length) {
+    showEmpty(friendRequestsList, "No tienes solicitudes pendientes.");
+  } else {
+    const requestProfiles = await fetchProfiles(requests.map(item => item.sender_id));
+    for (const request of requests) {
+      appendFriendRequestRow(request, requestProfiles.get(request.sender_id));
+    }
+  }
+
+  const { data: posts, error: postsError } = await supabase
+    .from("status_posts")
+    .select("id,user_id,media_type,media_url,caption,music_title,created_at,expires_at")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: true })
+    .limit(200);
+
+  if (postsError) {
+    statusStoriesStrip.replaceChildren();
+    showEmpty(statusStoriesStrip, "No se pudieron cargar los estados. Comprueba la actualización de Amigos y Estados.");
+    showEmpty(statusFeed, "Los estados todavía no están disponibles.");
+    console.warn("Error al cargar estados:", postsError);
+    statusStoryGroups = [];
+    return;
+  }
+
+  const allPosts = posts || [];
+  const authorIds = [...new Set([currentUser.id, ...allPosts.map(post => post.user_id)])];
+  const profiles = await fetchProfiles(authorIds);
+  const ownProfile = profiles.get(currentUser.id) || currentProfile || { id: currentUser.id };
+  const grouped = new Map();
+  for (const post of allPosts) {
+    if (!grouped.has(post.user_id)) grouped.set(post.user_id, []);
+    grouped.get(post.user_id).push(post);
+  }
+
+  statusStoryGroups = [];
+  if (grouped.has(currentUser.id)) {
+    statusStoryGroups.push({ userId: currentUser.id, profile: ownProfile, posts: grouped.get(currentUser.id) });
+  }
+  const friendGroups = [...grouped.entries()]
+    .filter(([userId]) => userId !== currentUser.id)
+    .map(([userId, userPosts]) => ({
+      userId,
+      profile: profiles.get(userId) || { id: userId },
+      posts: userPosts
+    }))
+    .sort((a, b) => new Date(b.posts[b.posts.length - 1].created_at) - new Date(a.posts[a.posts.length - 1].created_at));
+  statusStoryGroups.push(...friendGroups);
+
+  statusStoriesStrip.replaceChildren();
+  statusStoriesStrip.append(createStatusStoryButton(ownProfile, grouped.get(currentUser.id) || [], true));
+  for (const group of friendGroups) {
+    statusStoriesStrip.append(createStatusStoryButton(group.profile, group.posts, false));
+  }
+
+  statusFeed.replaceChildren();
+  if (!friendGroups.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Todavía no hay estados de tus amigos. Cuando acepten sus solicitudes, sus estados aparecerán aquí durante 24 horas.";
+    statusFeed.append(empty);
+    return;
+  }
+
+  const feedHeading = document.createElement("h3");
+  feedHeading.className = "status-feed-heading";
+  feedHeading.textContent = "Actualizaciones de tus amigos";
+  statusFeed.append(feedHeading);
+  for (const group of friendGroups) {
+    const latest = group.posts[group.posts.length - 1];
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "status-update-row";
+    card.append(createAvatar(group.profile, "status-update-avatar"));
+    const copy = document.createElement("span");
+    copy.className = "status-update-copy";
+    const name = document.createElement("strong");
+    name.textContent = displayName(group.profile);
+    const preview = document.createElement("span");
+    preview.textContent = latest.caption || (latest.media_type === "video" ? "Compartió un video" : latest.media_type === "image" ? "Compartió una foto" : "Nuevo estado");
+    const time = document.createElement("small");
+    time.textContent = statusTimeLabel(latest.created_at);
+    copy.append(name, preview, time);
+    card.append(copy);
+    card.addEventListener("click", () => {
+      const groupIndex = statusStoryGroups.findIndex(item => item.userId === group.userId);
+      if (groupIndex >= 0) openStatusStory(groupIndex, 0);
+    });
+    statusFeed.append(card);
+  }
+}
+async function renderStatusStory() {
+  const group = statusStoryGroups[activeStatusGroupIndex];
+  if (!group || !statusViewerDialog || !statusViewerContent) return;
+  const post = group.posts[activeStatusPostIndex];
+  if (!post) return;
+  const renderToken = ++statusViewerRenderToken;
+  const headerAvatar = $("#status-viewer-avatar");
+  if (headerAvatar) renderAvatar(headerAvatar, group.profile, "status-viewer-avatar");
+  const name = $("#status-viewer-name");
+  if (name) name.textContent = displayName(group.profile);
+  const timestamp = $("#status-viewer-time");
+  if (timestamp) timestamp.textContent = statusTimeLabel(post.created_at);
+
+  const progress = $("#status-viewer-progress");
+  if (progress) {
+    progress.replaceChildren();
+    group.posts.forEach((item, index) => {
+      const segment = document.createElement("span");
+      segment.className = "status-progress-segment";
+      const fill = document.createElement("i");
+      if (index < activeStatusPostIndex) fill.style.width = "100%";
+      else if (index === activeStatusPostIndex) fill.style.width = "100%";
+      else fill.style.width = "0%";
+      segment.append(fill);
+      progress.append(segment);
+    });
+  }
+
+  statusViewerContent.replaceChildren();
+  const mediaWrap = document.createElement("div");
+  mediaWrap.className = "status-viewer-media";
+  if (post.media_url) {
+    const signedUrl = await getStatusMediaUrl(post.media_url);
+    if (renderToken !== statusViewerRenderToken) return;
+    if (!signedUrl) {
+      const unavailable = document.createElement("p");
+      unavailable.className = "muted";
+      unavailable.textContent = "No se pudo abrir este archivo. Es posible que el estado haya vencido.";
+      mediaWrap.append(unavailable);
+    } else if (post.media_type === "video") {
+      const video = document.createElement("video");
+      video.src = signedUrl;
+      video.controls = true;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "metadata";
+      mediaWrap.append(video);
+    } else {
+      const image = document.createElement("img");
+      image.src = signedUrl;
+      image.alt = "Estado de " + displayName(group.profile);
+      image.loading = "eager";
+      mediaWrap.append(image);
+    }
+  } else {
+    const textStatus = document.createElement("p");
+    textStatus.className = "status-viewer-text";
+    textStatus.textContent = post.caption || " ";
+    mediaWrap.append(textStatus);
+  }
+  statusViewerContent.append(mediaWrap);
+
+  if (post.caption && post.media_url) {
+    const caption = document.createElement("p");
+    caption.className = "status-viewer-caption";
+    caption.textContent = post.caption;
+    statusViewerContent.append(caption);
+  }
+  if (post.music_title) {
+    const music = document.createElement("p");
+    music.className = "status-viewer-music";
+    music.textContent = "♫ " + post.music_title;
+    statusViewerContent.append(music);
+  }
+
+  const previous = $("#status-story-prev");
+  const next = $("#status-story-next");
+  if (previous) previous.disabled = activeStatusGroupIndex === 0 && activeStatusPostIndex === 0;
+  if (next) next.textContent = activeStatusGroupIndex === statusStoryGroups.length - 1 && activeStatusPostIndex === group.posts.length - 1 ? "Cerrar" : "Siguiente";
+}
+function openStatusStory(groupIndex, postIndex = 0) {
+  if (!statusStoryGroups[groupIndex]) return;
+  activeStatusGroupIndex = groupIndex;
+  activeStatusPostIndex = Math.max(0, Math.min(postIndex, statusStoryGroups[groupIndex].posts.length - 1));
+  if (!statusViewerDialog?.open) statusViewerDialog?.showModal();
+  renderStatusStory().catch(error => {
+    console.error("No se pudo mostrar el estado:", error);
+    showEmpty(statusViewerContent, "No se pudo abrir este estado.");
+  });
+}
+function moveStatusStory(direction) {
+  const group = statusStoryGroups[activeStatusGroupIndex];
+  if (!group) return;
+  const nextPost = activeStatusPostIndex + direction;
+  if (nextPost >= 0 && nextPost < group.posts.length) {
+    activeStatusPostIndex = nextPost;
+  } else {
+    const nextGroupIndex = activeStatusGroupIndex + direction;
+    if (nextGroupIndex < 0) return;
+    if (nextGroupIndex >= statusStoryGroups.length) {
+      statusViewerDialog?.close();
+      return;
+    }
+    activeStatusGroupIndex = nextGroupIndex;
+    activeStatusPostIndex = direction > 0 ? 0 : statusStoryGroups[nextGroupIndex].posts.length - 1;
+  }
+  renderStatusStory().catch(error => console.error("No se pudo cambiar de estado:", error));
+}
+$("#status-story-prev")?.addEventListener("click", () => moveStatusStory(-1));
+$("#status-story-next")?.addEventListener("click", () => moveStatusStory(1));
+$("#status-viewer-close")?.addEventListener("click", () => statusViewerDialog?.close());
+statusViewerDialog?.addEventListener("click", event => {
+  if (event.target === statusViewerDialog) statusViewerDialog.close();
+});
+statusViewerDialog?.addEventListener("keydown", event => {
+  if (event.key === "ArrowRight") { event.preventDefault(); moveStatusStory(1); }
+  else if (event.key === "ArrowLeft") { event.preventDefault(); moveStatusStory(-1); }
+});
+
+friendRequestsList?.addEventListener("click", async event => {
+  const button = event.target.closest("[data-friend-action]");
+  if (!button || !currentUser) return;
+  const action = button.dataset.friendAction;
+  const requestId = button.dataset.requestId;
+  if (!requestId || !["accept", "reject"].includes(action)) return;
+  button.disabled = true;
+  const row = button.closest(".friend-request-row");
+  row?.querySelectorAll("button").forEach(item => { item.disabled = true; });
+  const { error } = await supabase.rpc("respond_friend_request", {
+    p_request_id: requestId,
+    p_accept: action === "accept"
+  });
+  if (error) {
+    console.error("No se pudo responder la solicitud:", error);
+    if (statusFeedback) statusNotice("No se pudo " + (action === "accept" ? "aceptar" : "rechazar") + " la solicitud: " + (error.message || "inténtalo otra vez."), true);
+    row?.querySelectorAll("button").forEach(item => { item.disabled = false; });
+    return;
+  }
+  statusNotice(action === "accept" ? "¡Solicitud aceptada! Ya son amigos." : "Solicitud rechazada.");
+  await loadFriendsStatuses();
+  if (action === "accept" && activeConversation) {
+    const activePeerId = otherParticipant(activeConversation);
+    await refreshPrivateChatIdentity(activePeerId, activePeerProfile);
+    await refreshUserInfoBadges(activePeerId);
+  }
+});
+
+statusForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!currentUser) { statusNotice("Inicia sesión para publicar un estado.", true); return; }
+  const caption = statusText($("#status-caption")?.value);
+  const musicTitle = statusText($("#status-music-title")?.value).slice(0, 120);
+  const file = $("#status-media")?.files?.[0] || null;
+  const button = statusForm.querySelector('button[type="submit"]');
+  if (!caption && !file) {
+    statusNotice("Escribe algo o selecciona una foto o video.", true);
+    return;
+  }
+  const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
+  if (file && !supportedTypes.has(file.type)) {
+    statusNotice("Usa una foto JPG, PNG o WEBP, o un video MP4 o WEBM.", true);
+    return;
+  }
+  if (file && file.size > 50 * 1024 * 1024) {
+    statusNotice("El archivo no puede superar 50 MB.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  statusNotice("Publicando tu estado...");
+  let storagePath = null;
+  try {
+    let mediaType = "text";
+    if (file) {
+      mediaType = file.type.startsWith("video/") ? "video" : "image";
+      const extension = file.type === "image/jpeg" ? "jpg"
+        : file.type === "image/png" ? "png"
+        : file.type === "image/webp" ? "webp"
+        : file.type === "video/mp4" ? "mp4" : "webm";
+      storagePath = currentUser.id + "/" + crypto.randomUUID() + "." + extension;
+      const { error: uploadError } = await supabase.storage.from("aureon-statuses").upload(storagePath, file, {
+        contentType: file.type,
+        cacheControl: "3600",
+        upsert: false
+      });
+      if (uploadError) throw uploadError;
+    }
+    const { error: insertError } = await supabase.from("status_posts").insert({
+      user_id: currentUser.id,
+      media_type: mediaType,
+      media_url: storagePath,
+      caption: caption || null,
+      music_title: musicTitle || null
+    });
+    if (insertError) throw insertError;
+    statusForm.reset();
+    statusNotice("¡Estado publicado! Estará disponible para tus amigos durante 24 horas.");
+    await loadFriendsStatuses();
+  } catch (error) {
+    console.error("No se pudo publicar el estado:", error);
+    if (storagePath) {
+      const { error: cleanupError } = await supabase.storage.from("aureon-statuses").remove([storagePath]);
+      if (cleanupError) console.warn("No se pudo limpiar el archivo del estado:", cleanupError);
+    }
+    statusNotice(error?.message || "No se pudo publicar el estado.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("#states-nav-link")?.addEventListener("click", () => {
+  loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error));
+});
+document.querySelectorAll(".mobile-nav a[href='#estados']").forEach(link => {
+  link.addEventListener("click", () => loadFriendsStatuses().catch(error => console.warn(error)));
 });
 
 // BÚSQUEDA EN YOUTUBE
@@ -2469,6 +2900,7 @@ function createYouTubeChannelCard(channel) {
 
 // MENSAJERÍA PRIVADA
 let activeConversation = null;
+let activePeerProfile = null;
 let activeGroup = null;
 let groupCache = [];
 let selectedGroupUsers = new Map();
@@ -2664,9 +3096,16 @@ async function loadConversations() {
     .or("participant_one.eq." + currentUser.id + ",participant_two.eq." + currentUser.id)
     .order("last_message_at", { ascending: false });
   if (error) { showEmpty(conversationList, "No se pudieron cargar las conversaciones."); console.error(error); return; }
-  conversationCache = data || [];
+  const { data: clearStates, error: clearError } = await supabase.from("conversation_clear_states")
+    .select("conversation_id,cleared_at").eq("user_id", currentUser.id);
+  if (clearError) console.warn("No se pudieron cargar las fechas de chats borrados:", clearError);
+  const clearedAtByConversation = new Map((clearStates || []).map(item => [item.conversation_id, item.cleared_at]));
+  conversationCache = (data || []).filter(conversation => {
+    const clearedAt = clearedAtByConversation.get(conversation.id);
+    return !clearedAt || new Date(conversation.last_message_at).getTime() > new Date(clearedAt).getTime();
+  });
   conversationList.replaceChildren();
-  if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones privadas. Puedes crear un grupo.");
+  if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones privadas. Puedes crear un chat nuevo.");
   const profiles = await fetchProfiles(conversationCache.map(otherParticipant));
   for (const conversation of conversationCache) {
     const profile = profiles.get(otherParticipant(conversation));
@@ -2732,14 +3171,218 @@ async function startConversation(profile) {
   peopleResults.hidden = true; if (peopleSearch) peopleSearch.value = "";
   await loadConversations(); await openConversation(conversation, profile);
 }
+
+/* AUREON_FRIEND_REQUEST_PROFILE_V1: acciones de amistad desde Info de usuario. */
+const userInfoDialog = $("#user-info-dialog");
+const userInfoName = $("#user-info-name");
+const userInfoUsername = $("#user-info-username");
+const userInfoAvatar = $("#user-info-avatar");
+const userInfoFriendStatus = $("#user-info-friend-status");
+const userInfoFeedback = $("#user-info-feedback");
+const sendFriendRequestButton = $("#send-friend-request");
+
+async function openUserInfo() {
+  if (!currentUser || !activeConversation) return;
+  const peerId = otherParticipant(activeConversation);
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", peerId).maybeSingle();
+  activePeerProfile = profile || activePeerProfile || { id: peerId };
+  if (userInfoName) userInfoName.textContent = displayName(activePeerProfile);
+  if (userInfoUsername) userInfoUsername.textContent = accountName(activePeerProfile);
+  renderAvatar(userInfoAvatar, activePeerProfile);
+  if (userInfoFeedback) userInfoFeedback.textContent = "";
+  if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Comprobando amistad…";
+  if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+  if (userInfoFriendBadge) { userInfoFriendBadge.textContent = "Persona"; userInfoFriendBadge.className = "friend-status-badge is-person"; }
+  if (sendFriendRequestButton) { sendFriendRequestButton.hidden = false; sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; }
+  await refreshUserInfoBadges(peerId);
+  userInfoDialog?.showModal();
+  const { data: friendship, error: friendshipError } = await supabase.from("friendships").select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  if (friendshipError) {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "La función de amigos aún necesita que se aplique la migración.";
+    if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+    return;
+  }
+  if (friendship) {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Amigos. Ambos pueden ver sus estados.";
+    if (userInfoFriendBadge) { userInfoFriendBadge.textContent = "Amigos"; userInfoFriendBadge.className = "friend-status-badge is-friend"; }
+    if (sendFriendRequestButton) { sendFriendRequestButton.hidden = true; }
+    return;
+  }
+  if (sendFriendRequestButton) sendFriendRequestButton.hidden = false;
+  const { data: outgoing } = await supabase.from("friend_requests").select("id,status").eq("sender_id", currentUser.id).eq("recipient_id", peerId).maybeSingle();
+  const { data: incoming } = await supabase.from("friend_requests").select("id,status").eq("sender_id", peerId).eq("recipient_id", currentUser.id).maybeSingle();
+  if (incoming?.status === "pending") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Esta persona ya te envió una solicitud. Puedes aceptarla en Configuración.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud recibida"; sendFriendRequestButton.disabled = true; }
+  } else if (outgoing?.status === "pending") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya enviaste una solicitud a esta persona.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud enviada"; sendFriendRequestButton.disabled = true; }
+  } else {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solo las amistades aceptadas podrán ver los estados.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; sendFriendRequestButton.disabled = false; }
+  }
+}
+
+// Badge and moderation actions for the current private conversation.
+const userInfoFriendBadge = $("#user-info-friend-badge");
+const blockChatUserButton = $("#block-chat-user");
+const clearPrivateChatButton = $("#clear-private-chat");
+async function refreshUserInfoBadges(peerId) {
+  const isFriend = await supabase.from("friendships").select("user_id")
+    .eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  const friend = Boolean(isFriend.data) && !isFriend.error;
+  for (const badge of [userInfoFriendBadge, $("#chat-friend-badge")]) {
+    if (!badge) continue;
+    badge.textContent = friend ? "Amigos" : "Persona";
+    badge.className = "friend-status-badge " + (friend ? "is-friend" : "is-person");
+  }
+  const { data: blockStatus } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  const state = blockStatus?.[0] || {};
+  if (blockChatUserButton) {
+    blockChatUserButton.hidden = false;
+    blockChatUserButton.textContent = state.blocked_by_me ? "Desbloquear usuario" : "Bloquear usuario";
+    blockChatUserButton.classList.toggle("button-danger", !state.blocked_by_me);
+  }
+}
+blockChatUserButton?.addEventListener("click", async () => {
+  const peerId = activePeerProfile?.id;
+  if (!currentUser || !peerId || !activeConversation) return;
+  blockChatUserButton.disabled = true;
+  const { data: status } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  const blockedByMe = Boolean(status?.[0]?.blocked_by_me);
+  const { error } = await supabase.rpc("set_user_block", {p_peer_id:peerId,p_block:!blockedByMe});
+  blockChatUserButton.disabled = false;
+  if (error) {
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo actualizar el bloqueo.";
+    return;
+  }
+  await refreshPrivateChatIdentity(peerId, activePeerProfile);
+  await refreshUserInfoBadges(peerId);
+  if (userInfoFeedback) userInfoFeedback.textContent = blockedByMe
+    ? "Cuenta desbloqueada. Ya pueden volver a escribirse."
+    : "Cuenta bloqueada. No podrán enviarse mensajes ni iniciar llamadas privadas entre sí.";
+});
+clearPrivateChatButton?.addEventListener("click", async () => {
+  if (!currentUser || !activeConversation) return;
+  const conversationId = activeConversation.id;
+  if (!window.confirm("¿Borrar este chat de tu lista y ocultar los mensajes anteriores? La otra persona conservará su copia y podrán abrir un chat nuevo más adelante.")) return;
+  clearPrivateChatButton.disabled = true;
+  const { error } = await supabase.from("conversation_clear_states").upsert({
+    user_id:currentUser.id,
+    conversation_id:conversationId,
+    cleared_at:new Date().toISOString()
+  }, {onConflict:"user_id,conversation_id"});
+  clearPrivateChatButton.disabled = false;
+  if (error) {
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo borrar el chat.";
+    return;
+  }
+  userInfoDialog?.close();
+  if (messageRefreshTimer) { window.clearInterval(messageRefreshTimer); messageRefreshTimer=null; }
+  if (presenceRefreshTimer) { window.clearInterval(presenceRefreshTimer); presenceRefreshTimer=null; }
+  activeConversation=null;
+  activePeerProfile=null;
+  activeDirectChatBlockStatus={blockedByMe:false,blockedMe:false};
+  $("#chat-active").hidden=true;
+  $("#chat-empty").hidden=false;
+  $("#message-list")?.replaceChildren();
+  updatePrivateChatControls();
+  showMessage($("#message-status"), "");
+  await loadConversations();
+});
+$("#open-user-info")?.addEventListener("click", () => openUserInfo().catch(error => {
+  if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo abrir el perfil.";
+}));
+sendFriendRequestButton?.addEventListener("click", async () => {
+  const peerId = activePeerProfile?.id;
+  if (!currentUser || !peerId || peerId === currentUser.id) return;
+  sendFriendRequestButton.disabled = true;
+  if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
+  const { data: requestStatus, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
+  if (error) {
+    sendFriendRequestButton.disabled = false;
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo enviar la solicitud. Inténtalo otra vez.";
+    return;
+  }
+  if (requestStatus === "friends") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya son amigos.";
+    if (userInfoFeedback) userInfoFeedback.textContent = "Esta cuenta ya está en tu lista de amigos.";
+    sendFriendRequestButton.hidden = true;
+    return;
+  }
+  if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
+  if (userInfoFeedback) userInfoFeedback.textContent = requestStatus === "resent" ? "Solicitud de amistad enviada nuevamente." : "Solicitud de amistad enviada.";
+  sendFriendRequestButton.textContent = "Solicitud enviada";
+  const { data: pendingRequest } = await supabase.from("friend_requests").select("id")
+    .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending").maybeSingle();
+  if (pendingRequest?.id) {
+    try {
+      const { data: pushResult, error: pushError } = await invokeAureonPush({
+        action:"friend-request",
+        recipientId:peerId,
+        requestId:pendingRequest.id
+      });
+      if (pushError || !pushResult?.sent) {
+        console.warn("La solicitud quedó guardada, pero no se pudo enviar la notificación push:", pushError || pushResult);
+        if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud guardada. Para recibir el aviso inmediato, la otra cuenta debe tener activadas las notificaciones de AUREON.";
+      }
+    } catch (pushError) {
+      console.warn("No se pudo avisar de la solicitud:", pushError);
+    }
+  }
+});
+
+let activeDirectChatBlockStatus = { blockedByMe:false, blockedMe:false };
+function updatePrivateChatControls() {
+  const blocked = activeDirectChatBlockStatus.blockedByMe || activeDirectChatBlockStatus.blockedMe;
+  const input = $("#message-input");
+  const send = messageForm?.querySelector('button[type="submit"]');
+  const voice = $("#record-voice-message");
+  if (input) {
+    input.disabled = blocked;
+    input.placeholder = activeDirectChatBlockStatus.blockedByMe
+      ? "Has bloqueado a esta persona."
+      : activeDirectChatBlockStatus.blockedMe ? "Esta persona te ha bloqueado." : "Escribe un mensaje...";
+  }
+  if (send) send.disabled = blocked;
+  if (voice) voice.disabled = blocked;
+  for (const id of ["start-audio-call","start-video-call"]) {
+    const button = $( "#" + id );
+    if (button) button.disabled = blocked;
+  }
+}
+async function refreshPrivateChatIdentity(peerId, profile = activePeerProfile) {
+  if (!currentUser || !peerId) return;
+  if (!profile?.id) profile = (await fetchProfiles([peerId])).get(peerId) || { id:peerId };
+  activePeerProfile = profile;
+  renderAvatar($("#chat-peer-avatar"), profile, "chat-peer-avatar");
+  const { data: friendship, error: friendError } = await supabase.from("friendships")
+    .select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  const isFriend = !friendError && Boolean(friendship);
+  const badge = $("#chat-friend-badge");
+  if (badge) {
+    badge.textContent = isFriend ? "Amigos" : "Persona";
+    badge.className = "friend-status-badge " + (isFriend ? "is-friend" : "is-person");
+  }
+  const { data: access, error: blockError } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  activeDirectChatBlockStatus = blockError ? {blockedByMe:false,blockedMe:false} : {
+    blockedByMe:Boolean(access?.[0]?.blocked_by_me),
+    blockedMe:Boolean(access?.[0]?.blocked_me)
+  };
+  updatePrivateChatControls();
+}
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
-  activeGroup = null; activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
+  activeGroup = null; activeConversation = conversation; activePeerProfile = profile; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
   $("#chat-kind").textContent = "CONVERSACIÓN PRIVADA";
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
   $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
+  $("#open-user-info").hidden = false;
+  $("#chat-peer-avatar").hidden = false;
+  $("#chat-friend-badge").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
   const peerId = otherParticipant(conversation);
+  await refreshPrivateChatIdentity(peerId, profile);
   const chatPresence = $("#chat-presence");
   const refreshChatPresence = async () => {
     await loadPresence([peerId]);
@@ -3240,8 +3883,12 @@ initializeMessagePickers();
 
 async function loadMessages(conversationId, quiet = false) {
   if (!currentUser || !messageList) return;
-  const { data, error } = await supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
-    .eq("conversation_id", conversationId).order("created_at", { ascending: true }).limit(300);
+  const { data: clearState } = await supabase.from("conversation_clear_states")
+    .select("cleared_at").eq("user_id", currentUser.id).eq("conversation_id", conversationId).maybeSingle();
+  let messageQuery = supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
+    .eq("conversation_id", conversationId);
+  if (clearState?.cleared_at) messageQuery = messageQuery.gt("created_at", clearState.cleared_at);
+  const { data, error } = await messageQuery.order("created_at", { ascending: true }).limit(300);
   if (error) { if (!quiet) showEmpty(messageList, "No se pudieron cargar los mensajes."); console.error(error); return; }
   const messages=data||[], signature=messages.map(m=>m.id+":"+(m.read_at||"")).join("|");
   if(quiet&&messageList.dataset.signature===signature)return;
@@ -3534,6 +4181,11 @@ async function openGroup(group) {
   $("#chat-empty").hidden = true;
   $("#chat-active").hidden = false;
   $("#chat-title").textContent = group.name;
+  $("#open-user-info").hidden = true;
+  $("#chat-peer-avatar").hidden = true;
+  $("#chat-friend-badge").hidden = true;
+  activeDirectChatBlockStatus = {blockedByMe:false,blockedMe:false};
+  updatePrivateChatControls();
   const eyebrow = $("#chat-kind");
   if (eyebrow) eyebrow.textContent = "CHAT GRUPAL";
   $("#group-audio-call").hidden = false;

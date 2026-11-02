@@ -25,7 +25,7 @@ self.addEventListener("push", (event) => {
       tag: payload.tag || "aureon-notification",
       renotify: Boolean(payload.renotify),
       silent: false,
-      data: { url: payload.url || "./", type: payload.type || "general", callId: payload.callId || null }
+      data: { url: payload.url || "./", type: payload.type || "general", callId: payload.callId || null, requestId: payload.requestId || null }
     };
     // Android/Chrome admite acciones en las notificaciones. iOS web push puede ignorarlas.
     if (isCall && payload.callId) {
@@ -45,6 +45,9 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const targetUrl = new URL(data.url || "./", self.registration.scope);
+    if (data.type === "friend-request") {
+      targetUrl.searchParams.set("openSettings", "friend-requests");
+    }
     if (["call", "group-call"].includes(data.type) && data.callId) {
       targetUrl.searchParams.set("callId", data.callId);
       if (["accept", "reject"].includes(action)) targetUrl.searchParams.set("notificationAction", action);

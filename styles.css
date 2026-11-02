@@ -2054,3 +2054,206 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .group-settings-avatar { width:52px; height:52px; }
   .group-avatar-setting-details .button { padding:9px 10px; font-size:12px; }
 }
+
+/* AUREON: Estados y solicitudes de amistad */
+#estados .states-layout{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,1.2fr);gap:18px;align-items:start}
+.status-compose,.status-feed-wrap,.friends-panel{padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--panel, #0d1423);min-width:0}
+.status-compose{display:flex;flex-direction:column;gap:10px}
+.status-compose textarea,.status-compose input[type="text"],.status-compose input[type="file"]{width:100%;max-width:100%}
+.status-friends-feed{display:flex;flex-direction:column;gap:12px}
+.status-card{border:1px solid var(--border);border-radius:14px;padding:12px;overflow:hidden}
+.status-card-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.status-card-heading time{font-size:12px;color:var(--muted,#9aa4b2)}
+.status-card img,.status-card video{display:block;width:100%;max-height:440px;object-fit:contain;border-radius:10px;margin-top:10px;background:#05070c}
+.status-card p{overflow-wrap:anywhere}
+.friends-panel{margin-top:18px}
+.friend-request-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+@media(max-width:760px){#estados .states-layout{grid-template-columns:minmax(0,1fr)}.status-compose,.status-feed-wrap,.friends-panel{padding:13px}}
+
+/* AUREON: información del usuario desde el encabezado del chat */
+.user-info-dialog{width:min(92vw,440px);border:1px solid var(--border);border-radius:20px;padding:24px;background:var(--panel,#0d1423);color:var(--text,#f4f7fb)}
+.user-info-dialog::backdrop{background:rgba(0,0,0,.62);backdrop-filter:blur(3px)}
+.user-info-profile{display:flex;align-items:center;gap:14px;margin:18px 0}
+.user-info-profile h2{margin:0 0 4px}
+.user-info-profile .avatar-frame{width:68px;height:68px;flex:0 0 68px;border-radius:50%;overflow:hidden}
+.user-info-profile .avatar-frame img{width:100%;height:100%;object-fit:cover}
+.user-info-dialog .dialog-close{display:flex;justify-content:flex-end}
+#open-user-info{white-space:nowrap}
+@media(max-width:680px){.chat-header{gap:8px;flex-wrap:wrap}.chat-header .call-actions{flex-wrap:wrap}#open-user-info{font-size:12px}}
+
+
+/* AUREON · Estados como historias horizontales tipo WhatsApp */
+#estados .status-stories-panel,
+#estados .status-compose,
+#estados .status-feed-wrap {
+  min-width:0;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--panel);
+}
+#estados .status-stories-panel { margin-bottom:16px; }
+#estados .status-stories-panel > h3,
+#estados .status-feed-wrap > h3 { margin:0 0 14px; font-size:16px; }
+#estados .status-stories-strip {
+  display:flex;
+  align-items:flex-start;
+  gap:18px;
+  min-height:112px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding:4px 2px 10px;
+  scrollbar-width:thin;
+}
+.status-story-button {
+  position:relative;
+  flex:0 0 76px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+  padding:0;
+  border:0;
+  color:var(--text);
+  background:transparent;
+  cursor:pointer;
+}
+.status-story-avatar {
+  width:68px;
+  height:68px;
+  border-radius:50%;
+  border:3px solid transparent;
+  outline:2px solid #20c878;
+  outline-offset:2px;
+}
+.status-story-button.no-stories .status-story-avatar { outline:2px solid var(--border); }
+.status-story-avatar img { border-radius:50%; }
+.status-story-label {
+  display:block;
+  width:100%;
+  overflow:hidden;
+  color:var(--text);
+  font-size:12px;
+  line-height:1.3;
+  text-align:center;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.status-story-plus {
+  position:absolute;
+  top:45px;
+  right:3px;
+  display:grid;
+  place-items:center;
+  width:23px;
+  height:23px;
+  border:2px solid var(--panel);
+  border-radius:50%;
+  color:#fff;
+  background:#20a96a;
+  font-size:18px;
+  font-weight:800;
+}
+.status-update-row {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:12px 2px;
+  border:0;
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
+}
+.status-update-row:last-child { border-bottom:0; }
+.status-update-avatar { width:48px; height:48px; outline:2px solid #20c878; outline-offset:2px; }
+.status-update-copy { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.status-update-copy strong,.status-update-copy span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.status-update-copy span { color:var(--muted); font-size:13px; }
+.status-update-copy small { color:var(--muted); font-size:11px; }
+.status-feed-heading { margin:0 0 8px; }
+.status-privacy-note { font-size:12px; line-height:1.45; }
+.friend-request-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+.friend-request-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+.friend-request-avatar { width:42px; height:42px; }
+.friend-request-actions { display:flex; gap:7px; flex-shrink:0; }
+.friend-request-actions .button { padding:8px 11px; font-size:12px; }
+#settings-friend-requests { margin-bottom:18px; }
+
+/* Visor de estados */
+.status-viewer-dialog {
+  width:min(94vw,500px);
+  max-width:500px;
+  height:min(92dvh,860px);
+  max-height:92dvh;
+  padding:0;
+  overflow:hidden;
+  color:#fff;
+  background:#06080d;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:18px;
+}
+.status-viewer-dialog::backdrop { background:rgba(0,0,0,.82); backdrop-filter:blur(5px); }
+.status-viewer-shell { display:flex; flex-direction:column; width:100%; height:100%; min-height:0; padding:12px; gap:12px; }
+.status-viewer-progress { display:flex; gap:4px; flex:0 0 4px; width:100%; }
+.status-progress-segment { flex:1; height:4px; overflow:hidden; border-radius:8px; background:rgba(255,255,255,.25); }
+.status-progress-segment i { display:block; height:100%; border-radius:8px; background:#fff; }
+.status-viewer-header { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+.status-viewer-header .avatar-frame { width:40px; height:40px; border:2px solid #20c878; }
+.status-viewer-header-copy { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.status-viewer-header-copy strong { font-size:14px; }
+.status-viewer-header-copy time { color:#cbd5e1; font-size:11px; }
+.status-viewer-close { width:38px; height:38px; border:0; border-radius:50%; color:#fff; background:rgba(255,255,255,.12); font-size:26px; cursor:pointer; }
+.status-viewer-content { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; min-height:0; gap:12px; overflow:hidden; }
+.status-viewer-media { display:flex; align-items:center; justify-content:center; width:100%; min-height:0; flex:1; overflow:hidden; border-radius:12px; background:#111827; }
+.status-viewer-media img,.status-viewer-media video { display:block; width:100%; height:100%; max-height:100%; object-fit:contain; background:#000; }
+.status-viewer-text { width:100%; padding:28px 18px; color:#fff; font-size:clamp(22px,5vw,34px); line-height:1.45; text-align:center; overflow-wrap:anywhere; }
+.status-viewer-caption,.status-viewer-music { width:100%; color:#fff; font-size:14px; line-height:1.45; text-align:center; overflow-wrap:anywhere; }
+.status-viewer-music { color:#b7f7dc; }
+.status-viewer-nav { display:flex; justify-content:space-between; gap:12px; flex:0 0 auto; }
+.status-viewer-nav .button { min-width:110px; }
+@media(max-width:600px) {
+  #estados .states-layout { grid-template-columns:1fr; }
+  #estados .status-stories-panel,#estados .status-compose,#estados .status-feed-wrap { padding:14px; }
+  #estados .status-stories-strip { gap:14px; }
+  .status-viewer-dialog { width:100vw; max-width:none; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
+  .status-viewer-shell { padding:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
+  .friend-request-row { align-items:flex-start; flex-direction:column; }
+  .friend-request-actions { width:100%; }
+  .friend-request-actions .button { flex:1; }
+}
+:root[data-theme="light"] #estados .status-stories-panel,
+:root[data-theme="light"] #estados .status-compose,
+:root[data-theme="light"] #estados .status-feed-wrap { background:#fff; }
+:root[data-theme="light"] .status-story-label,
+:root[data-theme="light"] .status-update-row { color:#172238; }
+
+
+/* Identidad en el encabezado y etiqueta de amistad */
+.chat-identity { display:flex; align-items:center; gap:11px; min-width:0; }
+.chat-identity-copy { display:flex; flex-direction:column; align-items:flex-start; min-width:0; gap:3px; }
+.chat-peer-avatar { width:48px; height:48px; flex:0 0 48px; }
+.friend-status-badge {
+  display:inline-flex; align-items:center; width:max-content; max-width:100%;
+  padding:3px 9px; border-radius:6px; font-size:10px; font-weight:800;
+  letter-spacing:.2px; color:#d7e0ec; background:#536174; border:1px solid rgba(255,255,255,.12);
+}
+.friend-status-badge.is-friend { color:#fff; background:#18834e; border-color:#25b86e; }
+.friend-status-badge.is-person { color:#e5e7eb; background:#526071; border-color:#68778b; }
+.user-info-dialog .friend-status-badge { margin-top:7px; }
+.user-info-dialog #block-chat-user.button-danger { background:#a9323b !important; }
+@media(max-width:650px) {
+  .chat-identity { flex:1 1 100%; }
+  .chat-peer-avatar { width:42px;height:42px;flex-basis:42px; }
+  .chat-header .call-actions { justify-content:flex-start; }
+}
