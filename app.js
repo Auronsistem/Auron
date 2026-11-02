@@ -2333,7 +2333,10 @@ function moveStatusStory(direction) {
 $("#status-story-prev")?.addEventListener("click", () => moveStatusStory(-1));
 $("#status-story-next")?.addEventListener("click", () => moveStatusStory(1));
 $("#status-viewer-close")?.addEventListener("click", () => statusViewerDialog?.close());
-statusViewerDialog?.addEventListener("close", stopStatusMusic);
+statusViewerDialog?.addEventListener("close", () => {
+  statusViewerRenderToken++;
+  stopStatusMusic();
+});
 statusViewerDialog?.addEventListener("click", event => {
   if (event.target === statusViewerDialog) statusViewerDialog.close();
 });
