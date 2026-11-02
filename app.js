@@ -2063,27 +2063,8 @@ async function loadFriendsStatuses() {
     return;
   }
 
-  friendRequestsList.replaceChildren();
-  const { data: requests, error: requestError } = await supabase
-    .from("friend_requests")
-    .select("id,sender_id,created_at")
-    .eq("recipient_id", currentUser.id)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
-
-  updateFriendRequestBadge(requestError ? 0 : (requests || []).length);
-  if (requestError) {
-    showEmpty(friendRequestsList, "No se pudieron cargar las solicitudes. Comprueba la actualización de Amigos.");
-    console.warn("Error al cargar solicitudes de amistad:", requestError);
-  } else if (!requests?.length) {
-    showEmpty(friendRequestsList, "No tienes solicitudes pendientes.");
-  } else {
-    const requestProfiles = await fetchProfiles(requests.map(item => item.sender_id));
-    for (const request of requests) {
-      appendFriendRequestRow(request, requestProfiles.get(request.sender_id));
-    }
-  }
-
+  // Las solicitudes se cargan exclusivamente en loadFriendRequestsOnly().
+  // Evita que la carga de estados vacíe o sobrescriba la lista de solicitudes.
   const { data: posts, error: postsError } = await supabase
     .from("status_posts")
     .select("id,user_id,media_type,media_url,caption,music_title,music_url,created_at,expires_at")
