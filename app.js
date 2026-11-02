@@ -2052,7 +2052,11 @@ async function loadFriendRequestsOnly() {
   if (currentUser?.id !== userId) return;
   container.replaceChildren();
   for (const request of requests) {
-    appendFriendRequestRow(request, profiles.get(request.sender_id) || { id: request.sender_id, username: "Usuario de AUREON" });
+    const profile = profiles.get(request.sender_id) || { id: request.sender_id, username: "Usuario de AUREON" };
+    const row = appendFriendRequestRow(request, profile);
+    // La función construye y devuelve la tarjeta; hay que insertarla explícitamente
+    // en el rectángulo para que el usuario pueda aceptar o rechazar la solicitud.
+    if (row) container.append(row);
   }
 }
 
