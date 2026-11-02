@@ -3591,6 +3591,7 @@ sendFriendRequestButton?.addEventListener("click", async () => {
       return;
     }
     if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud cancelada.";
+    userInfoDialog?.close();
     await openUserInfo();
     return;
   }
@@ -3610,10 +3611,12 @@ sendFriendRequestButton?.addEventListener("click", async () => {
   }
   if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
   if (userInfoFeedback) userInfoFeedback.textContent = requestStatus === "resent" ? "Solicitud de amistad enviada nuevamente." : "Solicitud de amistad enviada.";
-  sendFriendRequestButton.textContent = "Solicitud enviada";
+  sendFriendRequestButton.textContent = "Cancelar solicitud";
+  sendFriendRequestButton.dataset.friendAction = "cancel";
   const { data: pendingRequest } = await supabase.from("friend_requests").select("id")
     .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending").maybeSingle();
   if (pendingRequest?.id) {
+    sendFriendRequestButton.dataset.requestId = pendingRequest.id;
     try {
       const { data: pushResult, error: pushError } = await invokeAureonPush({
         action:"friend-request",
