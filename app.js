@@ -1669,6 +1669,7 @@ const messageForm = $("#message-form");
 // PRESENCIA: actividad reciente de cada cuenta
 let presenceTimer = null;
 let presenceRefreshTimer = null;
+let peoplePresenceTimer = null;
 let presenceCache = new Map();
 function presenceLevel(lastSeen) {
   if (!lastSeen) return "offline";
@@ -1703,8 +1704,10 @@ function startPresence() {
 function stopPresence() {
   if (presenceTimer) clearInterval(presenceTimer);
   if (presenceRefreshTimer) clearInterval(presenceRefreshTimer);
+  if (peoplePresenceTimer) clearInterval(peoplePresenceTimer);
   presenceTimer = null;
   presenceRefreshTimer = null;
+  peoplePresenceTimer = null;
 }
 async function loadPresence(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -1808,11 +1811,21 @@ async function searchPeople(query) {
   await loadPresence(data.map(profile => profile.id));
   for (const profile of data) {
     const button = document.createElement("button");
-    button.type = "button"; button.className = "people-result";
+    button.type = "button"; button.className = "people-result"; button.dataset.userId = profile.id;
     const name = document.createElement("strong"); name.textContent = displayName(profile);
     button.append(name); renderPresenceLine(button, profile.id);
     button.addEventListener("click", () => startConversation(profile)); peopleResults.append(button);
   }
+  if (peoplePresenceTimer) clearInterval(peoplePresenceTimer);
+  peoplePresenceTimer = window.setInterval(async () => {
+    if (!peopleResults || peopleResults.hidden) return;
+    const ids = [...peopleResults.querySelectorAll(".people-result")].map(item => item.dataset.userId).filter(Boolean);
+    await loadPresence(ids);
+    for (const item of peopleResults.querySelectorAll(".people-result")) {
+      item.querySelector(".presence-line")?.remove();
+      if (item.dataset.userId) renderPresenceLine(item, item.dataset.userId);
+    }
+  }, 30000);
 }
 async function startConversation(profile) {
   if (!currentUser || !profile || profile.id === currentUser.id) return;
