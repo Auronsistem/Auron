@@ -2062,6 +2062,13 @@ const callDialog = $("#call-dialog");
 const callState = $("#call-state");
 const callTitle = $("#call-title");
 const callSubtitle = $("#call-subtitle");
+const callScreen = $(".call-screen");
+if (callSubtitle && callScreen) {
+  const callStatusObserver = new MutationObserver(() => {
+    callScreen.classList.toggle("is-connecting", /llamando|conectando|preparando/i.test(callSubtitle.textContent || ""));
+  });
+  callStatusObserver.observe(callSubtitle, { childList: true, characterData: true, subtree: true });
+}
 const remoteCallVideo = $("#remote-call-video");
 const localCallVideo = $("#local-call-video");
 let callChannel = null;
