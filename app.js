@@ -4317,6 +4317,10 @@ $("#profile-picture-input")?.addEventListener("change", async event => {
 });
 $("#settings-signout")?.addEventListener("click",logout);
 $("#open-settings-link")?.addEventListener("click", openSettings);
+$("#mobile-states-link")?.addEventListener("click", () => {
+  const statesButton = $("#states-nav-link");
+  if (statesButton) statesButton.click();
+});
 $("#mobile-settings-link")?.addEventListener("click", openSettings);
 $("#close-settings")?.addEventListener("click", closeSettings);
 
