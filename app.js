@@ -13,6 +13,7 @@ let currentUser = null;
 let parentalStatus = { supervised: false, maturity_level: 3 };
 let parentalMinuteTimer = null;
 let guardianClient = null;
+let guardianUserId = null;
 let guardianVerifiedEmail = "";
 let parentalScreenBlocked = false;
 let authMode = "login";
@@ -623,6 +624,7 @@ async function sendGuardianVerificationCode() {
     parentalStatusMessage("Código de 6 dígitos enviado al correo del apoderado. Revisa Recibidos y Spam.");
   } catch (error) {
     guardianClient = null;
+    guardianUserId = null;
     parentalStatusMessage(error.message || "No se pudo enviar el código. Comprueba que el apoderado tenga una cuenta AUREON verificada.", true);
   } finally {
     if (button) button.disabled = false;
@@ -649,6 +651,7 @@ async function verifyGuardianCode() {
     });
     if (error) throw error;
     if (!data?.user || !data?.session) throw new Error("No se pudo verificar la cuenta del apoderado.");
+    guardianUserId = data.user.id;
     $("#guardian-code-step").hidden = true;
     $("#guardian-link-step").hidden = false;
     $("#guardian-email").readOnly = true;
@@ -695,6 +698,7 @@ async function loadGuardianChildren() {
   const select = $("#parental-child-select");
   const { data, error } = await guardianClient.from("parental_links")
     .select("id,child_id,status")
+    .eq("parent_id", guardianUserId)
     .eq("status", "active")
     .order("created_at", { ascending: true });
   if (error) {
@@ -951,6 +955,7 @@ async function updateSession(session) {
   if (currentUser?.id && currentUser.id !== nextUser?.id && guardianClient) {
     guardianClient.auth.signOut({ scope: "local" }).catch(() => {});
     guardianClient = null;
+    guardianUserId = null;
     guardianVerifiedEmail = "";
     if ($("#guardian-email")) {
       $("#guardian-email").value = "";
