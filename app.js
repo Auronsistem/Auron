@@ -103,6 +103,27 @@ function closeSettings() {
 
 initializeThemeSettings();
 
+async function invokeAureonPush(body) {
+  const { data: currentSessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  let session = currentSessionData?.session || null;
+
+  const expiresAt = Number(session?.expires_at || 0) * 1000;
+  if (!session || !session.access_token || (expiresAt && expiresAt <= Date.now() + 45000)) {
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) throw refreshError;
+    session = refreshed?.session || null;
+  }
+  if (!session?.access_token) {
+    throw new Error("Tu sesión de AUREON venció. Vuelve a iniciar sesión para recibir notificaciones.");
+  }
+
+  return supabase.functions.invoke("call-push", {
+    body,
+    headers: { Authorization: "Bearer " + session.access_token }
+  });
+}
+
 function urlBase64ToUint8Array(value) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -144,9 +165,7 @@ async function enableAureonPushNotifications() {
       say("No se concedió permiso para notificaciones. Puedes activarlo en los ajustes de Chrome.", true);
       return;
     }
-    const { data: config, error: configError } = await supabase.functions.invoke("call-push", {
-      body: { action: "config" }
-    });
+    const { data: config, error: configError } = await invokeAureonPush({ action: "config" });
     if (configError || !config?.publicKey) {
       throw new Error(config?.error || "Falta configurar las claves de notificaciones en el servidor.");
     }
@@ -2568,9 +2587,7 @@ window.addEventListener("pagehide", () => {
 
 async function notifyAureonPush(action, details) {
   try {
-    const { data, error } = await supabase.functions.invoke("call-push", {
-      body: { action, ...details }
-    });
+    const { data, error } = await invokeAureonPush({ action, ...details });
     if (error) console.warn("El mensaje se envió, pero no se pudo mandar el aviso push:", error);
     else if (data?.error) console.warn("Aviso push de AUREON:", data.error);
     else if (data?.sent === 0) console.info("AUREON: el destinatario aún no tiene notificaciones activas en un dispositivo.");
@@ -3521,14 +3538,12 @@ async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peer
     return false;
   }
   if (type === "invite") {
-    const { error: pushError } = await supabase.functions.invoke("call-push", {
-      body: {
-        action: "call",
-        recipientId,
-        conversationId: activeCall.conversationId,
-        callId: activeCall.id,
-        video: Boolean(payload.video)
-      }
+    const { error: pushError } = await invokeAureonPush({
+      action: "call",
+      recipientId,
+      conversationId: activeCall.conversationId,
+      callId: activeCall.id,
+      video: Boolean(payload.video)
     });
     if (pushError) console.warn("La invitación se guardó, pero falló el aviso push:", pushError);
   }
@@ -3873,14 +3888,12 @@ async function sendGroupCallSignal(type, payload = {}, recipientId, call = activ
     return false;
   }
   if (type === "invite") {
-    const { error: pushError } = await supabase.functions.invoke("call-push", {
-      body: {
-        action: "group-call",
-        groupId: call.groupId,
-        callId: call.id,
-        recipientId,
-        video: Boolean(payload.video)
-      }
+    const { error: pushError } = await invokeAureonPush({
+      action: "group-call",
+      groupId: call.groupId,
+      callId: call.id,
+      recipientId,
+      video: Boolean(payload.video)
     });
     if (pushError) console.warn("La invitación grupal se guardó, pero no se pudo enviar la notificación push:", pushError);
   }
