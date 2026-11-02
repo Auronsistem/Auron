@@ -3522,7 +3522,8 @@ function attachVoiceWaveform(stream, indicator) {
     source.connect(analyser);
     const samples = new Uint8Array(analyser.fftSize);
     let frame = 0;
-    const state = { context, stop: () => { cancelAnimationFrame(frame); context.close().catch(() => {}); indicator.classList.remove("is-speaking"); } };
+    indicator.hidden = false;
+    const state = { context, stop: () => { cancelAnimationFrame(frame); context.close().catch(() => {}); indicator.classList.remove("is-speaking"); indicator.style.removeProperty("--voice-level"); } };
     voiceActivityContexts.set(indicator, state);
     const tick = () => {
       if (!indicator.isConnected || !stream.getAudioTracks().some(track => track.readyState === "live")) {
