@@ -1900,7 +1900,7 @@ messageForm?.addEventListener("submit", async event => {
       .select("id").single();
     if (error) { showMessage($("#message-status"), error.message || "No se pudo enviar el mensaje al grupo.", true); console.error(error); }
     else {
-      input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado al grupo.");
+      input.value = ""; playAureonTone("bird"); showMessage($("#message-status"), "Mensaje enviado al grupo.");
       notifyAureonPush("group-message", { messageId: sentGroupMessage.id });
       await loadGroupMessages(activeGroup.id);
     }
@@ -1912,7 +1912,7 @@ messageForm?.addEventListener("submit", async event => {
     .select("id").single();
   if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
   else {
-    input.value = ""; playAureonTone("message"); showMessage($("#message-status"), "Mensaje enviado.");
+    input.value = ""; playAureonTone("bird"); showMessage($("#message-status"), "Mensaje enviado.");
     notifyAureonPush("message", { messageId: sentMessage.id });
     await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", activeConversation.id);
     await loadMessages(activeConversation.id); await loadConversations();
@@ -2103,7 +2103,7 @@ function stopCallAlert() {
   callOscillator = null;
   if (callAudioContext) { callAudioContext.close().catch(() => {}); }
   callAudioContext = null;
-  if (navigator.vibrate) navigator.vibrate(0);
+
 }
 
 // Tonos cortos sintetizados por el navegador; no necesitan archivos externos.
@@ -2140,20 +2140,33 @@ function playAureonTone(kind = "message") {
 }
 
 // El service worker avisa a esta pestaña cuando llega un push mientras está visible.
+let pendingNotificationCallAction = null;
+try {
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get("notificationAction");
+  const callId = params.get("callId");
+  if (callId && ["accept", "reject"].includes(action)) pendingNotificationCallAction = { action, callId };
+} catch (_) {}
 navigator.serviceWorker?.addEventListener("message", (event) => {
-  if (event.data?.type === "AUREON_PUSH" && event.data?.payload?.type === "message") {
-    playAureonTone("bird");
+  if (event.data?.type === "AUREON_PUSH" && event.data?.payload?.type === "message") playAureonTone("bird");
+  if (event.data?.type === "AUREON_CALL_ACTION" && ["accept", "reject"].includes(event.data.action)) {
+    pendingNotificationCallAction = { action: event.data.action, callId: event.data.callId };
+    processPendingNotificationCallAction();
   }
 });
+function processPendingNotificationCallAction() {
+  if (!pendingNotificationCallAction || !activeCall?.incoming || activeCall.id !== pendingNotificationCallAction.callId) return;
+  const action = pendingNotificationCallAction.action;
+  pendingNotificationCallAction = null;
+  const button = action === "accept" ? $("#accept-call") : $("#reject-call");
+  if (button) window.setTimeout(() => button.click(), 250);
+}
 
 function startCallAlert() {
   stopCallAlert();
-  playAureonTone("call");
-  if (navigator.vibrate) navigator.vibrate([250, 120, 250, 250, 450]);
-  callRingTimer = window.setInterval(() => {
-    playAureonTone("call");
-    if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
-  }, 2300);
+  // AUREON usa el mismo canto corto de pájaro para llamadas y mensajes.
+  playAureonTone("bird");
+  callRingTimer = window.setInterval(() => playAureonTone("bird"), 3200);
 }
 function callDisplay(showIncoming = false, showActive = false) {
   if (callDialog && !callDialog.open) callDialog.showModal();
@@ -2294,6 +2307,7 @@ async function processCallSignal(signal) {
     callSubtitle.textContent = callerName + " te está llamando";
     callDisplay(true, false);
     startCallAlert();
+    processPendingNotificationCallAction();
     return;
   }
   if (!activeCall || signal.call_id !== activeCall.id || signal.sender_id !== activeCall.peerId) return;
