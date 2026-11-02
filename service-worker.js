@@ -1,4 +1,4 @@
-/* AUREON service worker: push notifications and call actions. */
+/* AUREON service worker v2: push notifications and call actions. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -9,8 +9,15 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visibleClient = windows.find(client => client.visibilityState === "visible");
-    if (visibleClient && payload.type === "message") visibleClient.postMessage({ type: "AUREON_PUSH", payload });
+    if (visibleClient && payload.type === "message") {
+      visibleClient.postMessage({ type: "AUREON_PUSH", payload });
+    }
     const isCall = payload.type === "call" || payload.type === "group-call";
+    if (isCall) {
+      for (const client of windows) {
+        client.postMessage({ type: "AUREON_INCOMING_CALL_PUSH", payload });
+      }
+    }
     const options = {
       body: payload.body || "Tienes una notificación nueva.",
       icon: "./icons/aureon.svg?v=2",
