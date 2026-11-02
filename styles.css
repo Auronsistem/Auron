@@ -1083,3 +1083,12 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 }
 
 .call-dialog [hidden] { display:none !important; }
+
+/* Estado de conexión de usuarios */
+.presence-line,.chat-presence { display:flex; align-items:center; gap:7px; color:#aebbd0; font-size:12px; margin-top:5px; }
+.presence-dot { display:inline-block; flex:0 0 9px; width:9px; height:9px; border-radius:50%; background:#87909e; }
+.presence-online { background:#22c875; box-shadow:0 0 9px rgba(34,200,117,.7); }
+.presence-recent { background:#f2c94c; box-shadow:0 0 8px rgba(242,201,76,.5); }
+.presence-offline { background:#89919d; }
+.people-result .presence-line { margin-top:3px; }
+.chat-presence:empty { display:none; }
