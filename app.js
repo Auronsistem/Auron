@@ -3346,8 +3346,6 @@ function setCallWindowMinimized(minimized) {
   callDialog.close();
   if (next) callDialog.show();
   else callDialog.showModal();
-  window.setTimeout(() => { suppressCallDialogClose = false; }, 250);
-
   const button = $("#toggle-call-window");
   if (button) {
     button.textContent = next ? "⤢ Ampliar" : "— Minimizar";
@@ -3831,7 +3829,10 @@ $("#switch-call-camera")?.addEventListener("click", async () => {
   }
 });
 callDialog?.addEventListener("close", () => {
-  if (suppressCallDialogClose) return;
+  if (suppressCallDialogClose) {
+    suppressCallDialogClose = false;
+    return;
+  }
   if (activeGroupCall) cleanupGroupCall();
   else if (activeCall) cleanupCall();
 });
