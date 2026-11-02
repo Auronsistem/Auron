@@ -947,7 +947,29 @@ $("#refresh-parental-children")?.addEventListener("click", loadGuardianChildren)
 $("#parental-controls-form")?.addEventListener("submit", saveSelectedChildSettings);
 
 async function updateSession(session) {
-  currentUser = session?.user || null;
+  const nextUser = session?.user || null;
+  if (currentUser?.id && currentUser.id !== nextUser?.id && guardianClient) {
+    guardianClient.auth.signOut({ scope: "local" }).catch(() => {});
+    guardianClient = null;
+    guardianVerifiedEmail = "";
+    if ($("#guardian-email")) {
+      $("#guardian-email").value = "";
+      $("#guardian-email").readOnly = false;
+    }
+    if ($("#guardian-code")) $("#guardian-code").value = "";
+    if ($("#guardian-code-step")) $("#guardian-code-step").hidden = true;
+    if ($("#guardian-link-step")) $("#guardian-link-step").hidden = true;
+    if ($("#parental-controls-form")) $("#parental-controls-form").hidden = true;
+    const childSelect = $("#parental-child-select");
+    if (childSelect) {
+      childSelect.replaceChildren();
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Verifica primero el correo del apoderado";
+      childSelect.append(option);
+    }
+  }
+  currentUser = nextUser;
   if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
   updateHeader();
