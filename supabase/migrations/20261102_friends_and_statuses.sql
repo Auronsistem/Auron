@@ -1,5 +1,5 @@
--- AUREON: solicitudes de amistad y estados privados.
--- Aplicar solo después de revisar la migración y probarla en un entorno de desarrollo.
+-- AUREON: solicitudes de amistad y estados privados estilo historias.
+-- La visibilidad de publicaciones y archivos se limita a la propia cuenta y sus amigos aceptados.
 
 create table if not exists public.friend_requests (
   id uuid primary key default gen_random_uuid(),
@@ -57,25 +57,21 @@ create policy "users can send friend requests"
 on public.friend_requests for insert to authenticated
 with check ((select auth.uid()) = sender_id and sender_id <> recipient_id and status = 'pending');
 
-drop policy if exists "recipient can respond to friend request" on public.friend_requests;
-create policy "recipient can respond to friend request"
-on public.friend_requests for update to authenticated
-using ((select auth.uid()) = recipient_id and status = 'pending')
-with check ((select auth.uid()) = recipient_id and status in ('accepted','rejected'));
-
 drop policy if exists "friendship visible to its owner" on public.friendships;
 create policy "friendship visible to its owner"
 on public.friendships for select to authenticated
 using ((select auth.uid()) = user_id or (select auth.uid()) = friend_id);
 
--- Friendship rows are created only by the accept_friend_request RPC below.
-revoke insert, update, delete on public.friendships from anon, authenticated;
+revoke all on public.friendships from anon, authenticated;
 grant select on public.friendships to authenticated;
+grant select, insert on public.friend_requests to authenticated;
 
-create or replace function public.accept_friend_request(p_request_id uuid)
+-- Solo el destinatario puede responder. La función crea las dos filas de amistad
+-- de forma atómica, para que ambos vean la relación como amigos.
+create or replace function public.respond_friend_request(p_request_id uuid, p_accept boolean)
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -98,17 +94,32 @@ begin
   end if;
 
   update public.friend_requests
-    set status = 'accepted', updated_at = now()
+    set status = case when p_accept then 'accepted' else 'rejected' end,
+        updated_at = now()
     where id = req.id;
 
-  insert into public.friendships(user_id, friend_id)
-    values (req.sender_id, req.recipient_id), (req.recipient_id, req.sender_id)
-    on conflict do nothing;
+  if p_accept then
+    insert into public.friendships(user_id, friend_id)
+      values (req.sender_id, req.recipient_id), (req.recipient_id, req.sender_id)
+      on conflict do nothing;
+  end if;
 
   return true;
 end;
 $$;
 
+revoke all on function public.respond_friend_request(uuid, boolean) from public, anon;
+grant execute on function public.respond_friend_request(uuid, boolean) to authenticated;
+
+-- Compatibilidad con versiones anteriores del cliente.
+create or replace function public.accept_friend_request(p_request_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $$
+  select public.respond_friend_request(p_request_id, true);
+$$;
 revoke all on function public.accept_friend_request(uuid) from public, anon;
 grant execute on function public.accept_friend_request(uuid) to authenticated;
 
@@ -130,12 +141,64 @@ using (
 drop policy if exists "users can publish own statuses" on public.status_posts;
 create policy "users can publish own statuses"
 on public.status_posts for insert to authenticated
-with check ((select auth.uid()) = user_id);
+with check ((select auth.uid()) = user_id and expires_at <= now() + interval '24 hours');
 
 drop policy if exists "users can delete own statuses" on public.status_posts;
 create policy "users can delete own statuses"
 on public.status_posts for delete to authenticated
 using ((select auth.uid()) = user_id);
 
-grant select, insert, delete on public.friend_requests to authenticated;
 grant select, insert, delete on public.status_posts to authenticated;
+
+-- Bucket privado: los enlaces multimedia se firman solo después de aplicar las
+-- políticas de lectura de status_posts y friendships.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'aureon-statuses',
+  'aureon-statuses',
+  false,
+  52428800,
+  array['image/jpeg','image/png','image/webp','video/mp4','video/webm']
+)
+on conflict (id) do update set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "status media owner upload" on storage.objects;
+create policy "status media owner upload"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'aureon-statuses'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "status media visible to friends" on storage.objects;
+create policy "status media visible to friends"
+on storage.objects for select to authenticated
+using (
+  bucket_id = 'aureon-statuses'
+  and exists (
+    select 1
+    from public.status_posts sp
+    where sp.media_url = storage.objects.name
+      and sp.expires_at > now()
+      and (
+        sp.user_id = (select auth.uid())
+        or exists (
+          select 1
+          from public.friendships f
+          where f.user_id = (select auth.uid())
+            and f.friend_id = sp.user_id
+        )
+      )
+  )
+);
+
+drop policy if exists "status media owner delete" on storage.objects;
+create policy "status media owner delete"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'aureon-statuses'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
