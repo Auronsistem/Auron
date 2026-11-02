@@ -323,11 +323,11 @@ function updateAuthForm() {
 
   authForm.innerHTML = `
     <label for="email">Correo electrónico</label>
-    <input id="email" type="email" autocomplete="${authMode === "login" ? "username" : "email"}"
+    <input id="email" name="email" type="email" autocomplete="${authMode === "login" ? "username" : "email"}"
       placeholder="tu@correo.com" required>
 
     <label for="password">Contraseña</label>
-    <input id="password" type="password" minlength="8"
+    <input id="password" name="password" type="password" minlength="8"
       autocomplete="${authMode === "login" ? "current-password" : "new-password"}"
       placeholder="Mínimo 8 caracteres" required>
 
@@ -495,25 +495,9 @@ function showRecoveryCodeForm() {
   waitingForPasswordRecovery = true;
 }
 
-async function askToSaveLoginCredentials(email, password) {
-  const save = window.confirm(
-    "¿Quieres guardar tu usuario y contraseña en este dispositivo?\n\n" +
-    "AUREON usará el administrador de contraseñas seguro del navegador. No guardará tu contraseña en su base de datos ni en el almacenamiento de la página."
-  );
-  if (!save) return;
-  try {
-    if (!("PasswordCredential" in window) || !navigator.credentials?.store) {
-      showMessage($("#auth-message"), "Este navegador no permite guardar desde AUREON. Usa el administrador de contraseñas del navegador; AUREON no guardará tu contraseña.", true);
-      return;
-    }
-    const credential = new window.PasswordCredential({ id: email, password, name: email });
-    await navigator.credentials.store(credential);
-    showMessage($("#auth-message"), "Usuario y contraseña enviados al administrador seguro del navegador.");
-  } catch (error) {
-    console.warn("No se pudo guardar la credencial con el navegador:", error);
-    showMessage($("#auth-message"), "El navegador no pudo guardar la contraseña. Comprueba sus ajustes de contraseñas.", true);
-  }
-}
+// No guardamos contraseñas en localStorage ni en la base de datos.
+ // El administrador integrado del navegador detecta los campos estándar del formulario.
+
 
 function showCodeForm() {
   if (!authForm || !authTitle || !toggleAuth) return;
@@ -639,7 +623,8 @@ authForm?.addEventListener("submit", async (event) => {
 
       if (error) throw error;
 
-      await askToSaveLoginCredentials(email, password);
+      // Tras iniciar sesión, dejamos que el gestor nativo del navegador ofrezca guardar
+      // o actualizar las credenciales usando los campos name/autocomplete del formulario.
       if (authDialog?.open) authDialog.close();
       return;
     }
