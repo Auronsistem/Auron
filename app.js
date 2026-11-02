@@ -905,19 +905,29 @@ async function refreshParentalState() {
     parentalMinuteTimer = window.setInterval(async () => {
       if (!currentUser || !parentalStatus.supervised || document.visibilityState !== "visible") return;
       if (parentalScreenBlocked) {
+        const previousMaturity = Number(parentalStatus.maturity_level ?? 0);
         const { data, error: statusError } = await supabase.rpc("get_parental_status");
         if (!statusError && data) {
           parentalStatus = data;
           setParentalScreenBlock(Boolean(data.blocked));
+          if (Number(data.maturity_level ?? 0) !== previousMaturity) {
+            await loadVideos();
+            await loadRecommendedShorts();
+          }
         }
         return;
       }
+      const previousMaturity = Number(parentalStatus.maturity_level ?? 0);
       const { data, error: usageError } = await supabase.rpc("record_parental_usage", { p_minutes: 1 });
       if (usageError) {
         console.warn("No se pudo registrar el tiempo de pantalla:", usageError);
         return;
       }
       parentalStatus = data || parentalStatus;
+      if (Number(parentalStatus.maturity_level ?? 0) !== previousMaturity) {
+        await loadVideos();
+        await loadRecommendedShorts();
+      }
       if (data?.blocked) {
         setParentalScreenBlock(true);
         cleanupCall();
