@@ -1763,6 +1763,7 @@ document.querySelectorAll("[data-section]").forEach((button) => {
 
 document.querySelectorAll(".side-link[href^='#']").forEach((link) => {
   link.addEventListener("click", () => {
+    if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
     document.querySelectorAll(".side-link").forEach((item) => {
       item.classList.toggle("active", item === link);
     });
