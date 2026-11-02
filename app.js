@@ -1216,6 +1216,14 @@ async function updateSession(session) {
     await loadVideos();
     await loadConversations();
     await loadFriendsStatuses();
+    const notificationRoute = new URLSearchParams(window.location.search).get("openSettings");
+    if (notificationRoute === "friend-requests") {
+      openSettings();
+      $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"});
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("openSettings");
+      window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.hash);
+    }
     await loadRecommendedYouTube();
     await loadRecommendedShorts();
   } else {
@@ -3083,9 +3091,16 @@ async function loadConversations() {
     .or("participant_one.eq." + currentUser.id + ",participant_two.eq." + currentUser.id)
     .order("last_message_at", { ascending: false });
   if (error) { showEmpty(conversationList, "No se pudieron cargar las conversaciones."); console.error(error); return; }
-  conversationCache = data || [];
+  const { data: clearStates, error: clearError } = await supabase.from("conversation_clear_states")
+    .select("conversation_id,cleared_at").eq("user_id", currentUser.id);
+  if (clearError) console.warn("No se pudieron cargar las fechas de chats borrados:", clearError);
+  const clearedAtByConversation = new Map((clearStates || []).map(item => [item.conversation_id, item.cleared_at]));
+  conversationCache = (data || []).filter(conversation => {
+    const clearedAt = clearedAtByConversation.get(conversation.id);
+    return !clearedAt || new Date(conversation.last_message_at).getTime() > new Date(clearedAt).getTime();
+  });
   conversationList.replaceChildren();
-  if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones privadas. Puedes crear un grupo.");
+  if (!conversationCache.length) showEmpty(conversationList, "Aún no tienes conversaciones privadas. Puedes crear un chat nuevo.");
   const profiles = await fetchProfiles(conversationCache.map(otherParticipant));
   for (const conversation of conversationCache) {
     const profile = profiles.get(otherParticipant(conversation));
@@ -3172,6 +3187,9 @@ async function openUserInfo() {
   if (userInfoFeedback) userInfoFeedback.textContent = "";
   if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Comprobando amistad…";
   if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+  if (userInfoFriendBadge) { userInfoFriendBadge.textContent = "Persona"; userInfoFriendBadge.className = "friend-status-badge is-person"; }
+  if (sendFriendRequestButton) { sendFriendRequestButton.hidden = false; sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; }
+  await refreshUserInfoBadges(peerId);
   userInfoDialog?.showModal();
   const { data: friendship, error: friendshipError } = await supabase.from("friendships").select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
   if (friendshipError) {
@@ -3180,7 +3198,8 @@ async function openUserInfo() {
     return;
   }
   if (friendship) {
-    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya son amigos. Esta persona podrá ver tus estados y tú los suyos.";
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Amigos. Ambos pueden ver sus estados.";
+    if (userInfoFriendBadge) { userInfoFriendBadge.textContent = "Amigos"; userInfoFriendBadge.className = "friend-status-badge is-friend"; }
     if (sendFriendRequestButton) { sendFriendRequestButton.hidden = true; }
     return;
   }
@@ -3198,6 +3217,74 @@ async function openUserInfo() {
     if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; sendFriendRequestButton.disabled = false; }
   }
 }
+
+// Badge and moderation actions for the current private conversation.
+const userInfoFriendBadge = $("#user-info-friend-badge");
+const blockChatUserButton = $("#block-chat-user");
+const clearPrivateChatButton = $("#clear-private-chat");
+async function refreshUserInfoBadges(peerId) {
+  const isFriend = await supabase.from("friendships").select("user_id")
+    .eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  const friend = Boolean(isFriend.data) && !isFriend.error;
+  for (const badge of [userInfoFriendBadge, $("#chat-friend-badge")]) {
+    if (!badge) continue;
+    badge.textContent = friend ? "Amigos" : "Persona";
+    badge.className = "friend-status-badge " + (friend ? "is-friend" : "is-person");
+  }
+  const { data: blockStatus } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  const state = blockStatus?.[0] || {};
+  if (blockChatUserButton) {
+    blockChatUserButton.hidden = false;
+    blockChatUserButton.textContent = state.blocked_by_me ? "Desbloquear usuario" : "Bloquear usuario";
+    blockChatUserButton.classList.toggle("button-danger", !state.blocked_by_me);
+  }
+}
+blockChatUserButton?.addEventListener("click", async () => {
+  const peerId = activePeerProfile?.id;
+  if (!currentUser || !peerId || !activeConversation) return;
+  blockChatUserButton.disabled = true;
+  const { data: status } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  const blockedByMe = Boolean(status?.[0]?.blocked_by_me);
+  const { error } = await supabase.rpc("set_user_block", {p_peer_id:peerId,p_block:!blockedByMe});
+  blockChatUserButton.disabled = false;
+  if (error) {
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo actualizar el bloqueo.";
+    return;
+  }
+  await refreshPrivateChatIdentity(peerId, activePeerProfile);
+  await refreshUserInfoBadges(peerId);
+  if (userInfoFeedback) userInfoFeedback.textContent = blockedByMe
+    ? "Cuenta desbloqueada. Ya pueden volver a escribirse."
+    : "Cuenta bloqueada. No podrán enviarse mensajes ni iniciar llamadas privadas entre sí.";
+});
+clearPrivateChatButton?.addEventListener("click", async () => {
+  if (!currentUser || !activeConversation) return;
+  const conversationId = activeConversation.id;
+  if (!window.confirm("¿Borrar este chat de tu lista y ocultar los mensajes anteriores? La otra persona conservará su copia y podrán abrir un chat nuevo más adelante.")) return;
+  clearPrivateChatButton.disabled = true;
+  const { error } = await supabase.from("conversation_clear_states").upsert({
+    user_id:currentUser.id,
+    conversation_id:conversationId,
+    cleared_at:new Date().toISOString()
+  }, {onConflict:"user_id,conversation_id"});
+  clearPrivateChatButton.disabled = false;
+  if (error) {
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo borrar el chat.";
+    return;
+  }
+  userInfoDialog?.close();
+  if (messageRefreshTimer) { window.clearInterval(messageRefreshTimer); messageRefreshTimer=null; }
+  if (presenceRefreshTimer) { window.clearInterval(presenceRefreshTimer); presenceRefreshTimer=null; }
+  activeConversation=null;
+  activePeerProfile=null;
+  activeDirectChatBlockStatus={blockedByMe:false,blockedMe:false};
+  $("#chat-active").hidden=true;
+  $("#chat-empty").hidden=false;
+  $("#message-list")?.replaceChildren();
+  updatePrivateChatControls();
+  showMessage($("#message-status"), "");
+  await loadConversations();
+});
 $("#open-user-info")?.addEventListener("click", () => openUserInfo().catch(error => {
   if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo abrir el perfil.";
 }));
@@ -3221,16 +3308,74 @@ sendFriendRequestButton?.addEventListener("click", async () => {
   if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
   if (userInfoFeedback) userInfoFeedback.textContent = requestStatus === "resent" ? "Solicitud de amistad enviada nuevamente." : "Solicitud de amistad enviada.";
   sendFriendRequestButton.textContent = "Solicitud enviada";
+  const { data: pendingRequest } = await supabase.from("friend_requests").select("id")
+    .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending").maybeSingle();
+  if (pendingRequest?.id) {
+    try {
+      const { error: pushError } = await invokeAureonPush({
+        action:"friend-request",
+        recipientId:peerId,
+        requestId:pendingRequest.id
+      });
+      if (pushError) {
+        console.warn("La solicitud quedó guardada, pero no se pudo enviar la notificación push:", pushError);
+        if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud guardada. La notificación solo llegará si la otra cuenta activó avisos en este dispositivo.";
+      }
+    } catch (pushError) {
+      console.warn("No se pudo avisar de la solicitud:", pushError);
+    }
+  }
 });
 
+let activeDirectChatBlockStatus = { blockedByMe:false, blockedMe:false };
+function updatePrivateChatControls() {
+  const blocked = activeDirectChatBlockStatus.blockedByMe || activeDirectChatBlockStatus.blockedMe;
+  const input = $("#message-input");
+  const send = messageForm?.querySelector('button[type="submit"]');
+  const voice = $("#record-voice-message");
+  if (input) {
+    input.disabled = blocked;
+    input.placeholder = activeDirectChatBlockStatus.blockedByMe
+      ? "Has bloqueado a esta persona."
+      : activeDirectChatBlockStatus.blockedMe ? "Esta persona te ha bloqueado." : "Escribe un mensaje...";
+  }
+  if (send) send.disabled = blocked;
+  if (voice) voice.disabled = blocked;
+  for (const id of ["start-audio-call","start-video-call"]) {
+    const button = $( "#" + id );
+    if (button) button.disabled = blocked;
+  }
+}
+async function refreshPrivateChatIdentity(peerId, profile = activePeerProfile) {
+  if (!currentUser || !peerId) return;
+  if (!profile?.id) profile = (await fetchProfiles([peerId])).get(peerId) || { id:peerId };
+  activePeerProfile = profile;
+  renderAvatar($("#chat-peer-avatar"), profile, "chat-peer-avatar");
+  const { data: friendship, error: friendError } = await supabase.from("friendships")
+    .select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  const isFriend = !friendError && Boolean(friendship);
+  const badge = $("#chat-friend-badge");
+  if (badge) {
+    badge.textContent = isFriend ? "Amigos" : "Persona";
+    badge.className = "friend-status-badge " + (isFriend ? "is-friend" : "is-person");
+  }
+  const { data: access, error: blockError } = await supabase.rpc("get_user_block_status", {p_peer_id:peerId});
+  activeDirectChatBlockStatus = blockError ? {blockedByMe:false,blockedMe:false} : {
+    blockedByMe:Boolean(access?.[0]?.blocked_by_me),
+    blockedMe:Boolean(access?.[0]?.blocked_me)
+  };
+  updatePrivateChatControls();
+}
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
   activeGroup = null; activeConversation = conversation; activePeerProfile = profile; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
   $("#chat-kind").textContent = "CONVERSACIÓN PRIVADA";
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
   $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
+  $("#open-user-info").hidden = false;
   $("#chat-title").textContent = displayName(profile); showMessage($("#message-status"), "");
   const peerId = otherParticipant(conversation);
+  await refreshPrivateChatIdentity(peerId, profile);
   const chatPresence = $("#chat-presence");
   const refreshChatPresence = async () => {
     await loadPresence([peerId]);
@@ -3731,8 +3876,12 @@ initializeMessagePickers();
 
 async function loadMessages(conversationId, quiet = false) {
   if (!currentUser || !messageList) return;
-  const { data, error } = await supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
-    .eq("conversation_id", conversationId).order("created_at", { ascending: true }).limit(300);
+  const { data: clearState } = await supabase.from("conversation_clear_states")
+    .select("cleared_at").eq("user_id", currentUser.id).eq("conversation_id", conversationId).maybeSingle();
+  let messageQuery = supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
+    .eq("conversation_id", conversationId);
+  if (clearState?.cleared_at) messageQuery = messageQuery.gt("created_at", clearState.cleared_at);
+  const { data, error } = await messageQuery.order("created_at", { ascending: true }).limit(300);
   if (error) { if (!quiet) showEmpty(messageList, "No se pudieron cargar los mensajes."); console.error(error); return; }
   const messages=data||[], signature=messages.map(m=>m.id+":"+(m.read_at||"")).join("|");
   if(quiet&&messageList.dataset.signature===signature)return;
