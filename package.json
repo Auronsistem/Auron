@@ -1,0 +1,20 @@
+{
+  "name": "aureon-capacitor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "node scripts/copy-web.mjs",
+    "cap:sync": "npm run build:web && cap sync",
+    "cap:open:android": "npm run cap:sync && cap open android",
+    "cap:open:ios": "npm run cap:sync && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/ios": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}
