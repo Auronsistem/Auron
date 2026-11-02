@@ -3329,7 +3329,7 @@ let callAudioContext = null;
 let callOscillator = null;
 let queuedIceCandidates = [];
 let callWindowMinimized = false;
-let suppressCallDialogClose = false;
+let suppressedCallCloseEvents = 0;
 let callMiniLastTapAt = 0;
 let callFallbackPollTimer = null;
 const handledIncomingCallIds = new Set();
@@ -3342,7 +3342,7 @@ function setCallWindowMinimized(minimized) {
   callDialog.classList.toggle("is-minimized", next);
 
   // La transición modal/flotante emite "close", pero no significa que se colgó.
-  suppressCallDialogClose = true;
+  suppressedCallCloseEvents += 1;
   callDialog.close();
   if (next) callDialog.show();
   else callDialog.showModal();
@@ -3829,8 +3829,8 @@ $("#switch-call-camera")?.addEventListener("click", async () => {
   }
 });
 callDialog?.addEventListener("close", () => {
-  if (suppressCallDialogClose) {
-    suppressCallDialogClose = false;
+  if (suppressedCallCloseEvents > 0) {
+    suppressedCallCloseEvents -= 1;
     return;
   }
   if (activeGroupCall) cleanupGroupCall();
