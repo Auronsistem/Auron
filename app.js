@@ -1437,6 +1437,12 @@ function openShortAt(index) {
   player.autoplay = true;
   player.playsInline = true;
   player.preload = "auto";
+  // Prioriza sonido si el acceso acaba de producirse por una acción del usuario.
+  // Si el navegador bloquea ese inicio, el reproductor reintentará en silencio.
+  const hasUserGesture = navigator.userActivation?.isActive === true;
+  player.muted = !hasUserGesture;
+  player.defaultMuted = !hasUserGesture;
+  if (player.muted) player.setAttribute("muted", "");
 
   Object.assign(player.style, {
     width: "100%",
@@ -1481,8 +1487,20 @@ function openShortAt(index) {
 
   if (!playerDialog.open) playerDialog.showModal();
 
-  player.play().catch(() => {
-    // Algunos navegadores requieren que el usuario pulse reproducir.
+  player.play().catch(async error => {
+    if (!player.muted) {
+      player.muted = true;
+      player.defaultMuted = true;
+      player.setAttribute("muted", "");
+      try {
+        await player.play();
+        return;
+      } catch (mutedError) {
+        console.warn("El navegador no permitió el autoplay de este Short:", mutedError);
+      }
+    } else {
+      console.warn("El navegador no permitió el autoplay de este Short:", error);
+    }
   });
 
   player.addEventListener("ended", () => {
@@ -2081,6 +2099,18 @@ function createYouTubeVideoCard(video) {
   return card;
 }
 
+function buildShortAutoplayUrl(rawUrl) {
+  try {
+    const embedUrl = new URL(rawUrl, window.location.href);
+    embedUrl.searchParams.set("autoplay", "1");
+    // PeerTube admite autoplay y muted como parámetros del reproductor.
+    embedUrl.searchParams.set("muted", "1");
+    return embedUrl.href;
+  } catch (_) {
+    return rawUrl;
+  }
+}
+
 function openPeerTubeShortAt(index) {
   if (!peerTubeShortsQueue.length || !playerDialog) return;
   const nextIndex = Math.max(0, Math.min(index, peerTubeShortsQueue.length - 1));
@@ -2100,7 +2130,7 @@ function openPeerTubeShortAt(index) {
 
   const frame = document.createElement("iframe");
   frame.className = "aureon-short-frame";
-  frame.src = video.embedPath || video.url;
+  frame.src = buildShortAutoplayUrl(video.embedPath || video.url);
   frame.title = video.title || "Short";
   frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write; web-share";
   frame.allowFullscreen = true;
