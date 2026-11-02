@@ -1297,3 +1297,118 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   gap:10px;
 }
 .parental-child-list-heading label { margin:0; }
+
+
+/* SHORTS: visor vertical con proporciones reales, sin recorte por el diálogo ancho */
+#player-dialog:has(.youtube-shorts-viewer) {
+  position:fixed;
+  inset:0;
+  margin:auto;
+  width:min(100vw,520px);
+  max-width:520px;
+  height:min(100dvh,940px);
+  max-height:100dvh;
+  padding:0;
+  overflow:hidden;
+  border-radius:14px;
+  background:#000;
+}
+#player-dialog:has(.youtube-shorts-viewer) #player-container {
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+}
+#player-dialog:has(.youtube-shorts-viewer) .youtube-shorts-viewer {
+  display:flex;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  margin:0;
+  padding:0;
+}
+#player-dialog:has(.youtube-shorts-viewer) .aureon-short-stage {
+  position:relative;
+  display:block;
+  flex:1 1 auto;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  max-height:none;
+  aspect-ratio:auto;
+  overflow:hidden;
+  border-radius:0;
+}
+#player-dialog:has(.youtube-shorts-viewer) .aureon-short-frame {
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  max-width:none;
+  max-height:none;
+  aspect-ratio:auto;
+  border:0;
+  object-fit:contain;
+}
+#player-dialog:has(.youtube-shorts-viewer) .youtube-short-action-rail { right:12px; }
+@media(max-width:520px) {
+  #player-dialog:has(.youtube-shorts-viewer) {
+    inset:0;
+    width:100vw;
+    max-width:100vw;
+    height:100dvh;
+    max-height:100dvh;
+    border-radius:0;
+  }
+}
+
+/* Shorts propios: el contenedor conserva 9:16 y el video nunca se corta */
+#player-dialog:has(.socora-short-player) {
+  width:min(96vw,520px);
+  max-width:520px;
+  max-height:96dvh;
+  padding:16px;
+  overflow-x:hidden;
+  overflow-y:auto;
+}
+#player-dialog:has(.socora-short-player) .socora-short-stage {
+  width:min(calc(96vw - 32px),420px);
+  height:min(72dvh,746px);
+  flex:0 1 auto;
+  aspect-ratio:9 / 16;
+}
+#player-dialog:has(.socora-short-player) .socora-short-video {
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+}
+@media(max-width:520px) {
+  #player-dialog:has(.socora-short-player) {
+    width:96vw;
+    max-width:96vw;
+    max-height:94dvh;
+    padding:12px;
+  }
+  #player-dialog:has(.socora-short-player) .socora-short-stage {
+    width:min(calc(96vw - 24px),360px);
+    height:min(66dvh,640px);
+  }
+}
+
+/* Desvinculación parental permanente */
+.button-danger {
+  color:#fff !important;
+  background:#a9323b !important;
+  border-color:#c24a54 !important;
+}
+.button-danger:hover { background:#c13a45 !important; }
+.parental-unlink-note { margin-top:8px; font-size:12px; line-height:1.45; }
