@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -262,6 +262,14 @@
         <p id="profile-picture-status" class="notice" aria-live="polite"></p>
         <button id="settings-signout" class="button button-outline" type="button" hidden>Cerrar sesión</button>
       </div>
+      <div class="content-panel group-avatar-settings-panel" id="group-avatar-settings-panel">
+        <p class="eyebrow">TUS CONVERSACIONES</p>
+        <h3>👥 Fotos de grupos</h3>
+        <p class="muted">Cada integrante de un grupo puede cambiar su foto. Los grupos en los que participes, incluidos los que se creen después de esta actualización, aparecerán aquí automáticamente.</p>
+        <div id="group-avatar-settings-list" class="group-avatar-settings-list" aria-live="polite">
+          <p class="muted">Carga tus grupos al abrir Configuración.</p>
+        </div>
+      </div>
       <div class="content-panel parental-panel" id="parental-settings-panel">
         <p class="eyebrow">FAMILIA Y SEGURIDAD</p>
         <h3>🛡️ Controles parentales</h3>
@@ -490,6 +498,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=67"></script>
+  <script type="module" src="app.js?v=68"></script>
 </body>
 </html>
