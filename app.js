@@ -3589,8 +3589,9 @@ $("#open-user-info")?.addEventListener("click", () => openUserInfo().catch(error
 $("#cancel-friend-request")?.addEventListener("click", async () => {
   const button = $("#cancel-friend-request");
   const peerId = activePeerProfile?.id;
+  const requestId = button?.dataset.requestId;
   if (!button || !currentUser || !peerId || peerId === currentUser.id) {
-    if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo identificar la solicitud. Cierra esta ventana y vuelve a abrir la información del usuario.";
+    if (userInfoFeedback) userInfoFeedback.textContent = "No pude identificar al destinatario. Cierra la ventana y vuelve a abrir su información.";
     return;
   }
 
@@ -3598,37 +3599,33 @@ $("#cancel-friend-request")?.addEventListener("click", async () => {
   if (userInfoFeedback) userInfoFeedback.textContent = "Cancelando solicitud…";
 
   try {
-    // No dependemos solo del ID guardado en el botón: buscamos todas las solicitudes
-    // pendientes de esta cuenta hacia ese destinatario.
-    const { data: deletedRows, error: deleteError } = await supabase
-      .from("friend_requests")
-      .delete()
-      .eq("sender_id", currentUser.id)
-      .eq("recipient_id", peerId)
-      .eq("status", "pending")
-      .select("id");
-
-    if (deleteError) throw deleteError;
-
-    // Verificación real en la base de datos; no mostramos éxito si sigue pendiente.
-    const { data: remainingRows, error: verifyError } = await supabase
-      .from("friend_requests")
-      .select("id")
-      .eq("sender_id", currentUser.id)
-      .eq("recipient_id", peerId)
-      .eq("status", "pending");
-
-    if (verifyError) throw verifyError;
-    if (remainingRows?.length) {
-      throw new Error("Supabase todavía devuelve una solicitud pendiente. Revisa los permisos DELETE de friend_requests.");
+    // RPC seguro: conserva el registro y lo marca como rechazado/cancelado,
+    // para que send_friend_request pueda reactivarlo al volver a enviar.
+    let targetId = requestId;
+    if (!targetId) {
+      const { data: found, error: findError } = await supabase
+        .from("friend_requests").select("id")
+        .eq("sender_id", currentUser.id).eq("recipient_id", peerId)
+        .eq("status", "pending").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (findError) throw findError;
+      targetId = found?.id;
     }
+    if (!targetId) throw new Error("No encontré una solicitud pendiente. Vuelve a abrir la información del usuario.");
+
+    const { data: cancelled, error: cancelError } = await supabase.rpc("cancel_friend_request", { p_request_id: targetId });
+    if (cancelError) throw cancelError;
+    if (cancelled !== true) throw new Error("Supabase no confirmó la cancelación.");
+
+    const { data: stillPending, error: verifyError } = await supabase
+      .from("friend_requests").select("id")
+      .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending");
+    if (verifyError) throw verifyError;
+    if (stillPending?.length) throw new Error("La solicitud continúa pendiente. Actualiza la página e inténtalo de nuevo.");
 
     button.hidden = true;
     button.dataset.requestId = "";
-    if (userInfoFeedback) userInfoFeedback.textContent = deletedRows?.length
-      ? "Solicitud cancelada correctamente."
-      : "No había una solicitud pendiente para cancelar.";
-    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya puedes enviar una nueva solicitud.";
+    if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud cancelada. Puedes volver a enviarla cuando quieras.";
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "No hay una solicitud pendiente. Puedes enviar otra.";
     if (sendFriendRequestButton) {
       sendFriendRequestButton.hidden = false;
       sendFriendRequestButton.textContent = "Enviar solicitud de amigo";
@@ -3636,51 +3633,9 @@ $("#cancel-friend-request")?.addEventListener("click", async () => {
     }
     await loadFriendRequestsOnly();
   } catch (error) {
-    console.error("AUREON: error cancelando solicitud:", error);
+    console.error("AUREON: no se pudo cancelar la solicitud:", error);
     button.disabled = false;
-    if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo cancelar la solicitud: " + (error?.message || "Error desconocido. Revisa la conexión e inténtalo otra vez.");
-  }
-});
-sendFriendRequestButton?.addEventListener("click", async () => {
-  const peerId = activePeerProfile?.id;
-  if (!currentUser || !peerId || peerId === currentUser.id) return;
-  sendFriendRequestButton.disabled = true;
-
-  if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
-  const { data: requestStatus, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
-  if (error) {
-    sendFriendRequestButton.disabled = false;
-    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo enviar la solicitud. Inténtalo otra vez.";
-    return;
-  }
-  if (requestStatus === "friends") {
-    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya son amigos.";
-    if (userInfoFeedback) userInfoFeedback.textContent = "Esta cuenta ya está en tu lista de amigos.";
-    sendFriendRequestButton.hidden = true;
-    return;
-  }
-  if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
-  if (userInfoFeedback) userInfoFeedback.textContent = requestStatus === "resent" ? "Solicitud de amistad enviada nuevamente." : "Solicitud de amistad enviada.";
-  sendFriendRequestButton.textContent = "Solicitud enviada";
-  sendFriendRequestButton.disabled = true;
-  const { data: pendingRequest } = await supabase.from("friend_requests").select("id")
-    .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending").maybeSingle();
-  if (pendingRequest?.id) {
-    const cancelButton = $("#cancel-friend-request");
-    if (cancelButton) { cancelButton.hidden = false; cancelButton.dataset.requestId = pendingRequest.id; cancelButton.disabled = false; }
-    try {
-      const { data: pushResult, error: pushError } = await invokeAureonPush({
-        action:"friend-request",
-        recipientId:peerId,
-        requestId:pendingRequest.id
-      });
-      if (pushError || !pushResult?.sent) {
-        console.warn("La solicitud quedó guardada, pero no se pudo enviar la notificación push:", pushError || pushResult);
-        if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud guardada. Para recibir el aviso inmediato, la otra cuenta debe tener activadas las notificaciones de AUREON.";
-      }
-    } catch (pushError) {
-      console.warn("No se pudo avisar de la solicitud:", pushError);
-    }
+    if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo cancelar: " + (error?.message || "error desconocido");
   }
 });
 
