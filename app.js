@@ -1221,9 +1221,12 @@ async function updateSession(session) {
     await loadVideos();
     await loadConversations();
     await loadFriendsStatuses();
-    const notificationRoute = new URLSearchParams(window.location.search).get("openSettings");
+    const notificationRoute = new URLSearchParams(window.location.search).get("openSettings") ||
+      sessionStorage.getItem("aureon-open-settings");
     if (notificationRoute === "friend-requests") {
-      openSettings().then(() => $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"}));
+      sessionStorage.removeItem("aureon-open-settings");
+      await openSettings();
+      $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"});
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete("openSettings");
       window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.hash);
@@ -3482,17 +3485,21 @@ async function openUserInfo() {
     return;
   }
   if (sendFriendRequestButton) sendFriendRequestButton.hidden = false;
-  const { data: outgoing } = await supabase.from("friend_requests").select("id,status").eq("sender_id", currentUser.id).eq("recipient_id", peerId).maybeSingle();
-  const { data: incoming } = await supabase.from("friend_requests").select("id,status").eq("sender_id", peerId).eq("recipient_id", currentUser.id).maybeSingle();
+  const { data: outgoing } = await supabase.from("friend_requests").select("id,status")
+    .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: incoming } = await supabase.from("friend_requests").select("id,status")
+    .eq("sender_id", peerId).eq("recipient_id", currentUser.id).eq("status", "pending")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (incoming?.status === "pending") {
     if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Esta persona ya te envió una solicitud. Puedes aceptarla en Configuración.";
-    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud recibida"; sendFriendRequestButton.disabled = true; }
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud recibida"; sendFriendRequestButton.dataset.friendAction = ""; sendFriendRequestButton.dataset.requestId = ""; sendFriendRequestButton.disabled = true; }
   } else if (outgoing?.status === "pending") {
-    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya enviaste una solicitud a esta persona.";
-    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud enviada"; sendFriendRequestButton.disabled = true; }
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya enviaste una solicitud a esta persona. Puedes cancelarla si no aparece en la otra cuenta.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Cancelar solicitud"; sendFriendRequestButton.dataset.friendAction = "cancel"; sendFriendRequestButton.dataset.requestId = outgoing.id; sendFriendRequestButton.disabled = false; }
   } else {
     if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solo las amistades aceptadas podrán ver los estados.";
-    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; sendFriendRequestButton.disabled = false; }
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; sendFriendRequestButton.dataset.friendAction = ""; sendFriendRequestButton.dataset.requestId = ""; sendFriendRequestButton.disabled = false; }
   }
 }
 
@@ -3570,6 +3577,24 @@ sendFriendRequestButton?.addEventListener("click", async () => {
   const peerId = activePeerProfile?.id;
   if (!currentUser || !peerId || peerId === currentUser.id) return;
   sendFriendRequestButton.disabled = true;
+
+  if (sendFriendRequestButton.dataset.friendAction === "cancel") {
+    if (userInfoFeedback) userInfoFeedback.textContent = "Cancelando solicitud…";
+    const requestId = sendFriendRequestButton.dataset.requestId;
+    let cancelQuery = supabase.from("friend_requests").delete()
+      .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending");
+    if (requestId) cancelQuery = cancelQuery.eq("id", requestId);
+    const { error: cancelError } = await cancelQuery;
+    if (cancelError) {
+      sendFriendRequestButton.disabled = false;
+      if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo cancelar la solicitud: " + (cancelError.message || "inténtalo otra vez.");
+      return;
+    }
+    if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud cancelada.";
+    await openUserInfo();
+    return;
+  }
+
   if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
   const { data: requestStatus, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
   if (error) {
