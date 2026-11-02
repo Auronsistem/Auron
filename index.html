@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=44">
+  <link rel="stylesheet" href="styles.css?v=45">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -39,9 +39,9 @@
     <a href="#mensajes" class="side-link">
       <span>☁</span> Mensajes
     </a>
-    <a href="#estados" class="side-link" id="states-nav-link">
+    <button type="button" class="side-link" id="states-nav-link" aria-expanded="false" aria-controls="estados">
       <span>◉</span> Estados
-    </a>
+    </button>
     <button id="open-upload" class="side-link">
       <span>＋</span> Publicar
     </button>
@@ -52,7 +52,7 @@
       <span>◉</span> Mi canal
     </a>
     <button type="button" class="side-link settings-nav-button" id="open-settings-link">
-      <span>⚙</span> Configuración
+      <span>⚙</span> Configuración <span id="friend-request-count" class="nav-count" hidden></span>
     </button>
   </aside>
 
@@ -122,7 +122,7 @@
     </section>
 
     <!-- ESTADOS ESTILO HISTORIAS -->
-    <section class="section" id="estados">
+    <section class="section" id="estados" hidden>
       <div class="section-head">
         <div>
           <p class="eyebrow">SOLO TUS AMIGOS</p>
@@ -143,8 +143,11 @@
           <textarea id="status-caption" maxlength="700" rows="3" placeholder="¿Qué estás haciendo?"></textarea>
           <label for="status-media">Añadir foto o video (opcional)</label>
           <input id="status-media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm">
-          <label for="status-music-title">Música (opcional)</label>
-          <input id="status-music-title" type="text" maxlength="120" placeholder="Nombre de la canción">
+          <label for="status-music-title">Nombre de la canción (opcional)</label>
+          <input id="status-music-title" type="text" maxlength="120" placeholder="Escribe el nombre de la canción">
+          <label for="status-music-file">Subir música para este estado</label>
+          <input id="status-music-file" type="file" accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/webm">
+          <p class="muted">MP3, M4A, AAC, OGG, WAV o WEBM · máximo 20 MB. La canción intentará reproducirse automáticamente cuando alguien abra tu estado.</p>
           <button class="button" type="submit">Publicar estado</button>
           <p id="status-publish-feedback" class="notice" aria-live="polite"></p>
           <p class="muted status-privacy-note">Solo tus amigos aceptados podrán ver tus estados. Los archivos se guardan en almacenamiento privado.</p>
@@ -558,6 +561,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=71"></script>
+  <script type="module" src="app.js?v=72"></script>
 </body>
 </html>
