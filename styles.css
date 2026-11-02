@@ -1554,3 +1554,105 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .settings-section-head h2 { font-size:24px; }
   .theme-options { grid-template-columns:1fr 1fr; }
 }
+
+
+/* LLAMADA MINIMIZABLE: diálogo no modal para seguir usando AUREON */
+.call-window-toggle {
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;
+  color:#fff;
+  background:rgba(255,255,255,.12);
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.call-dialog.is-minimized[open] {
+  position:fixed;
+  inset:auto 14px calc(82px + env(safe-area-inset-bottom)) auto;
+  width:min(340px,calc(100vw - 24px));
+  max-width:none;
+  height:auto;
+  max-height:min(300px,calc(100dvh - 100px));
+  margin:0;
+  padding:0;
+  display:block;
+  overflow:hidden;
+  border-radius:18px;
+  z-index:1000;
+  box-shadow:0 16px 55px rgba(0,0,0,.5);
+}
+.call-dialog.is-minimized::backdrop { background:transparent; }
+.call-dialog.is-minimized .call-screen {
+  display:flex;
+  width:100%;
+  min-height:0;
+  max-height:min(300px,calc(100dvh - 100px));
+  height:auto;
+  padding:10px;
+  gap:8px;
+  justify-content:flex-start;
+}
+.call-dialog.is-minimized .call-topbar { gap:8px; }
+.call-dialog.is-minimized .call-brand { font-size:10px; letter-spacing:1px; }
+.call-dialog.is-minimized .call-live-indicator { font-size:9px; flex:1; }
+.call-dialog.is-minimized .call-window-toggle { min-height:30px; padding:5px 8px; white-space:nowrap; }
+.call-dialog.is-minimized .call-person {
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-start;
+  gap:9px;
+  padding:0;
+}
+.call-dialog.is-minimized .call-avatar {
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  border-width:2px;
+  font-size:16px;
+}
+.call-dialog.is-minimized .call-person h2 { margin:0; font-size:14px; }
+.call-dialog.is-minimized .call-person .muted { margin:0; font-size:11px; }
+.call-dialog.is-minimized .call-media { flex:0 0 auto; min-height:0; max-height:140px; }
+.call-dialog.is-minimized #remote-call-video {
+  width:100%;
+  height:140px;
+  max-height:140px;
+  aspect-ratio:16 / 9;
+  object-fit:contain;
+}
+.call-dialog.is-minimized #local-call-video {
+  top:6px;
+  right:6px;
+  width:48px;
+  height:68px;
+  border-radius:8px;
+}
+.call-dialog.is-minimized .call-screen.is-video .call-media { min-height:0; }
+.call-dialog.is-minimized .call-actions {
+  width:100%;
+  padding:0;
+  gap:8px;
+  justify-content:flex-end;
+}
+.call-dialog.is-minimized .call-control {
+  min-width:44px;
+  min-height:40px;
+  padding:4px 8px;
+  border-radius:12px;
+}
+.call-dialog.is-minimized .call-control span { width:28px; height:28px; font-size:16px; }
+.call-dialog.is-minimized .call-control small { font-size:9px; }
+@media(max-width:600px) {
+  .call-dialog.is-minimized[open] {
+    inset:auto 8px calc(74px + env(safe-area-inset-bottom)) auto;
+    width:min(340px,calc(100vw - 16px));
+    max-height:min(290px,calc(100dvh - 90px));
+  }
+  .call-dialog.is-minimized .call-screen {
+    max-height:min(290px,calc(100dvh - 90px));
+    padding:8px;
+  }
+}
