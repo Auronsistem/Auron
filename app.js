@@ -1205,6 +1205,7 @@ async function updateSession(session) {
   subscribeToGroupCallSignals();
   subscribeToMessageEvents();
   subscribeToFriendRequestEvents();
+  startFriendRequestPolling();
   if (currentUser) {
     loadPendingNotificationCall();
     startIncomingCallFallback();
@@ -2116,7 +2117,7 @@ async function loadFriendsStatuses() {
     statusFeed.append(card);
   }
 }
-async function handleIncomingFriendRequestEvent(row) {
+async function handleIncomingFriendRequestEvent(row, { notify = true } = {}) {
   const recipientId = currentUser?.id;
   if (!recipientId || !row || row.recipient_id !== recipientId || row.status !== "pending") return;
   const eventKey = String(row.id || "") + ":" + String(row.created_at || row.updated_at || "");
@@ -2124,9 +2125,64 @@ async function handleIncomingFriendRequestEvent(row) {
   handledFriendRequestEvents.add(eventKey);
   if (handledFriendRequestEvents.size > 300) handledFriendRequestEvents.clear();
 
+  // Refresh the persisted request list before navigating; Realtime can arrive
+  // before the row is visible in the current UI.
+  await loadFriendsStatuses();
+  if (currentUser?.id !== recipientId) return;
+  if (notify && document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
+    try {
+      const notification = new Notification("Nueva solicitud de amistad en AUREON", {
+        body: "Abre AUREON para aceptar o rechazar la solicitud.",
+        tag: "aureon-friend-request-" + row.id,
+        icon: "./icon-192.png"
+      });
+      notification.onclick = () => {
+        window.focus();
+        openSettings().then(() => $("#settings-friend-requests")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+        notification.close();
+      };
+    } catch (error) {
+      console.warn("No se pudo mostrar la notificación de amistad:", error);
+    }
+  }
   await openSettings();
   if (currentUser?.id !== recipientId) return;
   $("#settings-friend-requests")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+let friendRequestPollTimer = null;
+let friendRequestPollUserId = null;
+async function pollIncomingFriendRequests() {
+  const recipientId = currentUser?.id;
+  if (!recipientId) return;
+  const { data, error } = await supabase
+    .from("friend_requests")
+    .select("id,sender_id,recipient_id,status,created_at,updated_at")
+    .eq("recipient_id", recipientId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("AUREON: no se pudieron comprobar solicitudes pendientes:", error);
+    return;
+  }
+  for (const row of data || []) {
+    await handleIncomingFriendRequestEvent(row, { notify: false });
+  }
+}
+function startFriendRequestPolling() {
+  const userId = currentUser?.id || null;
+  if (friendRequestPollTimer && friendRequestPollUserId === userId) return;
+  if (friendRequestPollTimer) window.clearInterval(friendRequestPollTimer);
+  friendRequestPollTimer = null;
+  friendRequestPollUserId = userId;
+  if (!userId) return;
+  // Fallback for phones/background tabs where Realtime may not reconnect.
+  friendRequestPollTimer = window.setInterval(() => {
+    if (currentUser?.id === userId) {
+      pollIncomingFriendRequests().catch(error => console.warn("Error al actualizar solicitudes:", error));
+    }
+  }, 12000);
+  pollIncomingFriendRequests().catch(error => console.warn("Error al comprobar solicitudes:", error));
 }
 
 function subscribeToFriendRequestEvents() {
