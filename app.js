@@ -827,6 +827,8 @@ async function loadGuardianChildren() {
     select.append(option);
   }
   $("#parental-controls-form").hidden = true;
+  select.value = links[0].child_id;
+  await loadSelectedChildSettings();
 }
 
 async function restoreGuardianSession() {
@@ -1163,7 +1165,7 @@ $("#parental-unlink-child")?.addEventListener("click", permanentlyUnlinkSelected
 async function updateSession(session) {
   const nextUser = session?.user || null;
   if (currentUser?.id && currentUser.id !== nextUser?.id && guardianClient) {
-    guardianClient.auth.signOut({ scope: "local" }).catch(() => {});
+    await guardianClient.auth.signOut({ scope: "local" }).catch(() => {});
     guardianClient = null;
     guardianUserId = null;
     guardianVerifiedEmail = "";
