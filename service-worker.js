@@ -38,9 +38,9 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const targetUrl = new URL(data.url || "./", self.registration.scope);
-    if (data.type === "call" && data.callId && ["accept", "reject"].includes(action)) {
-      targetUrl.searchParams.set("notificationAction", action);
+    if (data.type === "call" && data.callId) {
       targetUrl.searchParams.set("callId", data.callId);
+      if (["accept", "reject"].includes(action)) targetUrl.searchParams.set("notificationAction", action);
     }
     const target = targetUrl.href;
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
