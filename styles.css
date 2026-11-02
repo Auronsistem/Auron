@@ -2054,3 +2054,18 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .group-settings-avatar { width:52px; height:52px; }
   .group-avatar-setting-details .button { padding:9px 10px; font-size:12px; }
 }
+
+/* AUREON: Estados y solicitudes de amistad */
+#estados .states-layout{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,1.2fr);gap:18px;align-items:start}
+.status-compose,.status-feed-wrap,.friends-panel{padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--panel, #0d1423);min-width:0}
+.status-compose{display:flex;flex-direction:column;gap:10px}
+.status-compose textarea,.status-compose input[type="text"],.status-compose input[type="file"]{width:100%;max-width:100%}
+.status-friends-feed{display:flex;flex-direction:column;gap:12px}
+.status-card{border:1px solid var(--border);border-radius:14px;padding:12px;overflow:hidden}
+.status-card-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.status-card-heading time{font-size:12px;color:var(--muted,#9aa4b2)}
+.status-card img,.status-card video{display:block;width:100%;max-height:440px;object-fit:contain;border-radius:10px;margin-top:10px;background:#05070c}
+.status-card p{overflow-wrap:anywhere}
+.friends-panel{margin-top:18px}
+.friend-request-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+@media(max-width:760px){#estados .states-layout{grid-template-columns:minmax(0,1fr)}.status-compose,.status-feed-wrap,.friends-panel{padding:13px}}
