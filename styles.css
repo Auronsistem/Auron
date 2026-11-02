@@ -2312,3 +2312,35 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 
 /* El botón secundario solo aparece cuando existe una solicitud pendiente enviada por esta cuenta. */
 #cancel-friend-request[hidden] { display:none !important; }
+
+
+/* Cámara de estados: captura directa desde el navegador */
+.status-camera-open { margin: 8px 0 12px; }
+.status-capture-preview { display:flex; align-items:center; gap:12px; margin:10px 0 14px; padding:10px; border:1px solid var(--border); border-radius:14px; background:var(--panel); }
+.status-capture-preview[hidden] { display:none; }
+.status-capture-preview-media { width:92px; height:112px; object-fit:cover; border-radius:10px; background:#05070b; }
+.status-capture-preview span { font-size:13px; color:var(--text); }
+.status-camera-dialog { width:min(94vw,520px); max-width:520px; height:min(92dvh,850px); max-height:92dvh; padding:0; overflow:hidden; color:#fff; background:#080a10; border:1px solid rgba(255,255,255,.16); border-radius:22px; }
+.status-camera-dialog::backdrop { background:rgba(0,0,0,.84); backdrop-filter:blur(5px); }
+.status-camera-shell { display:flex; flex-direction:column; width:100%; height:100%; min-height:0; }
+.status-camera-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; }
+.status-camera-header strong { font-size:16px; }
+.status-camera-close { width:38px; height:38px; border:0; border-radius:50%; color:#fff; background:rgba(255,255,255,.14); font-size:27px; cursor:pointer; }
+.status-camera-stage { position:relative; display:flex; flex:1; align-items:center; justify-content:center; min-height:0; overflow:hidden; background:#000; }
+#status-camera-live { display:block; width:100%; height:100%; object-fit:contain; background:#000; }
+.status-camera-notice { position:absolute; left:12px; right:12px; bottom:10px; margin:0; padding:9px 12px; border-radius:12px; color:#fff; background:rgba(0,0,0,.58); text-align:center; font-size:12px; }
+.status-camera-notice.is-error { color:#ffd0d0; }
+.status-camera-controls { display:flex; flex-direction:column; align-items:center; gap:10px; padding:15px 16px 18px; }
+.status-camera-mode-control { display:flex; align-items:center; justify-content:center; gap:12px; font-size:11px; letter-spacing:.08em; font-weight:800; }
+#status-camera-mode { width:110px; accent-color:#fff; cursor:ew-resize; }
+#status-camera-mode-label { font-size:12px; letter-spacing:.12em; }
+.status-camera-actions { display:grid; grid-template-columns:58px 76px 58px; align-items:center; justify-items:center; width:100%; }
+.status-camera-capture { width:66px; height:66px; border:5px solid rgba(255,255,255,.65); border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(0,0,0,.6); cursor:pointer; }
+.status-camera-capture.is-recording-mode { background:#e53945; }
+.status-camera-capture.is-recording { transform:scale(.82); border-radius:18px; background:#e53945; }
+.status-camera-switch { width:42px; height:42px; border:1px solid rgba(255,255,255,.25); border-radius:50%; color:#fff; background:rgba(255,255,255,.12); font-size:25px; cursor:pointer; }
+.status-camera-controls > .muted { margin:0; text-align:center; font-size:11px; }
+@media (max-width:520px) {
+  .status-camera-dialog { width:100vw; height:100dvh; max-width:none; max-height:100dvh; border-radius:0; border:0; }
+  .status-camera-controls { padding-bottom:max(16px, env(safe-area-inset-bottom)); }
+}

@@ -1915,6 +1915,279 @@ let friendRequestRealtimeUserId = null;
 let friendRequestReconnectTimer = null;
 const handledFriendRequestEvents = new Set();
 
+/* Cámara integrada para publicar estados: foto o video */
+const statusMediaInput = $("#status-media");
+let statusCameraDialog = null;
+let statusCameraStream = null;
+let statusCameraRecorder = null;
+let statusCameraChunks = [];
+let statusCameraMode = "photo";
+let statusCameraFacing = "environment";
+let statusCameraStopTimer = null;
+let statusCameraPreviewUrl = null;
+
+function setStatusCameraNotice(message, error = false) {
+  const node = $("#status-camera-notice");
+  if (node) {
+    node.textContent = message || "";
+    node.classList.toggle("is-error", Boolean(error));
+  }
+}
+
+function stopStatusCameraStream() {
+  if (statusCameraStopTimer) {
+    clearTimeout(statusCameraStopTimer);
+    statusCameraStopTimer = null;
+  }
+  if (statusCameraStream) {
+    statusCameraStream.getTracks().forEach(track => track.stop());
+    statusCameraStream = null;
+  }
+  const livePreview = $("#status-camera-live");
+  if (livePreview) livePreview.srcObject = null;
+}
+
+async function startStatusCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatusCameraNotice("Este navegador no permite abrir la cámara aquí. Puedes elegir una foto o video desde tu galería.", true);
+    return;
+  }
+  stopStatusCameraStream();
+  try {
+    statusCameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: statusCameraMode === "video",
+      video: { facingMode: { ideal: statusCameraFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const livePreview = $("#status-camera-live");
+    if (livePreview) {
+      livePreview.srcObject = statusCameraStream;
+      livePreview.muted = true;
+      livePreview.playsInline = true;
+      await livePreview.play().catch(() => {});
+    }
+    setStatusCameraNotice(statusCameraMode === "photo"
+      ? "Encuadra la foto y toca el botón blanco."
+      : "Toca el botón rojo para empezar a grabar. La grabación se limita a 30 segundos.");
+  } catch (error) {
+    console.warn("No se pudo abrir la cámara para el estado:", error);
+    setStatusCameraNotice("No se pudo abrir la cámara. Revisa los permisos del navegador y vuelve a intentarlo.", true);
+  }
+}
+
+function setStatusCameraMode(mode) {
+  if (statusCameraRecorder?.state === "recording") {
+    setStatusCameraNotice("Detén la grabación antes de cambiar de modo.", true);
+    const slider = $("#status-camera-mode");
+    if (slider) slider.value = statusCameraMode === "photo" ? "0" : "1";
+    return;
+  }
+  statusCameraMode = mode === "video" ? "video" : "photo";
+  const slider = $("#status-camera-mode");
+  const label = $("#status-camera-mode-label");
+  const action = $("#status-camera-capture");
+  if (slider) slider.value = statusCameraMode === "photo" ? "0" : "1";
+  if (label) label.textContent = statusCameraMode === "photo" ? "FOTO" : "VIDEO";
+  if (action) {
+    action.classList.toggle("is-recording-mode", statusCameraMode === "video");
+    action.setAttribute("aria-label", statusCameraMode === "photo" ? "Tomar foto" : "Empezar a grabar video");
+  }
+  startStatusCamera();
+}
+
+function setStatusFileFromBlob(blob, filename) {
+  if (!statusMediaInput || !blob) return false;
+  try {
+    const file = new File([blob], filename, { type: blob.type || "video/webm", lastModified: Date.now() });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    statusMediaInput.files = transfer.files;
+    statusMediaInput.dispatchEvent(new Event("change", { bubbles: true }));
+    renderStatusCapturePreview(file);
+    return true;
+  } catch (error) {
+    console.warn("No se pudo adjuntar el archivo capturado:", error);
+    setStatusCameraNotice("Tu navegador no permitió adjuntar la captura. Usa el selector de archivos para elegir el contenido.", true);
+    return false;
+  }
+}
+
+function renderStatusCapturePreview(file) {
+  const preview = $("#status-capture-preview");
+  if (!preview || !file) return;
+  if (statusCameraPreviewUrl) URL.revokeObjectURL(statusCameraPreviewUrl);
+  statusCameraPreviewUrl = URL.createObjectURL(file);
+  preview.replaceChildren();
+  const media = document.createElement(file.type.startsWith("video/") ? "video" : "img");
+  media.src = statusCameraPreviewUrl;
+  media.className = "status-capture-preview-media";
+  if (media.tagName === "VIDEO") {
+    media.controls = true;
+    media.playsInline = true;
+  } else {
+    media.alt = "Vista previa del estado";
+  }
+  const label = document.createElement("span");
+  label.textContent = file.type.startsWith("video/") ? "Video listo para publicar" : "Foto lista para publicar";
+  preview.append(media, label);
+  preview.hidden = false;
+}
+
+function createStatusCamera() {
+  if (!statusMediaInput || $("#open-status-camera")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "open-status-camera";
+  button.className = "button button-outline status-camera-open";
+  button.textContent = "📷 Abrir cámara";
+  button.addEventListener("click", async () => {
+    if (!currentUser) {
+      statusNotice("Inicia sesión para publicar un estado.", true);
+      return;
+    }
+    if (!statusCameraDialog) buildStatusCameraDialog();
+    if (!statusCameraDialog.open) statusCameraDialog.showModal();
+    setStatusCameraMode("photo");
+  });
+  statusMediaInput.insertAdjacentElement("afterend", button);
+  const preview = document.createElement("div");
+  preview.id = "status-capture-preview";
+  preview.className = "status-capture-preview";
+  preview.hidden = true;
+  button.insertAdjacentElement("afterend", preview);
+}
+
+function buildStatusCameraDialog() {
+  const dialog = document.createElement("dialog");
+  dialog.id = "status-camera-dialog";
+  dialog.className = "status-camera-dialog";
+  dialog.setAttribute("aria-label", "Tomar foto o grabar video para el estado");
+  dialog.innerHTML = `
+    <div class="status-camera-shell">
+      <header class="status-camera-header">
+        <strong>Crear estado</strong>
+        <button type="button" id="status-camera-close" class="status-camera-close" aria-label="Cerrar cámara">×</button>
+      </header>
+      <div class="status-camera-stage">
+        <video id="status-camera-live" autoplay muted playsinline></video>
+        <p id="status-camera-notice" class="status-camera-notice" aria-live="polite">Preparando cámara…</p>
+      </div>
+      <div class="status-camera-controls">
+        <div class="status-camera-mode-control">
+          <span>FOTO</span>
+          <input id="status-camera-mode" type="range" min="0" max="1" step="1" value="0" aria-label="Desliza para cambiar entre foto y video">
+          <span>VIDEO</span>
+        </div>
+        <strong id="status-camera-mode-label">FOTO</strong>
+        <div class="status-camera-actions">
+          <button type="button" id="status-camera-switch" class="status-camera-switch" aria-label="Cambiar cámara frontal o trasera">↻</button>
+          <button type="button" id="status-camera-capture" class="status-camera-capture" aria-label="Tomar foto"></button>
+          <span class="status-camera-switch-spacer" aria-hidden="true"></span>
+        </div>
+        <p class="muted">Las fotos y videos se guardan como borrador hasta que pulses «Publicar estado».</p>
+      </div>
+    </div>`;
+  document.body.append(dialog);
+  statusCameraDialog = dialog;
+
+  $("#status-camera-close")?.addEventListener("click", () => dialog.close());
+  $("#status-camera-mode")?.addEventListener("input", event => setStatusCameraMode(event.target.value === "1" ? "video" : "photo"));
+  $("#status-camera-switch")?.addEventListener("click", async () => {
+    statusCameraFacing = statusCameraFacing === "environment" ? "user" : "environment";
+    await startStatusCamera();
+  });
+  $("#status-camera-capture")?.addEventListener("click", async () => {
+    const action = $("#status-camera-capture");
+    const livePreview = $("#status-camera-live");
+    if (statusCameraMode === "photo") {
+      if (!livePreview?.videoWidth || !livePreview?.videoHeight) {
+        setStatusCameraNotice("La cámara todavía está iniciando. Espera un momento.", true);
+        return;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = livePreview.videoWidth;
+      canvas.height = livePreview.videoHeight;
+      canvas.getContext("2d")?.drawImage(livePreview, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        if (!blob) {
+          setStatusCameraNotice("No se pudo tomar la foto. Inténtalo otra vez.", true);
+          return;
+        }
+        setStatusFileFromBlob(blob, "aureon-estado-" + Date.now() + ".jpg");
+        stopStatusCameraStream();
+        dialog.close();
+        statusNotice("Foto lista. Puedes añadir texto o música y publicar el estado.");
+      }, "image/jpeg", 0.92);
+      return;
+    }
+
+    if (statusCameraRecorder?.state === "recording") {
+      statusCameraRecorder.stop();
+      if (action) action.classList.remove("is-recording");
+      setStatusCameraNotice("Guardando el video…");
+      return;
+    }
+    if (!statusCameraStream) {
+      setStatusCameraNotice("Primero permite el acceso a la cámara.", true);
+      return;
+    }
+    const mimeType = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
+      .find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+    if (!window.MediaRecorder || !mimeType) {
+      setStatusCameraNotice("Este navegador no permite grabar video desde aquí. Elige un video de tu galería.", true);
+      return;
+    }
+    try {
+      statusCameraChunks = [];
+      statusCameraRecorder = new MediaRecorder(statusCameraStream, { mimeType });
+      statusCameraRecorder.ondataavailable = event => {
+        if (event.data?.size) statusCameraChunks.push(event.data);
+      };
+      statusCameraRecorder.onerror = () => {
+        setStatusCameraNotice("Hubo un error al grabar. Inténtalo otra vez.", true);
+        if (action) action.classList.remove("is-recording");
+      };
+      statusCameraRecorder.onstop = () => {
+        const type = statusCameraRecorder?.mimeType || mimeType;
+        const blob = new Blob(statusCameraChunks, { type });
+        const extension = type.includes("mp4") ? "mp4" : "webm";
+        const saved = setStatusFileFromBlob(blob, "aureon-estado-" + Date.now() + "." + extension);
+        statusCameraChunks = [];
+        stopStatusCameraStream();
+        if (saved) {
+          dialog.close();
+          statusNotice("Video listo. Puedes añadir texto o música y publicar el estado.");
+        }
+      };
+      statusCameraRecorder.start();
+      if (action) action.classList.add("is-recording");
+      setStatusCameraNotice("Grabando… toca el botón rojo para terminar. Máximo 30 segundos.");
+      statusCameraStopTimer = setTimeout(() => {
+        if (statusCameraRecorder?.state === "recording") statusCameraRecorder.stop();
+      }, 30000);
+    } catch (error) {
+      console.warn("No se pudo iniciar la grabación:", error);
+      setStatusCameraNotice("No se pudo iniciar la grabación. Inténtalo otra vez o elige un video.", true);
+    }
+  });
+  dialog.addEventListener("close", () => {
+    if (statusCameraRecorder?.state === "recording") statusCameraRecorder.stop();
+    stopStatusCameraStream();
+    const action = $("#status-camera-capture");
+    if (action) action.classList.remove("is-recording");
+  });
+}
+
+createStatusCamera();
+statusForm?.addEventListener("reset", () => {
+  const preview = $("#status-capture-preview");
+  if (preview) { preview.replaceChildren(); preview.hidden = true; }
+  if (statusCameraPreviewUrl) {
+    URL.revokeObjectURL(statusCameraPreviewUrl);
+    statusCameraPreviewUrl = null;
+  }
+});
+
+
 function updateFriendRequestBadge(count) {
   const badge = $("#friend-request-count");
   if (!badge) return;
