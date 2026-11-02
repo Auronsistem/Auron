@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icons/aureon.svg">
   <title>SOCORA PLAY</title>
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%23090d18%27/%3E%3Cpath d=%27M35 25 L75 50 L35 75 Z%27 fill=%27%2320d9ed%27/%3E%3C/svg%3E">
 </head>
 <body>
@@ -150,25 +150,27 @@
               <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button><button id="group-audio-call" class="button button-outline" type="button" hidden>☎ Llamada grupal</button><button id="group-video-call" class="button" type="button" hidden>▣ Video grupal</button></div>
             </header>
             <div id="message-list" class="message-list" aria-live="polite"></div>
-            <div class="message-tools" aria-label="Contenido para enviar">
-              <button id="open-stickers" class="button button-outline" type="button">😀 Stickers</button>
-              <button id="open-gif" class="button button-outline" type="button">GIF</button>
+            <div class="message-tools" aria-label="Emojis y GIF">
+              <button id="open-message-picker" class="emoji-picker-trigger" type="button" aria-label="Abrir emojis y GIF" title="Emojis y GIF">😀</button>
+              <span class="message-shortcut-hint">Windows: pulsa Win + . para abrir el panel de emojis.</span>
             </div>
-            <section id="sticker-picker" class="message-picker" hidden>
-              <p class="eyebrow">STICKERS</p>
-              <div id="sticker-grid" class="sticker-grid"></div>
-            </section>
-            <section id="gif-picker" class="message-picker" hidden>
-              <p class="eyebrow">GIF</p>
-              <label for="gif-search">Buscar un GIF en Tenor</label>
-              <div class="gif-search-row">
-                <input id="gif-search" type="search" maxlength="80" placeholder="Ej. celebración, gato, gaming...">
-                <button id="search-gif" class="button button-outline" type="button">Buscar</button>
+            <section id="message-picker" class="message-picker message-picker-unified" hidden>
+              <div class="message-picker-tabs" role="tablist" aria-label="Tipo de contenido">
+                <button class="message-picker-tab active" type="button" data-message-tab="emoji" role="tab" aria-selected="true">😀 Emojis</button>
+                <button class="message-picker-tab" type="button" data-message-tab="gif" role="tab" aria-selected="false">GIF</button>
               </div>
-              <label for="gif-url">Enlace directo del GIF</label>
-              <input id="gif-url" type="url" placeholder="https://media.tenor.com/...gif">
-              <button id="send-gif-link" class="button" type="button">Enviar GIF</button>
-              <p class="muted">Busca en Tenor, copia el enlace directo .gif y pégalo aquí. También admite enlaces directos de Giphy.</p>
+              <div id="emoji-picker-panel" class="message-picker-panel">
+                <p class="eyebrow">STICKERS Y REACCIONES</p>
+                <div id="sticker-grid" class="sticker-grid"></div>
+              </div>
+              <div id="gif-picker-panel" class="message-picker-panel" hidden>
+                <p class="eyebrow">ENVIAR GIF O STICKER</p>
+                <button id="choose-gif-file" class="button button-outline full" type="button">＋ Elegir GIF o imagen del dispositivo</button>
+                <input id="gif-file-input" type="file" accept="image/gif,image/webp,image/png,image/jpeg" hidden>
+                <div id="gif-paste-zone" class="gif-paste-zone" contenteditable="true" role="textbox" aria-label="Pegar un GIF aquí" data-placeholder="También puedes pegar aquí un GIF copiado."></div>
+                <p class="muted">En Windows, enfoca esta zona y pulsa Win + .; elige un GIF si aparece en tu panel. En celular, selecciona un GIF guardado o usa el teclado si permite pegarlo.</p>
+                <p class="muted">Se admiten GIF, WEBP, PNG y JPG de hasta 5 MB.</p>
+              </div>
             </section>
             <form id="message-form" class="message-form">
               <label class="sr-only" for="message-input">Escribe un mensaje</label>
@@ -446,6 +448,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=47"></script>
+  <script type="module" src="app.js?v=48"></script>
 </body>
 </html>
