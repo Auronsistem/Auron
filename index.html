@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icons/aureon.svg">
   <title>SOCORA PLAY</title>
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%23090d18%27/%3E%3Cpath d=%27M35 25 L75 50 L35 75 Z%27 fill=%27%2320d9ed%27/%3E%3C/svg%3E">
 </head>
 <body>
@@ -143,7 +143,7 @@
           </div>
           <div id="chat-active" hidden>
             <header class="chat-header">
-              <div><p class="eyebrow" id="chat-kind">CONVERSACIÓN PRIVADA</p><h3 id="chat-title">Usuario</h3></div>
+              <div><p class="eyebrow" id="chat-kind">CONVERSACIÓN PRIVADA</p><h3 id="chat-title">Usuario</h3><div id="chat-presence" class="chat-presence"></div></div>
               <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button><button id="group-audio-call" class="button button-outline" type="button" hidden>☎ Llamada grupal</button><button id="group-video-call" class="button" type="button" hidden>▣ Video grupal</button></div>
             </header>
             <div id="message-list" class="message-list" aria-live="polite"></div>
@@ -336,6 +336,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=29"></script>
+  <script type="module" src="app.js?v=30"></script>
 </body>
 </html>
