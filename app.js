@@ -1923,6 +1923,8 @@ let statusCameraRecorder = null;
 let statusCameraChunks = [];
 let statusCameraMode = "photo";
 let statusCameraFacing = "environment";
+let statusCameraMirrored = false;
+let statusCameraSwitching = false;
 let statusCameraStopTimer = null;
 let statusCameraPreviewUrl = null;
 
@@ -1985,6 +1987,7 @@ async function startStatusCamera() {
     statusCameraStream = stream;
     livePreview.pause();
     livePreview.srcObject = stream;
+    livePreview.style.transform = statusCameraMirrored ? "scaleX(-1)" : "scaleX(1)";
     livePreview.muted = true;
     livePreview.autoplay = true;
     livePreview.playsInline = true;
@@ -2165,9 +2168,27 @@ function buildStatusCameraDialog() {
 
   $("#status-camera-close")?.addEventListener("click", () => dialog.close());
   $("#status-camera-mode")?.addEventListener("input", event => setStatusCameraMode(event.target.value === "1" ? "video" : "photo"));
-  $("#status-camera-switch")?.addEventListener("click", async () => {
+  $("#status-camera-switch")?.addEventListener("click", async event => {
+    // En escritorio normalmente hay una sola webcam: voltear la vista no debe reiniciar el dispositivo.
+    const isDesktop = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const switchButton = event.currentTarget;
+    if (statusCameraSwitching || statusCameraRecorder?.state === "recording") return;
+    if (isDesktop) {
+      statusCameraMirrored = !statusCameraMirrored;
+      const livePreview = $("#status-camera-live");
+      if (livePreview) livePreview.style.transform = statusCameraMirrored ? "scaleX(-1)" : "scaleX(1)";
+      setStatusCameraNotice(statusCameraMirrored ? "Vista invertida. Pulsa ↻ otra vez para volver." : "Vista normal.");
+      return;
+    }
+    statusCameraSwitching = true;
+    if (switchButton) switchButton.disabled = true;
     statusCameraFacing = statusCameraFacing === "environment" ? "user" : "environment";
-    await startStatusCamera();
+    try {
+      await startStatusCamera();
+    } finally {
+      statusCameraSwitching = false;
+      if (switchButton) switchButton.disabled = false;
+    }
   });
   $("#status-camera-capture")?.addEventListener("click", async () => {
     const action = $("#status-camera-capture");
