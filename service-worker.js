@@ -24,7 +24,7 @@ self.addEventListener("push", (event) => {
     if (isCall && payload.callId) {
       options.actions = [
         { action: "accept", title: "Aceptar" },
-        { action: "reject", title: "Rechazar" }
+        { action: "reject", title: "Colgar" }
       ];
       options.requireInteraction = true;
     }
