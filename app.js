@@ -276,7 +276,9 @@ function updateAuthForm() {
       }
       reset.disabled = true;
       try {
-        const result = await supabase.auth.resetPasswordForEmail(email);
+        const result = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: new URL("./", window.location.href).toString()
+        });
         if (result.error) throw result.error;
         pendingEmail = email;
         showRecoveryCodeForm();
@@ -357,17 +359,20 @@ function showRecoveryCodeForm() {
 
   const codeLabel = document.createElement("label");
   codeLabel.htmlFor = "recovery-code";
-  codeLabel.textContent = "Código de recuperación (6 u 8 dígitos)";
+  codeLabel.textContent = "Código de recuperación (6 dígitos)";
 
   const code = document.createElement("input");
   code.id = "recovery-code";
   code.type = "text";
   code.inputMode = "numeric";
   code.autocomplete = "one-time-code";
-  code.maxLength = 8;
-  code.pattern = "(?:[0-9]{6}|[0-9]{8})";
-  code.placeholder = "12345678";
+  code.maxLength = 6;
+  code.pattern = "[0-9]{6}";
+  code.placeholder = "123456";
   code.required = true;
+  code.addEventListener("input", () => {
+    code.value = code.value.replace(/\D/g, "").slice(0, 6);
+  });
 
   const passLabel = document.createElement("label");
   passLabel.htmlFor = "recovery-code-password";
@@ -424,16 +429,19 @@ function showCodeForm() {
 
   const label = document.createElement("label");
   label.htmlFor = "verification-code";
-  label.textContent = "Código de verificación (6 u 8 dígitos)";
+  label.textContent = "Código de verificación (6 dígitos)";
 
   const input = document.createElement("input");
   input.id = "verification-code";
   input.type = "text";
   input.inputMode = "numeric";
   input.autocomplete = "one-time-code";
-  input.maxLength = 8;
-  input.pattern = "(?:[0-9]{6}|[0-9]{8})";
+  input.maxLength = 6;
+  input.pattern = "[0-9]{6}";
   input.required = true;
+  input.addEventListener("input", () => {
+    input.value = input.value.replace(/\D/g, "").slice(0, 6);
+  });
 
   const button = document.createElement("button");
   button.className = "button full";
@@ -464,8 +472,8 @@ authForm?.addEventListener("submit", async (event) => {
       const password = $("#recovery-code-password")?.value || "";
       const confirmation = $("#recovery-code-confirm")?.value || "";
 
-      if (!/^(?:[0-9]{6}|[0-9]{8})$/.test(token)) {
-        throw new Error("Introduce el código completo que recibiste (6 u 8 dígitos).");
+      if (!/^\d{6}$/.test(token)) {
+        throw new Error("Introduce el código de 6 dígitos que recibiste.");
       }
       if (password.length < 8) {
         throw new Error("La contraseña debe tener al menos 8 caracteres.");
@@ -497,8 +505,8 @@ authForm?.addEventListener("submit", async (event) => {
     if (waitingForCode) {
       const token = $("#verification-code")?.value.trim() || "";
 
-      if (!/^\d{8}$/.test(token)) {
-        throw new Error("Escribe el código de 8 dígitos que llegó a tu correo.");
+      if (!/^\d{6}$/.test(token)) {
+        throw new Error("Escribe el código de 6 dígitos que llegó a tu correo.");
       }
 
       const { error } = await supabase.auth.verifyOtp({
@@ -537,7 +545,7 @@ authForm?.addEventListener("submit", async (event) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin + "/Auron/" }
+      options: { emailRedirectTo: new URL("./", window.location.href).toString() }
     });
 
     if (error) throw error;
@@ -546,7 +554,7 @@ authForm?.addEventListener("submit", async (event) => {
       showCodeForm();
       showMessage(
         $("#auth-message"),
-        "Te enviamos un código de 8 dígitos. Revisa Recibidos y Spam."
+        "Te enviamos un código de 6 dígitos. Revisa Recibidos y Spam."
       );
     } else if (authDialog?.open) {
       authDialog.close();
@@ -616,7 +624,10 @@ async function sendGuardianVerificationCode() {
     guardianClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
     const { error } = await guardianClient.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false }
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: new URL("./", window.location.href).toString()
+      }
     });
     if (error) throw error;
     guardianVerifiedEmail = email;
