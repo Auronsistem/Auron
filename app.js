@@ -1949,28 +1949,102 @@ function stopStatusCameraStream() {
 
 async function startStatusCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    setStatusCameraNotice("Este navegador no permite abrir la cámara aquí. Puedes elegir una foto o video desde tu galería.", true);
+    setStatusCameraNotice("Este navegador no permite usar la cámara. Abre AUREON desde Chrome o Edge actualizado mediante HTTPS.", true);
     return;
   }
+
   stopStatusCameraStream();
+  const livePreview = $("#status-camera-live");
+  if (!livePreview) return;
+
   try {
-    statusCameraStream = await navigator.mediaDevices.getUserMedia({
-      audio: statusCameraMode === "video",
-      video: { facingMode: { ideal: statusCameraFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    setStatusCameraNotice("Solicitando acceso a la cámara…");
+    // En computadoras no forzamos una cámara trasera, porque normalmente solo hay webcam frontal.
+    const isDesktop = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const videoConstraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      ...(isDesktop ? {} : { facingMode: { ideal: statusCameraFacing } })
+    };
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: statusCameraMode === "video",
+        video: videoConstraints
+      });
+    } catch (firstError) {
+      // Algunos drivers de webcam no aceptan restricciones de resolución/orientación.
+      console.warn("Reintentando cámara con restricciones básicas:", firstError);
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: statusCameraMode === "video",
+        video: true
+      });
+    }
+
+    statusCameraStream = stream;
+    livePreview.pause();
+    livePreview.srcObject = stream;
+    livePreview.muted = true;
+    livePreview.autoplay = true;
+    livePreview.playsInline = true;
+
+    // Espera a que el navegador entregue fotogramas; evita dejar una vista negra mientras carga.
+    await new Promise((resolve, reject) => {
+      if (livePreview.videoWidth > 0 && livePreview.readyState >= 2) {
+        resolve();
+        return;
+      }
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("La cámara no entregó video a tiempo."));
+      }, 8000);
+      const cleanup = () => {
+        clearTimeout(timeout);
+        livePreview.removeEventListener("loadedmetadata", onReady);
+        livePreview.removeEventListener("canplay", onReady);
+        livePreview.removeEventListener("error", onError);
+      };
+      const onReady = () => {
+        if (livePreview.videoWidth > 0 && livePreview.videoHeight > 0) {
+          cleanup();
+          resolve();
+        }
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error("No se pudo mostrar el video de la cámara."));
+      };
+      livePreview.addEventListener("loadedmetadata", onReady);
+      livePreview.addEventListener("canplay", onReady);
+      livePreview.addEventListener("error", onError);
+      livePreview.play().catch(() => {});
     });
-    const livePreview = $("#status-camera-live");
-    if (livePreview) {
-      livePreview.srcObject = statusCameraStream;
-      livePreview.muted = true;
-      livePreview.playsInline = true;
-      await livePreview.play().catch(() => {});
+
+    await livePreview.play();
+    const track = stream.getVideoTracks()[0];
+    if (!track || track.readyState !== "live") {
+      throw new Error("La cámara no está transmitiendo.");
     }
     setStatusCameraNotice(statusCameraMode === "photo"
-      ? "Encuadra la foto y toca el botón blanco."
-      : "Toca el botón rojo para empezar a grabar. La grabación se limita a 30 segundos.");
+      ? "Cámara lista. Encuadra la foto y toca el botón blanco."
+      : "Cámara lista. Toca el botón rojo para grabar (máximo 30 segundos).");
   } catch (error) {
-    console.warn("No se pudo abrir la cámara para el estado:", error);
-    setStatusCameraNotice("No se pudo abrir la cámara. Revisa los permisos del navegador y vuelve a intentarlo.", true);
+    console.warn("No se pudo mostrar la cámara para el estado:", error);
+    stopStatusCameraStream();
+    let message = "No se pudo mostrar la cámara. Cierra otras apps que la estén usando y revisa los permisos de Chrome.";
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+      message = "Chrome bloqueó el acceso. Pulsa el candado junto a la dirección web y permite Cámara y Micrófono.";
+    } else if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+      message = "No se encontró una cámara conectada o habilitada en esta computadora.";
+    } else if (error?.name === "NotReadableError" || error?.name === "TrackStartError") {
+      message = "La cámara está ocupada por otra aplicación. Cierra Zoom, Meet u otra app que la use y vuelve a intentar.";
+    } else if (error?.name === "OverconstrainedError") {
+      message = "La webcam no acepta el formato solicitado. Vuelve a abrir la cámara para intentar con ajustes básicos.";
+    } else if (error?.message?.includes("no entregó video") || error?.message?.includes("mostrar el video")) {
+      message = "La cámara se conectó, pero no envió imagen. Cierra otras apps que la usen, comprueba el interruptor físico de la webcam y vuelve a intentar.";
+    }
+    setStatusCameraNotice(message, true);
   }
 }
 
