@@ -2617,7 +2617,14 @@ function clearMessaging() {
 function otherParticipant(conversation) {
   return conversation.participant_one === currentUser.id ? conversation.participant_two : conversation.participant_one;
 }
-function displayName(profile) { return profile?.display_name?.trim() || "Usuario de AUREON"; }
+function displayName(profile) {
+  const nickname = profile?.display_name?.trim();
+  if (nickname && nickname.toLowerCase() !== "jugador") return nickname;
+  return profile?.username?.trim() || "Usuario de AUREON";
+}
+function accountName(profile) {
+  return profile?.username?.trim() || displayName(profile);
+}
 function renderAvatar(element, profile, extraClass = "") {
   if (!element) return;
   element.replaceChildren();
@@ -2634,16 +2641,18 @@ function createAvatar(profile, extraClass = "") { const el = document.createElem
 let currentProfile = null;
 async function loadCurrentProfile() {
   if (!currentUser) { currentProfile = null; updateHeader(); return; }
-  const {data,error} = await supabase.from("profiles").select("id, display_name, avatar_url").eq("id",currentUser.id).maybeSingle();
+  const {data,error} = await supabase.from("profiles").select("id, username, display_name, avatar_url").eq("id",currentUser.id).maybeSingle();
   if (error) { console.warn("No se pudo cargar el perfil:",error); currentProfile={id:currentUser.id,avatar_url:currentUser.user_metadata?.avatar_url||null}; }
   else currentProfile=data||{id:currentUser.id,avatar_url:currentUser.user_metadata?.avatar_url||null};
   const preview=$("#profile-settings-preview"); if(preview) renderAvatar(preview,currentProfile,"profile-settings-avatar");
+  const nicknameInput=$("#profile-nickname");
+  if(nicknameInput) nicknameInput.value=(currentProfile?.display_name && currentProfile.display_name.toLowerCase()!=="jugador" && currentProfile.display_name!==currentProfile.username) ? currentProfile.display_name : "";
   updateHeader();
 }
 async function fetchProfiles(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return new Map();
-  const { data, error } = await supabase.from("profiles").select("id, display_name, avatar_url").in("id", unique);
+  const { data, error } = await supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", unique);
   if (error) { console.error("No se pudieron cargar perfiles:", error); return new Map(); }
   return new Map((data || []).map(profile => [profile.id, profile]));
 }
@@ -2663,9 +2672,12 @@ async function loadConversations() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "conversation-item" + (activeConversation?.id === conversation.id ? " active" : "");
+    button.append(createAvatar(profile, "conversation-avatar"));
+    const copy = document.createElement("span"); copy.className = "conversation-copy";
     const name = document.createElement("strong"); name.textContent = displayName(profile);
     const preview = document.createElement("span"); preview.textContent = "Abrir conversación";
-    button.append(name, preview);
+    copy.append(name, preview);
+    button.append(copy);
     button.addEventListener("click", () => openConversation(conversation, profile));
     conversationList.append(button);
   }
@@ -2675,9 +2687,10 @@ async function searchPeople(query) {
   if (!currentUser || !peopleResults) return;
   const clean = query.trim(); peopleResults.replaceChildren();
   if (clean.length < 2) { peopleResults.hidden = true; return; }
-  const { data, error } = await supabase.from("profiles").select("id, display_name")
-    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "") + "%")
-    .order("display_name").limit(12);
+  const safeQuery = clean.replace(/[%,()]/g, "").replace(/[_]/g, "");
+  const { data, error } = await supabase.from("profiles").select("id, username, display_name, avatar_url")
+    .neq("id", currentUser.id).ilike("username", "%" + safeQuery + "%")
+    .order("username").limit(12);
   peopleResults.hidden = false;
   if (error) { showEmpty(peopleResults, "No se pudo buscar usuarios."); return; }
   if (!data?.length) { showEmpty(peopleResults, "No encontramos usuarios con ese nombre."); return; }
@@ -2685,7 +2698,8 @@ async function searchPeople(query) {
   for (const profile of data) {
     const button = document.createElement("button");
     button.type = "button"; button.className = "people-result"; button.dataset.userId = profile.id;
-    const name = document.createElement("strong"); name.textContent = displayName(profile);
+    button.append(createAvatar(profile, "people-result-avatar"));
+    const name = document.createElement("strong"); name.textContent = accountName(profile);
     button.append(name); renderPresenceLine(button, profile.id);
     button.addEventListener("click", () => startConversation(profile)); peopleResults.append(button);
   }
@@ -3256,6 +3270,32 @@ messageForm?.addEventListener("submit", async event => {
   const sent = await sendChatBody(body, target);
   if (sent && input?.value.trim() === body) input.value = "";
 });
+$("#save-profile-nickname")?.addEventListener("click", async () => {
+  if (!currentUser) { showMessage($("#profile-nickname-status"), "Inicia sesión para guardar tu apodo.", true); return; }
+  const input=$("#profile-nickname");
+  const button=$("#save-profile-nickname");
+  const username=currentProfile?.username || currentUser.email?.split("@")[0] || "usuario";
+  const nickname=(input?.value || "").trim().slice(0,32) || username;
+  if(button) button.disabled=true;
+  showMessage($("#profile-nickname-status"), "Guardando apodo...");
+  try {
+    const {data,error}=await supabase.from("profiles").upsert({
+      id:currentUser.id, username, display_name:nickname, avatar_url:currentProfile?.avatar_url || null
+    },{onConflict:"id"}).select("id,username,display_name,avatar_url").single();
+    if(error) throw error;
+    currentProfile=data;
+    if(input) input.value=data.display_name===data.username ? "" : data.display_name;
+    const preview=$("#profile-settings-preview"); if(preview) renderAvatar(preview,currentProfile,"profile-settings-avatar");
+    if(activeGroup?.id) await loadGroupMessages(activeGroup.id);
+    showMessage($("#profile-nickname-status"), "¡Apodo guardado! Se verá en tus mensajes grupales y en las llamadas.");
+  } catch(error) {
+    console.error("No se pudo guardar el apodo:",error);
+    showMessage($("#profile-nickname-status"), error?.message || "No se pudo guardar el apodo.", true);
+  } finally { if(button) button.disabled=false; }
+});
+$("#profile-nickname")?.addEventListener("keydown", event => {
+  if(event.key==="Enter"){event.preventDefault();$("#save-profile-nickname")?.click();}
+});
 $("#profile-picture-input")?.addEventListener("change", async event => {
   const file=event.target.files?.[0]; if(!file||!currentUser) return;
   const status=$("#profile-picture-status");
@@ -3268,7 +3308,7 @@ $("#profile-picture-input")?.addEventListener("change", async event => {
   if(uploadError){console.error(uploadError);showMessage(status,"No se pudo subir la foto. Inténtalo otra vez.",true);return;}
   const {data:publicData}=supabase.storage.from("avatars").getPublicUrl(path);
   const avatarUrl=publicData?.publicUrl?publicData.publicUrl+"?v="+Date.now():"";
-  const {data:savedProfile,error:saveError}=await supabase.from("profiles").upsert({id:currentUser.id,avatar_url:avatarUrl},{onConflict:"id"}).select("id,display_name,avatar_url").single();
+  const {data:savedProfile,error:saveError}=await supabase.from("profiles").upsert({id:currentUser.id,username:currentProfile?.username||currentUser.email?.split("@")[0]||"usuario",display_name:currentProfile?.display_name||currentUser.email?.split("@")[0]||"usuario",avatar_url:avatarUrl},{onConflict:"id"}).select("id,username,display_name,avatar_url").single();
   if(saveError){console.error(saveError);showMessage(status,"La foto se subió, pero no se pudo guardar en el perfil.",true);return;}
   currentProfile=savedProfile; await loadCurrentProfile(); showMessage(status,"¡Foto de perfil actualizada!"); event.target.value="";
 });
@@ -3320,9 +3360,10 @@ async function searchGroupMembers(query) {
   const clean = query.trim();
   groupMemberResults.replaceChildren();
   if (clean.length < 2) { groupMemberResults.hidden = true; return; }
-  const { data, error } = await supabase.from("profiles").select("id, display_name")
-    .neq("id", currentUser.id).ilike("display_name", "%" + clean.replace(/[%_]/g, "") + "%")
-    .order("display_name").limit(30);
+  const safeQuery = clean.replace(/[%,()]/g, "").replace(/[_]/g, "");
+  const { data, error } = await supabase.from("profiles").select("id, username, display_name, avatar_url")
+    .neq("id", currentUser.id).ilike("username", "%" + safeQuery + "%")
+    .order("username").limit(30);
   groupMemberResults.hidden = false;
   if (error) { showEmpty(groupMemberResults, "No se pudieron buscar usuarios."); return; }
   if (!data?.length) { showEmpty(groupMemberResults, "No encontramos usuarios."); return; }
@@ -3336,7 +3377,7 @@ async function searchGroupMembers(query) {
       else selectedGroupUsers.delete(profile.id);
       updateGroupSelectionCount();
     });
-    const name = document.createElement("span"); name.textContent = displayName(profile);
+    const name = document.createElement("span"); name.textContent = accountName(profile);
     label.append(check, name); groupMemberResults.append(label);
   }
 }
