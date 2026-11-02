@@ -95,7 +95,8 @@ async function openSettings() {
   showSection("configuracion");
   await Promise.all([
     loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error)),
-    loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar las solicitudes y estados:", error))
+    loadFriendRequestsOnly().catch(error => console.warn("No se pudieron cargar las solicitudes:", error)),
+    loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error))
   ]);
   section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -2003,6 +2004,54 @@ function appendFriendRequestRow(request, profile) {
   row.append(identity, actions);
   return row;
 }
+async function loadFriendRequestsOnly() {
+  const container = $("#friend-requests-list");
+  if (!container) {
+    console.error("AUREON: no existe #friend-requests-list en index.html.");
+    return;
+  }
+  const userId = currentUser?.id;
+  if (!userId) {
+    showEmpty(container, "Inicia sesión para ver tus solicitudes.");
+    updateFriendRequestBadge(0);
+    return;
+  }
+
+  container.replaceChildren();
+  const { data: requests, error } = await supabase
+    .from("friend_requests")
+    .select("id,sender_id,created_at")
+    .eq("recipient_id", userId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (currentUser?.id !== userId) return;
+  if (error) {
+    console.error("AUREON: error al cargar solicitudes pendientes:", error);
+    showEmpty(container, "No se pudieron cargar las solicitudes. Comprueba tu conexión e inténtalo de nuevo.");
+    updateFriendRequestBadge(0);
+    return;
+  }
+
+  updateFriendRequestBadge((requests || []).length);
+  if (!requests?.length) {
+    showEmpty(container, "No tienes solicitudes pendientes.");
+    return;
+  }
+
+  let profiles = new Map();
+  try {
+    profiles = await fetchProfiles(requests.map(request => request.sender_id));
+  } catch (profileError) {
+    console.warn("AUREON: no se pudieron cargar los perfiles de quienes enviaron solicitud:", profileError);
+  }
+  if (currentUser?.id !== userId) return;
+  container.replaceChildren();
+  for (const request of requests) {
+    appendFriendRequestRow(request, profiles.get(request.sender_id) || { id: request.sender_id, username: "Usuario de AUREON" });
+  }
+}
+
 async function loadFriendsStatuses() {
   if (!statusFeed || !friendRequestsList || !statusStoriesStrip) return;
   if (!currentUser) {
@@ -2127,7 +2176,7 @@ async function handleIncomingFriendRequestEvent(row, { notify = true } = {}) {
 
   // Refresh the persisted request list before navigating; Realtime can arrive
   // before the row is visible in the current UI.
-  await loadFriendsStatuses();
+  await loadFriendRequestsOnly();
   if (currentUser?.id !== recipientId) return;
   if (notify && document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
     try {
