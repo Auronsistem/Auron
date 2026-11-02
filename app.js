@@ -2054,6 +2054,10 @@ function callDisplay(showIncoming = false, showActive = false) {
   if (callDialog && !callDialog.open) callDialog.showModal();
   $("#incoming-call-actions").hidden = !showIncoming;
   $("#active-call-actions").hidden = !showActive;
+  const videoMode = Boolean(activeCall?.video || activeGroupCall?.video);
+  $(".call-screen")?.classList.toggle("is-video", videoMode);
+  const avatar = $("#call-avatar");
+  if (avatar) avatar.textContent = (callTitle?.textContent || "A").trim().charAt(0).toUpperCase();
 }
 async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peerId) {
   if (!activeCall || !recipientId || !currentUser) return;
@@ -2254,6 +2258,7 @@ function cleanupCall() {
   if (localCallVideo) localCallVideo.srcObject = null;
   if (remoteCallVideo) remoteCallVideo.srcObject = null;
   if (callDialog?.open) callDialog.close();
+  $(".call-screen")?.classList.remove("is-video");
   activeCall = null;
 }
 async function beginCall(video) {
@@ -2564,6 +2569,7 @@ async function cleanupGroupCall(notify = false) {
   const grid = $("#group-call-grid"); if (grid) { grid.replaceChildren(); grid.hidden = true; }
   remoteCallVideo.hidden = false; localCallVideo.hidden = false;
   if (callDialog?.open) callDialog.close();
+  $(".call-screen")?.classList.remove("is-video");
 }
 $("#group-audio-call")?.addEventListener("click", () => beginGroupCall(false));
 $("#group-video-call")?.addEventListener("click", () => beginGroupCall(true));
