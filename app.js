@@ -2544,6 +2544,7 @@ function createYouTubeChannelCard(channel) {
 
 // MENSAJERÍA PRIVADA
 let activeConversation = null;
+let activePeerProfile = null;
 let activeGroup = null;
 let groupCache = [];
 let selectedGroupUsers = new Map();
@@ -2807,9 +2808,75 @@ async function startConversation(profile) {
   peopleResults.hidden = true; if (peopleSearch) peopleSearch.value = "";
   await loadConversations(); await openConversation(conversation, profile);
 }
+
+/* AUREON_FRIEND_REQUEST_PROFILE_V1: acciones de amistad desde Info de usuario. */
+const userInfoDialog = $("#user-info-dialog");
+const userInfoName = $("#user-info-name");
+const userInfoUsername = $("#user-info-username");
+const userInfoAvatar = $("#user-info-avatar");
+const userInfoFriendStatus = $("#user-info-friend-status");
+const userInfoFeedback = $("#user-info-feedback");
+const sendFriendRequestButton = $("#send-friend-request");
+
+async function openUserInfo() {
+  if (!currentUser || !activeConversation) return;
+  const peerId = otherParticipant(activeConversation);
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", peerId).maybeSingle();
+  activePeerProfile = profile || activePeerProfile || { id: peerId };
+  if (userInfoName) userInfoName.textContent = displayName(activePeerProfile);
+  if (userInfoUsername) userInfoUsername.textContent = accountName(activePeerProfile);
+  renderAvatar(userInfoAvatar, activePeerProfile);
+  if (userInfoFeedback) userInfoFeedback.textContent = "";
+  if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Comprobando amistad…";
+  if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+  userInfoDialog?.showModal();
+  const { data: friendship, error: friendshipError } = await supabase.from("friendships").select("user_id").eq("user_id", currentUser.id).eq("friend_id", peerId).maybeSingle();
+  if (friendshipError) {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "La función de amigos aún necesita que se aplique la migración.";
+    if (sendFriendRequestButton) sendFriendRequestButton.disabled = true;
+    return;
+  }
+  if (friendship) {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya son amigos. Esta persona podrá ver tus estados y tú los suyos.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.hidden = true; }
+    return;
+  }
+  if (sendFriendRequestButton) sendFriendRequestButton.hidden = false;
+  const { data: outgoing } = await supabase.from("friend_requests").select("id,status").eq("sender_id", currentUser.id).eq("recipient_id", peerId).maybeSingle();
+  const { data: incoming } = await supabase.from("friend_requests").select("id,status").eq("sender_id", peerId).eq("recipient_id", currentUser.id).maybeSingle();
+  if (incoming?.status === "pending") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Esta persona ya te envió una solicitud. Puedes aceptarla en Configuración.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud recibida"; sendFriendRequestButton.disabled = true; }
+  } else if (outgoing?.status === "pending") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya enviaste una solicitud a esta persona.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Solicitud enviada"; sendFriendRequestButton.disabled = true; }
+  } else {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solo las amistades aceptadas podrán ver los estados.";
+    if (sendFriendRequestButton) { sendFriendRequestButton.textContent = "Enviar solicitud de amigo"; sendFriendRequestButton.disabled = false; }
+  }
+}
+$("#open-user-info")?.addEventListener("click", () => openUserInfo().catch(error => {
+  if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo abrir el perfil.";
+}));
+sendFriendRequestButton?.addEventListener("click", async () => {
+  const peerId = activePeerProfile?.id;
+  if (!currentUser || !peerId || peerId === currentUser.id) return;
+  sendFriendRequestButton.disabled = true;
+  if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
+  const { error } = await supabase.from("friend_requests").insert({sender_id:currentUser.id, recipient_id:peerId, status:"pending"});
+  if (error) {
+    sendFriendRequestButton.disabled = false;
+    if (userInfoFeedback) userInfoFeedback.textContent = error.code === "23505" ? "Ya existe una solicitud entre estas cuentas." : "No se pudo enviar. La migración de amigos debe estar aplicada y la solicitud no debe existir ya.";
+    return;
+  }
+  if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
+  if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud de amistad enviada.";
+  sendFriendRequestButton.textContent = "Solicitud enviada";
+});
+
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
-  activeGroup = null; activeConversation = conversation; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
+  activeGroup = null; activeConversation = conversation; activePeerProfile = profile; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
   $("#chat-kind").textContent = "CONVERSACIÓN PRIVADA";
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
   $("#start-audio-call").hidden = false; $("#start-video-call").hidden = false;
