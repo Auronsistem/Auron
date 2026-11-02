@@ -1828,6 +1828,7 @@ function showSection(sectionName) {
     inicio: "#inicio",
     videos: "#videos",
     mensajes: "#mensajes",
+    estados: "#estados",
     shorts: "#shorts",
     cuenta: "#cuenta",
     youtube: "#youtube"
@@ -1867,6 +1868,80 @@ document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
     if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
   });
 });
+
+
+/* AUREON_FRIENDS_STATUS_V1: UI base; las acciones se habilitan con la migración de Supabase aplicada. */
+const statusForm = $("#status-publish-form");
+const statusFeedback = $("#status-publish-feedback");
+const statusFeed = $("#status-friends-feed");
+const friendRequestsList = $("#friend-requests-list");
+
+function statusEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
+function statusNotice(message) {
+  if (statusFeedback) statusFeedback.textContent = message;
+}
+async function loadFriendsStatuses() {
+  if (!statusFeed || !friendRequestsList) return;
+  if (!currentUser) {
+    statusFeed.innerHTML = '<p class="muted">Inicia sesión para ver los estados de tus amigos.</p>';
+    friendRequestsList.innerHTML = '<p class="muted">Inicia sesión para ver tus solicitudes.</p>';
+    return;
+  }
+  const { data: requests, error: requestError } = await supabase
+    .from("friend_requests").select("id,sender_id,created_at").eq("recipient_id", currentUser.id).eq("status", "pending").order("created_at", {ascending:false});
+  if (requestError) {
+    friendRequestsList.innerHTML = '<p class="muted">Las solicitudes estarán disponibles cuando se aplique la actualización de amigos.</p>';
+  } else if (!requests?.length) {
+    friendRequestsList.innerHTML = '<p class="muted">No tienes solicitudes pendientes.</p>';
+  } else {
+    const ids = [...new Set(requests.map(r => r.sender_id))];
+    const { data: profiles } = await supabase.from("profiles").select("*").in("id", ids);
+    const byId = new Map((profiles || []).map(p => [p.id,p]));
+    friendRequestsList.innerHTML = requests.map(r => {
+      const p = byId.get(r.sender_id);
+      return '<div class="friend-request-row"><span>' + statusEscape(p ? displayName(p) : "Usuario") + '</span><button type="button" class="button" data-accept-friend="' + statusEscape(r.id) + '">Aceptar</button></div>';
+    }).join("");
+  }
+  const { data: posts, error: postsError } = await supabase.from("status_posts").select("*").gt("expires_at", new Date().toISOString()).order("created_at", {ascending:false}).limit(100);
+  if (postsError) {
+    statusFeed.innerHTML = '<p class="muted">Los estados estarán disponibles cuando se aplique la actualización de amigos.</p>';
+    return;
+  }
+  if (!posts?.length) {
+    statusFeed.innerHTML = '<p class="muted">Todavía no hay estados recientes de tus amigos.</p>';
+    return;
+  }
+  const authorIds = [...new Set(posts.map(p => p.user_id))];
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", authorIds);
+  const byId = new Map((profiles || []).map(p => [p.id,p]));
+  statusFeed.innerHTML = posts.map(post => {
+    const author = byId.get(post.user_id);
+    const media = post.media_url ? (post.media_type === "video"
+      ? '<video controls preload="metadata" src="' + statusEscape(post.media_url) + '"></video>'
+      : '<img loading="lazy" src="' + statusEscape(post.media_url) + '" alt="Foto del estado">') : "";
+    return '<article class="status-card"><div class="status-card-heading"><strong>' + statusEscape(author ? displayName(author) : "Usuario") + '</strong><time>' + statusEscape(new Date(post.created_at).toLocaleString()) + '</time></div>' + media + (post.caption ? '<p>' + statusEscape(post.caption) + '</p>' : '') + (post.music_title ? '<p class="muted">♫ ' + statusEscape(post.music_title) + '</p>' : '') + '</article>';
+  }).join("");
+}
+friendRequestsList?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-accept-friend]");
+  if (!button || !currentUser) return;
+  button.disabled = true;
+  const { error } = await supabase.rpc("accept_friend_request", {p_request_id:button.dataset.acceptFriend});
+  if (error) {
+    button.disabled = false;
+    if (statusFeedback) statusFeedback.textContent = "No se pudo aceptar todavía. Comprueba que la actualización de amigos esté instalada.";
+    return;
+  }
+  await loadFriendsStatuses();
+});
+statusForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentUser) { statusNotice("Inicia sesión para publicar un estado."); return; }
+  statusNotice("Para publicar, primero hay que aplicar y verificar la migración de amigos/estados y configurar el almacenamiento seguro. No se ha subido ningún archivo.");
+});
+document.querySelector('#states-nav-link')?.addEventListener('click', () => { loadFriendsStatuses().catch(() => {}); });
 
 // BÚSQUEDA EN YOUTUBE
 const youtubeForm = $("#youtube-search-form");
