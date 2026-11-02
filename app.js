@@ -3541,6 +3541,13 @@ function callDisplay(showIncoming = false, showActive = false) {
       if(callDialog?.open&&(activeCall?.peerId===peerId||activeGroupCall?.peerId===peerId||activeGroupCall?.hostId===peerId)) renderAvatar(avatar,profiles.get(peerId),"call-avatar-image");
     });
   }
+  const localAvatar=$("#local-call-avatar");
+  if(localAvatar){
+    renderAvatar(localAvatar,currentProfile,"local-call-avatar");
+    const cameraOn=Boolean(videoMode&&callLocalStream?.getVideoTracks().some(track=>track.enabled&&track.readyState==="live"));
+    localAvatar.hidden=cameraOn;
+    if(localCallVideo) localCallVideo.hidden=!cameraOn;
+  }
 }
 async function sendCallSignal(type, payload = {}, recipientId = activeCall?.peerId) {
   if (!activeCall || !recipientId || !currentUser) return;
@@ -3833,7 +3840,11 @@ $("#toggle-call-camera")?.addEventListener("click", () => {
   const tracks = callLocalStream?.getVideoTracks() || [];
   if (!tracks.length) return;
   tracks.forEach(track => track.enabled = !track.enabled);
-  $("#toggle-call-camera").textContent = tracks.some(track => track.enabled) ? "Apagar cámara" : "Activar cámara";
+  const cameraOn=tracks.some(track=>track.enabled&&track.readyState==="live");
+  $("#toggle-call-camera").textContent = cameraOn ? "Apagar cámara" : "Activar cámara";
+  const localAvatar=$("#local-call-avatar");
+  if(localAvatar){renderAvatar(localAvatar,currentProfile,"local-call-avatar");localAvatar.hidden=cameraOn;}
+  if(localCallVideo) localCallVideo.hidden=!cameraOn;
 });
 $("#switch-call-camera")?.addEventListener("click", async () => {
   if (!activeCall?.video || !callLocalStream) {
