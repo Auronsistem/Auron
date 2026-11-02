@@ -72,7 +72,7 @@ returns text
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $aureon$
 declare
   actor uuid := (select auth.uid());
   existing_request public.friend_requests%rowtype;
@@ -113,7 +113,7 @@ begin
     values (actor, p_recipient_id, 'pending');
   return 'sent';
 end;
-$;
+$aureon$;
 revoke all on function public.send_friend_request(uuid) from public, anon;
 grant execute on function public.send_friend_request(uuid) to authenticated;
 
