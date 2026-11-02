@@ -2603,14 +2603,16 @@ async function uploadAndSendChatMedia(file) {
   if (picker) picker.hidden = true;
 
   showMessage($("#message-status"), "Subiendo GIF o imagen...");
-  const { error: uploadError } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, file, {
-    cacheControl: "3600",
-    contentType: file.type,
-    upsert: false
-  });
-  if (uploadError) {
+  try {
+    const { error: uploadError } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: false
+    });
+    if (uploadError) throw uploadError;
+  } catch (uploadError) {
     console.error("No se pudo subir el GIF de chat:", uploadError);
-    showMessage($("#message-status"), uploadError.message || "No se pudo subir el archivo.", true);
+    showMessage($("#message-status"), uploadError?.message || "No se pudo subir el archivo.", true);
     return;
   }
 
