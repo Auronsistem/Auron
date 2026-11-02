@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=33">
+  <link rel="stylesheet" href="styles.css?v=34">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -151,10 +151,12 @@
               <div class="call-actions"><button id="start-audio-call" class="button button-outline" type="button">☎ Llamar</button><button id="start-video-call" class="button" type="button">▣ Videollamar</button><button id="group-audio-call" class="button button-outline" type="button" hidden>☎ Llamada grupal</button><button id="group-video-call" class="button" type="button" hidden>▣ Video grupal</button></div>
             </header>
             <div id="message-list" class="message-list" aria-live="polite"></div>
-            <div class="message-tools" aria-label="Emojis y GIF">
+            <div class="message-tools" aria-label="Herramientas de mensaje">
               <button id="open-message-picker" class="emoji-picker-trigger" type="button" aria-label="Abrir emojis y GIF" title="Emojis y GIF">😀</button>
+              <button id="record-voice-message" class="button button-outline voice-record-button" type="button" aria-pressed="false">🎙 Grabar audio</button>
               <span class="message-shortcut-hint">Windows: pulsa Win + . para abrir el panel de emojis.</span>
             </div>
+            <p id="voice-recording-status" class="voice-recording-status" aria-live="polite"></p>
             <section id="message-picker" class="message-picker message-picker-unified" hidden>
               <div class="message-picker-tabs" role="tablist" aria-label="Tipo de contenido">
                 <button class="message-picker-tab active" type="button" data-message-tab="emoji" role="tab" aria-selected="true">😀 Emojis</button>
@@ -410,6 +412,7 @@
       </header>
       <section class="call-person">
         <div id="call-avatar" class="call-avatar" aria-hidden="true">A</div>
+        <div id="call-voice-waves" class="call-voice-waves" aria-label="La otra persona está hablando" hidden><i></i><i></i><i></i><i></i><i></i></div>
         <h2 id="call-title">Llamada</h2>
         <p id="call-subtitle" class="muted" aria-live="polite">Conectando…</p>
       </section>
@@ -480,6 +483,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=59"></script>
+  <script type="module" src="app.js?v=60"></script>
 </body>
 </html>
