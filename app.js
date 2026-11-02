@@ -1212,7 +1212,13 @@ async function updateSession(session) {
   updateHeader();
   subscribeToCallSignals();
   subscribeToGroupCallSignals();
-  if (currentUser) loadPendingNotificationCall();
+  subscribeToMessageEvents();
+  if (currentUser) {
+    loadPendingNotificationCall();
+    startIncomingCallFallback();
+  } else {
+    stopIncomingCallFallback();
+  }
 
   if (currentUser) {
     removeLockScreen();
@@ -1224,7 +1230,12 @@ async function updateSession(session) {
     await loadRecommendedShorts();
   } else {
     cleanupCall();
-    if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; }
+    if (callChannel) { supabase.removeChannel(callChannel); callChannel = null; callChannelUserId = null; }
+    if (messageRealtimeChannel) {
+      supabase.removeChannel(messageRealtimeChannel);
+      messageRealtimeChannel = null;
+      messageRealtimeUserId = null;
+    }
     cleanupGroupCall();
     stopPlayer();
     clearMessaging();
@@ -2562,9 +2573,48 @@ async function notifyAureonPush(action, details) {
     });
     if (error) console.warn("El mensaje se envió, pero no se pudo mandar el aviso push:", error);
     else if (data?.error) console.warn("Aviso push de AUREON:", data.error);
+    else if (data?.sent === 0) console.info("AUREON: el destinatario aún no tiene notificaciones activas en un dispositivo.");
   } catch (error) {
     console.warn("No se pudo enviar el aviso push de AUREON:", error);
   }
+}
+
+let aureonToastTimer = null;
+function showAureonToast(title, body, onOpen = null) {
+  let toast = $("#aureon-notification-toast");
+  if (!toast) {
+    toast = document.createElement("button");
+    toast.id = "aureon-notification-toast";
+    toast.className = "aureon-notification-toast";
+    toast.type = "button";
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+    document.body.append(toast);
+  }
+  toast.replaceChildren();
+  const heading = document.createElement("strong");
+  heading.textContent = title || "AUREON";
+  const detail = document.createElement("span");
+  detail.textContent = body || "Tienes una notificación nueva.";
+  toast.append(heading, detail);
+  toast.hidden = false;
+  toast.onclick = () => {
+    toast.hidden = true;
+    if (typeof onOpen === "function") onOpen();
+  };
+  if (aureonToastTimer) window.clearTimeout(aureonToastTimer);
+  aureonToastTimer = window.setTimeout(() => { toast.hidden = true; }, 6500);
+}
+
+const seenIncomingMessageIds = new Set();
+function claimIncomingMessageNotice(id) {
+  if (!id) return true;
+  if (seenIncomingMessageIds.has(id)) return false;
+  seenIncomingMessageIds.add(id);
+  if (seenIncomingMessageIds.size > 300) {
+    seenIncomingMessageIds.delete(seenIncomingMessageIds.values().next().value);
+  }
+  return true;
 }
 
 function clearMessaging() {
@@ -3171,6 +3221,88 @@ async function loadGroupMessages(groupId, quiet = false) {
   messageList.scrollTop = messageList.scrollHeight;
 }
 
+let messageRealtimeChannel = null;
+let messageRealtimeUserId = null;
+
+async function handleIncomingMessageEvent(kind, row) {
+  if (!currentUser || !row || row.sender_id === currentUser.id) return;
+  if (!claimIncomingMessageNotice(row.id)) return;
+
+  const userId = currentUser.id;
+  const privateOpen = kind === "private" && activeConversation?.id === row.conversation_id;
+  const groupOpen = kind === "group" && activeGroup?.id === row.group_id;
+  if (privateOpen) {
+    await loadMessages(row.conversation_id, true);
+    return;
+  }
+  if (groupOpen) {
+    await loadGroupMessages(row.group_id, true);
+    return;
+  }
+
+  const profiles = await fetchProfiles([row.sender_id]);
+  if (currentUser?.id !== userId) return;
+  const senderName = displayName(profiles.get(row.sender_id));
+  let toastTitle = senderName;
+  let openTarget = null;
+
+  if (kind === "private") {
+    const conversation = conversationCache.find(item => item.id === row.conversation_id);
+    if (conversation) openTarget = () => openConversation(conversation, profiles.get(row.sender_id));
+    await loadConversations();
+  } else {
+    const group = groupCache.find(item => item.id === row.group_id);
+    if (group) {
+      toastTitle = senderName + " · " + group.name;
+      openTarget = () => openGroup(group);
+    } else {
+      toastTitle = senderName + " · Grupo";
+    }
+    await loadConversations();
+  }
+
+  playAureonTone("bird");
+  const rawBody = String(row.body || "Te enviaron un mensaje");
+  const preview = rawBody.startsWith("AUREON_MEDIA_FILE:") ? "Te enviaron una imagen o GIF."
+    : rawBody.startsWith("AUREON_GIF:") ? "Te enviaron un GIF."
+    : rawBody.startsWith("AUREON_STICKER:") ? "Te enviaron un sticker."
+    : rawBody.slice(0, 110);
+  showAureonToast(toastTitle, preview, openTarget);
+}
+
+function subscribeToMessageEvents() {
+  const requestedUserId = currentUser?.id || null;
+  if (messageRealtimeChannel && messageRealtimeUserId === requestedUserId) return;
+  if (messageRealtimeChannel) {
+    const previous = messageRealtimeChannel;
+    messageRealtimeChannel = null;
+    messageRealtimeUserId = null;
+    supabase.removeChannel(previous).catch(error => console.warn("No se pudo cerrar el canal de mensajes:", error));
+  }
+  if (!requestedUserId) return;
+
+  const channel = supabase.channel("message-events-" + requestedUserId + "-" + crypto.randomUUID())
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "messages"
+    }, ({ new: row }) => {
+      handleIncomingMessageEvent("private", row).catch(error => console.error("Error al recibir mensaje privado:", error));
+    })
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "chat_group_messages"
+    }, ({ new: row }) => {
+      handleIncomingMessageEvent("group", row).catch(error => console.error("Error al recibir mensaje grupal:", error));
+    })
+    .subscribe((status, error) => {
+      if (status === "SUBSCRIBED") console.info("AUREON: recepción de mensajes en tiempo real conectada.");
+      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error("AUREON: no se pudo conectar el canal de mensajes en tiempo real:", error);
+      }
+    });
+
+  messageRealtimeChannel = channel;
+  messageRealtimeUserId = requestedUserId;
+}
+
 
 // LLAMADAS PRIVADAS DE AUDIO Y VIDEO (WebRTC + señalización Supabase)
 const callDialog = $("#call-dialog");
@@ -3187,6 +3319,7 @@ if (callSubtitle && callScreen) {
 const remoteCallVideo = $("#remote-call-video");
 const localCallVideo = $("#local-call-video");
 let callChannel = null;
+let callChannelUserId = null;
 let activeCall = null;
 let callPeer = null;
 let callLocalStream = null;
@@ -3196,6 +3329,10 @@ let callAudioContext = null;
 let callOscillator = null;
 let queuedIceCandidates = [];
 let callWindowMinimized = false;
+let suppressCallDialogClose = false;
+let callMiniLastTapAt = 0;
+let callFallbackPollTimer = null;
+const handledIncomingCallIds = new Set();
 
 function setCallWindowMinimized(minimized) {
   if (!callDialog?.open) return;
@@ -3203,9 +3340,14 @@ function setCallWindowMinimized(minimized) {
   if (next === callWindowMinimized) return;
   callWindowMinimized = next;
   callDialog.classList.toggle("is-minimized", next);
+
+  // La transición modal/flotante emite "close", pero no significa que se colgó.
+  suppressCallDialogClose = true;
   callDialog.close();
   if (next) callDialog.show();
   else callDialog.showModal();
+  window.setTimeout(() => { suppressCallDialogClose = false; }, 250);
+
   const button = $("#toggle-call-window");
   if (button) {
     button.textContent = next ? "⤢ Ampliar" : "— Minimizar";
@@ -3214,6 +3356,17 @@ function setCallWindowMinimized(minimized) {
   }
 }
 
+function expandCallOnDoubleTap(event) {
+  if (!callWindowMinimized || event.target?.closest?.("button")) return;
+  const now = Date.now();
+  if (event.detail >= 2 || (callMiniLastTapAt && now - callMiniLastTapAt <= 420)) {
+    callMiniLastTapAt = 0;
+    setCallWindowMinimized(false);
+  } else {
+    callMiniLastTapAt = now;
+  }
+}
+callScreen?.addEventListener("click", expandCallOnDoubleTap);
 $("#toggle-call-window")?.addEventListener("click", () => {
   setCallWindowMinimized(!callWindowMinimized);
 });
@@ -3288,7 +3441,20 @@ try {
   if (callId && ["accept", "reject"].includes(action)) pendingNotificationCallAction = { action, callId };
 } catch (_) {}
 navigator.serviceWorker?.addEventListener("message", (event) => {
-  if (event.data?.type === "AUREON_PUSH" && event.data?.payload?.type === "message") playAureonTone("bird");
+  if (event.data?.type === "AUREON_PUSH" && event.data?.payload?.type === "message") {
+    const payload = event.data.payload || {};
+    const messageId = String(payload.tag || "").replace(/^aureon-message-/, "");
+    if (claimIncomingMessageNotice(messageId)) {
+      playAureonTone("bird");
+      showAureonToast(payload.title || "Nuevo mensaje", payload.body || "Tienes un mensaje nuevo.");
+    }
+  }
+  if (event.data?.type === "AUREON_INCOMING_CALL_PUSH") {
+    const callId = event.data.payload?.callId;
+    if (callId) pendingNotificationCallId = callId;
+    pollIncomingCallInvitations();
+    loadPendingNotificationCall().catch(error => console.warn("AUREON: no se pudo abrir la llamada desde el aviso:", error));
+  }
   if (event.data?.type === "AUREON_CALL_ACTION" && ["accept", "reject"].includes(event.data.action)) {
     pendingNotificationCallAction = { action: event.data.action, callId: event.data.callId };
     processPendingNotificationCallAction();
@@ -3453,6 +3619,10 @@ async function prepareCallPeer() {
 async function processCallSignal(signal) {
   if (!signal || !currentUser) return;
   if (signal.signal_type === "invite") {
+    if (activeCall?.id === signal.call_id || activeGroupCall?.id === signal.call_id ||
+        handledIncomingCallIds.has(signal.call_id)) return;
+    handledIncomingCallIds.add(signal.call_id);
+    if (handledIncomingCallIds.size > 150) handledIncomingCallIds.delete(handledIncomingCallIds.values().next().value);
     if (activeCall || activeGroupCall) {
       await supabase.from("call_signals").insert({
         conversation_id: signal.conversation_id, sender_id: currentUser.id,
@@ -3522,12 +3692,19 @@ async function processCallSignal(signal) {
   }
 }
 function subscribeToCallSignals() {
-  if (callChannel) supabase.removeChannel(callChannel);
-  if (!currentUser) return;
-  callChannel = supabase.channel("private-calls-" + currentUser.id)
+  const requestedUserId = currentUser?.id || null;
+  if (callChannel && callChannelUserId === requestedUserId) return;
+  if (callChannel) {
+    const previous = callChannel;
+    callChannel = null;
+    callChannelUserId = null;
+    supabase.removeChannel(previous).catch(error => console.warn("No se pudo cerrar el canal de llamadas:", error));
+  }
+  if (!requestedUserId) return;
+  callChannel = supabase.channel("private-calls-" + requestedUserId + "-" + crypto.randomUUID())
     .on("postgres_changes", {
       event: "INSERT", schema: "public", table: "call_signals",
-      filter: "recipient_id=eq." + currentUser.id
+      filter: "recipient_id=eq." + requestedUserId
     }, ({ new: signal }) => processCallSignal(signal).catch(error => console.error("Error procesando llamada:", error)))
     .subscribe((status, error) => {
       if (status === "SUBSCRIBED") console.info("AUREON: recepción de llamadas conectada.");
@@ -3536,6 +3713,7 @@ function subscribeToCallSignals() {
         if (activeCall && !activeCall.incoming) callSubtitle.textContent = "Reconectando para recibir respuesta…";
       }
     });
+  callChannelUserId = requestedUserId;
 }
 function cleanupCall() {
   stopCallAlert();
@@ -3652,10 +3830,15 @@ $("#switch-call-camera")?.addEventListener("click", async () => {
     callSubtitle.textContent = "No se pudo cambiar la cámara. Revisa los permisos del navegador.";
   }
 });
-callDialog?.addEventListener("close", () => { if (activeGroupCall) cleanupGroupCall(); else if (activeCall) cleanupCall(); });
+callDialog?.addEventListener("close", () => {
+  if (suppressCallDialogClose) return;
+  if (activeGroupCall) cleanupGroupCall();
+  else if (activeCall) cleanupCall();
+});
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && activeCall && callSubtitle) {
-    callSubtitle.textContent += "";
+  if (document.visibilityState === "visible") {
+    if (activeCall && callSubtitle) callSubtitle.textContent += "";
+    pollIncomingCallInvitations();
   }
 });
 
@@ -3753,6 +3936,10 @@ async function removeGroupPeer(userId) {
 async function processGroupCallSignal(signal) {
   if (!signal || !currentUser) return;
   if (signal.signal_type === "invite") {
+    if (activeCall?.id === signal.call_id || activeGroupCall?.id === signal.call_id ||
+        handledIncomingCallIds.has(signal.call_id)) return;
+    handledIncomingCallIds.add(signal.call_id);
+    if (handledIncomingCallIds.size > 150) handledIncomingCallIds.delete(handledIncomingCallIds.values().next().value);
     if (activeCall || activeGroupCall) {
       await supabase.from("chat_group_call_signals").insert({
         group_id: signal.group_id, call_id: signal.call_id, sender_id: currentUser.id,
@@ -3846,6 +4033,53 @@ function subscribeToGroupCallSignals() {
 
   return groupCallSubscriptionQueue;
 }
+
+async function pollIncomingCallInvitations() {
+  const requestedUserId = currentUser?.id;
+  if (!requestedUserId) return;
+  const cutoff = new Date(Date.now() - 90000).toISOString();
+  try {
+    const [privateResult, groupResult] = await Promise.all([
+      supabase.from("call_signals").select("*")
+        .eq("recipient_id", requestedUserId).eq("signal_type", "invite")
+        .gte("created_at", cutoff).order("created_at", { ascending: true }).limit(5),
+      supabase.from("chat_group_call_signals").select("*")
+        .eq("recipient_id", requestedUserId).eq("signal_type", "invite")
+        .gte("created_at", cutoff).order("created_at", { ascending: true }).limit(5)
+    ]);
+    if (currentUser?.id !== requestedUserId) return;
+    if (privateResult.error) console.warn("AUREON: respaldo de llamadas privadas:", privateResult.error);
+    if (groupResult.error) console.warn("AUREON: respaldo de llamadas grupales:", groupResult.error);
+    const invites = [
+      ...(privateResult.data || []).map(signal => ({ kind: "private", signal })),
+      ...(groupResult.data || []).map(signal => ({ kind: "group", signal }))
+    ].sort((a,b) => new Date(a.signal.created_at) - new Date(b.signal.created_at));
+
+    for (const item of invites) {
+      if (currentUser?.id !== requestedUserId) return;
+      if (item.kind === "private") await processCallSignal(item.signal);
+      else await processGroupCallSignal(item.signal);
+    }
+  } catch (error) {
+    console.error("AUREON: no se pudieron comprobar llamadas entrantes:", error);
+  }
+}
+
+function startIncomingCallFallback() {
+  if (callFallbackPollTimer) window.clearInterval(callFallbackPollTimer);
+  callFallbackPollTimer = null;
+  if (!currentUser) return;
+  pollIncomingCallInvitations();
+  callFallbackPollTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") pollIncomingCallInvitations();
+  }, 3500);
+}
+
+function stopIncomingCallFallback() {
+  if (callFallbackPollTimer) window.clearInterval(callFallbackPollTimer);
+  callFallbackPollTimer = null;
+}
+
 async function beginGroupCall(video) {
   if (!currentUser || !activeGroup) return;
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
