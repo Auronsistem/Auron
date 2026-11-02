@@ -85,16 +85,18 @@ function setSettingsVisibility(isOpen) {
   document.body.classList.toggle("settings-open", Boolean(isOpen));
 }
 
-function openSettings() {
+async function openSettings() {
   if (!currentUser) { openAuth(); return; }
   const section = $("#configuracion");
   if (!section) return;
   const parentalPanel = $("#parental-settings-panel");
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
   setSettingsVisibility(true);
-  loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error));
-  loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar las solicitudes y estados:", error));
   showSection("configuracion");
+  await Promise.all([
+    loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error)),
+    loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar las solicitudes y estados:", error))
+  ]);
   section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1202,6 +1204,7 @@ async function updateSession(session) {
   subscribeToCallSignals();
   subscribeToGroupCallSignals();
   subscribeToMessageEvents();
+  subscribeToFriendRequestEvents();
   if (currentUser) {
     loadPendingNotificationCall();
     startIncomingCallFallback();
@@ -1218,8 +1221,7 @@ async function updateSession(session) {
     await loadFriendsStatuses();
     const notificationRoute = new URLSearchParams(window.location.search).get("openSettings");
     if (notificationRoute === "friend-requests") {
-      openSettings();
-      $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"});
+      openSettings().then(() => $("#settings-friend-requests")?.scrollIntoView({behavior:"smooth",block:"start"}));
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete("openSettings");
       window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.hash);
@@ -1233,6 +1235,15 @@ async function updateSession(session) {
       supabase.removeChannel(messageRealtimeChannel);
       messageRealtimeChannel = null;
       messageRealtimeUserId = null;
+    }
+    if (friendRequestRealtimeChannel) {
+      supabase.removeChannel(friendRequestRealtimeChannel).catch(error => console.warn("No se pudo cerrar el canal de solicitudes:", error));
+      friendRequestRealtimeChannel = null;
+      friendRequestRealtimeUserId = null;
+    }
+    if (friendRequestReconnectTimer) {
+      window.clearTimeout(friendRequestReconnectTimer);
+      friendRequestReconnectTimer = null;
     }
     cleanupGroupCall();
     stopPlayer();
@@ -1892,6 +1903,27 @@ let statusStoryGroups = [];
 let activeStatusGroupIndex = -1;
 let activeStatusPostIndex = 0;
 let statusViewerRenderToken = 0;
+let statusRealtimeAudio = null;
+let friendRequestRealtimeChannel = null;
+let friendRequestRealtimeUserId = null;
+let friendRequestReconnectTimer = null;
+const handledFriendRequestEvents = new Set();
+
+function updateFriendRequestBadge(count) {
+  const badge = $("#friend-request-count");
+  if (!badge) return;
+  const safeCount = Math.max(0, Number(count) || 0);
+  badge.textContent = safeCount > 99 ? "99+" : String(safeCount);
+  badge.hidden = safeCount === 0;
+  badge.setAttribute("aria-label", safeCount + (safeCount === 1 ? " solicitud pendiente" : " solicitudes pendientes"));
+}
+function stopStatusMusic() {
+  if (!statusRealtimeAudio) return;
+  statusRealtimeAudio.pause();
+  statusRealtimeAudio.removeAttribute("src");
+  statusRealtimeAudio.load();
+  statusRealtimeAudio = null;
+}
 
 function statusNotice(message, error = false) {
   if (!statusFeedback) return;
@@ -1976,6 +2008,7 @@ async function loadFriendsStatuses() {
     showEmpty(statusFeed, "Inicia sesión para ver los estados de tus amigos.");
     showEmpty(friendRequestsList, "Inicia sesión para ver tus solicitudes.");
     showEmpty(statusStoriesStrip, "Inicia sesión para ver los estados.");
+    updateFriendRequestBadge(0);
     statusStoryGroups = [];
     return;
   }
@@ -1988,6 +2021,7 @@ async function loadFriendsStatuses() {
     .eq("status", "pending")
     .order("created_at", { ascending: false });
 
+  updateFriendRequestBadge(requestError ? 0 : (requests || []).length);
   if (requestError) {
     showEmpty(friendRequestsList, "No se pudieron cargar las solicitudes. Comprueba la actualización de Amigos.");
     console.warn("Error al cargar solicitudes de amistad:", requestError);
@@ -2002,7 +2036,7 @@ async function loadFriendsStatuses() {
 
   const { data: posts, error: postsError } = await supabase
     .from("status_posts")
-    .select("id,user_id,media_type,media_url,caption,music_title,created_at,expires_at")
+    .select("id,user_id,media_type,media_url,caption,music_title,music_url,created_at,expires_at")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: true })
     .limit(200);
@@ -2082,7 +2116,67 @@ async function loadFriendsStatuses() {
     statusFeed.append(card);
   }
 }
+async function handleIncomingFriendRequestEvent(row) {
+  const recipientId = currentUser?.id;
+  if (!recipientId || !row || row.recipient_id !== recipientId || row.status !== "pending") return;
+  const eventKey = String(row.id || "") + ":" + String(row.created_at || row.updated_at || "");
+  if (!eventKey || handledFriendRequestEvents.has(eventKey)) return;
+  handledFriendRequestEvents.add(eventKey);
+  if (handledFriendRequestEvents.size > 300) handledFriendRequestEvents.clear();
+
+  await openSettings();
+  if (currentUser?.id !== recipientId) return;
+  $("#settings-friend-requests")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function subscribeToFriendRequestEvents() {
+  const requestedUserId = currentUser?.id || null;
+  if (friendRequestRealtimeChannel && friendRequestRealtimeUserId === requestedUserId) return;
+  if (friendRequestRealtimeChannel) {
+    const previous = friendRequestRealtimeChannel;
+    friendRequestRealtimeChannel = null;
+    friendRequestRealtimeUserId = null;
+    supabase.removeChannel(previous).catch(error => console.warn("No se pudo cerrar el canal de solicitudes:", error));
+  }
+  if (friendRequestReconnectTimer) {
+    window.clearTimeout(friendRequestReconnectTimer);
+    friendRequestReconnectTimer = null;
+  }
+  if (!requestedUserId) return;
+
+  const channel = supabase.channel("friend-request-events-" + requestedUserId + "-" + crypto.randomUUID())
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "friend_requests",
+      filter: "recipient_id=eq." + requestedUserId
+    }, ({ new: row }) => {
+      handleIncomingFriendRequestEvent(row).catch(error => console.error("No se pudo mostrar la solicitud recibida:", error));
+    })
+    .on("postgres_changes", {
+      event: "UPDATE", schema: "public", table: "friend_requests",
+      filter: "recipient_id=eq." + requestedUserId
+    }, ({ new: row }) => {
+      handleIncomingFriendRequestEvent(row).catch(error => console.error("No se pudo actualizar la solicitud recibida:", error));
+    })
+    .subscribe((status, error) => {
+      if (status === "SUBSCRIBED") {
+        console.info("AUREON: solicitudes de amistad en tiempo real conectadas.");
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error("AUREON: no se pudo conectar el canal de solicitudes:", error);
+        friendRequestRealtimeUserId = null;
+        if (friendRequestReconnectTimer) window.clearTimeout(friendRequestReconnectTimer);
+        friendRequestReconnectTimer = window.setTimeout(() => {
+          friendRequestReconnectTimer = null;
+          if (currentUser?.id === requestedUserId) subscribeToFriendRequestEvents();
+        }, 2500);
+      }
+    });
+
+  friendRequestRealtimeChannel = channel;
+  friendRequestRealtimeUserId = requestedUserId;
+}
+
 async function renderStatusStory() {
+  stopStatusMusic();
   const group = statusStoryGroups[activeStatusGroupIndex];
   if (!group || !statusViewerDialog || !statusViewerContent) return;
   const post = group.posts[activeStatusPostIndex];
@@ -2151,7 +2245,52 @@ async function renderStatusStory() {
     caption.textContent = post.caption;
     statusViewerContent.append(caption);
   }
-  if (post.music_title) {
+  if (post.music_url) {
+    const musicUrl = await getStatusMediaUrl(post.music_url);
+    if (renderToken !== statusViewerRenderToken) return;
+    const musicPanel = document.createElement("section");
+    musicPanel.className = "status-viewer-music-panel";
+    const musicLabel = document.createElement("p");
+    musicLabel.className = "status-viewer-music";
+    musicLabel.textContent = "♫ " + (post.music_title || "Música del estado");
+    musicPanel.append(musicLabel);
+    if (musicUrl) {
+      const audio = document.createElement("audio");
+      audio.className = "status-viewer-audio";
+      audio.src = musicUrl;
+      audio.controls = true;
+      audio.autoplay = true;
+      audio.loop = true;
+      audio.preload = "auto";
+      audio.setAttribute("aria-label", "Música de este estado");
+      statusRealtimeAudio = audio;
+      audio.addEventListener("error", () => {
+        if (renderToken !== statusViewerRenderToken) return;
+        const errorText = document.createElement("small");
+        errorText.className = "muted";
+        errorText.textContent = "No se pudo reproducir esta música. Prueba con el botón de reproducir.";
+        musicPanel.append(errorText);
+      }, { once: true });
+      musicPanel.append(audio);
+      statusViewerContent.append(musicPanel);
+      const playback = audio.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => {
+          if (renderToken !== statusViewerRenderToken) return;
+          const hint = document.createElement("small");
+          hint.className = "muted";
+          hint.textContent = "Tu navegador bloqueó el inicio automático. Pulsa ▶ en el reproductor para escucharla.";
+          musicPanel.append(hint);
+        });
+      }
+    } else {
+      const unavailable = document.createElement("small");
+      unavailable.className = "muted";
+      unavailable.textContent = "No se pudo cargar el archivo de música.";
+      musicPanel.append(unavailable);
+      statusViewerContent.append(musicPanel);
+    }
+  } else if (post.music_title) {
     const music = document.createElement("p");
     music.className = "status-viewer-music";
     music.textContent = "♫ " + post.music_title;
@@ -2194,6 +2333,7 @@ function moveStatusStory(direction) {
 $("#status-story-prev")?.addEventListener("click", () => moveStatusStory(-1));
 $("#status-story-next")?.addEventListener("click", () => moveStatusStory(1));
 $("#status-viewer-close")?.addEventListener("click", () => statusViewerDialog?.close());
+statusViewerDialog?.addEventListener("close", stopStatusMusic);
 statusViewerDialog?.addEventListener("click", event => {
   if (event.target === statusViewerDialog) statusViewerDialog.close();
 });
@@ -2233,26 +2373,44 @@ friendRequestsList?.addEventListener("click", async event => {
 statusForm?.addEventListener("submit", async event => {
   event.preventDefault();
   if (!currentUser) { statusNotice("Inicia sesión para publicar un estado.", true); return; }
+
   const caption = statusText($("#status-caption")?.value);
-  const musicTitle = statusText($("#status-music-title")?.value).slice(0, 120);
+  const musicTitleInput = statusText($("#status-music-title")?.value).slice(0, 120);
   const file = $("#status-media")?.files?.[0] || null;
+  const musicFile = $("#status-music-file")?.files?.[0] || null;
   const button = statusForm.querySelector('button[type="submit"]');
-  if (!caption && !file) {
-    statusNotice("Escribe algo o selecciona una foto o video.", true);
+  if (!caption && !file && !musicFile) {
+    statusNotice("Escribe algo, elige una foto o video, o añade una canción.", true);
     return;
   }
-  const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
-  if (file && !supportedTypes.has(file.type)) {
+
+  const supportedMediaTypes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
+  const audioExtensions = new Map([
+    ["audio/mpeg", "mp3"], ["audio/mp3", "mp3"], ["audio/mp4", "m4a"],
+    ["audio/x-m4a", "m4a"], ["audio/aac", "aac"], ["audio/ogg", "ogg"],
+    ["audio/wav", "wav"], ["audio/x-wav", "wav"], ["audio/webm", "webm"]
+  ]);
+  if (file && !supportedMediaTypes.has(file.type)) {
     statusNotice("Usa una foto JPG, PNG o WEBP, o un video MP4 o WEBM.", true);
     return;
   }
-  if (file && file.size > 50 * 1024 * 1024) {
-    statusNotice("El archivo no puede superar 50 MB.", true);
+  if (musicFile && !audioExtensions.has(musicFile.type)) {
+    statusNotice("La música debe ser MP3, M4A, AAC, OGG, WAV o WEBM.", true);
     return;
   }
+  if (file && file.size > 50 * 1024 * 1024) {
+    statusNotice("La foto o el video no puede superar 50 MB.", true);
+    return;
+  }
+  if (musicFile && musicFile.size > 20 * 1024 * 1024) {
+    statusNotice("La música no puede superar 20 MB.", true);
+    return;
+  }
+
   if (button) button.disabled = true;
   statusNotice("Publicando tu estado...");
   let storagePath = null;
+  let musicStoragePath = null;
   try {
     let mediaType = "text";
     if (file) {
@@ -2269,22 +2427,36 @@ statusForm?.addEventListener("submit", async event => {
       });
       if (uploadError) throw uploadError;
     }
+    if (musicFile) {
+      const extension = audioExtensions.get(musicFile.type);
+      musicStoragePath = currentUser.id + "/music-" + crypto.randomUUID() + "." + extension;
+      const { error: musicUploadError } = await supabase.storage.from("aureon-statuses").upload(musicStoragePath, musicFile, {
+        contentType: musicFile.type,
+        cacheControl: "3600",
+        upsert: false
+      });
+      if (musicUploadError) throw musicUploadError;
+    }
+
+    const guessedTitle = musicFile ? musicFile.name.replace(/\.[^.]+$/, "") : "";
     const { error: insertError } = await supabase.from("status_posts").insert({
       user_id: currentUser.id,
       media_type: mediaType,
       media_url: storagePath,
       caption: caption || null,
-      music_title: musicTitle || null
+      music_title: musicTitleInput || guessedTitle || null,
+      music_url: musicStoragePath
     });
     if (insertError) throw insertError;
     statusForm.reset();
-    statusNotice("¡Estado publicado! Estará disponible para tus amigos durante 24 horas.");
+    statusNotice("¡Estado publicado! Tus amigos podrán verlo durante 24 horas y la música sonará al abrirlo.");
     await loadFriendsStatuses();
   } catch (error) {
     console.error("No se pudo publicar el estado:", error);
-    if (storagePath) {
-      const { error: cleanupError } = await supabase.storage.from("aureon-statuses").remove([storagePath]);
-      if (cleanupError) console.warn("No se pudo limpiar el archivo del estado:", cleanupError);
+    const filesToRemove = [storagePath, musicStoragePath].filter(Boolean);
+    if (filesToRemove.length) {
+      const { error: cleanupError } = await supabase.storage.from("aureon-statuses").remove(filesToRemove);
+      if (cleanupError) console.warn("No se pudieron limpiar los archivos del estado:", cleanupError);
     }
     statusNotice(error?.message || "No se pudo publicar el estado.", true);
   } finally {
@@ -2293,7 +2465,20 @@ statusForm?.addEventListener("submit", async event => {
 });
 
 $("#states-nav-link")?.addEventListener("click", () => {
-  loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error));
+  const section = $("#estados");
+  const button = $("#states-nav-link");
+  if (!section || !button) return;
+  const shouldOpen = section.hidden;
+  section.hidden = !shouldOpen;
+  button.setAttribute("aria-expanded", String(shouldOpen));
+  button.classList.toggle("active", shouldOpen);
+  if (shouldOpen) {
+    showSection("estados");
+    button.classList.add("active");
+    loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error));
+  } else {
+    showSection("inicio");
+  }
 });
 document.querySelectorAll(".mobile-nav a[href='#estados']").forEach(link => {
   link.addEventListener("click", () => loadFriendsStatuses().catch(error => console.warn(error)));
