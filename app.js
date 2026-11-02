@@ -2487,20 +2487,145 @@ const AUREON_STICKERS = [
   { emoji: "💯", label: "Cien" }, { emoji: "👍", label: "Me gusta" }
 ];
 
+const CHAT_MEDIA_BUCKET = "chat-media";
+const CHAT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+const CHAT_MEDIA_TYPES = new Map([
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"]
+]);
+
 function isAllowedGifUrl(raw) {
   try {
     const url = new URL(raw);
     const host = url.hostname.toLowerCase();
-    const allowedHost = host === "media.tenor.com" || /^media\d*\.giphy\.com$/.test(host);
-    return url.protocol === "https:" && allowedHost && /\.gif$/i.test(url.pathname) ? url.href : null;
+    const allowedHost = host === "media.tenor.com" ||
+      /^media\d*\.giphy\.com$/.test(host) ||
+      host === "j.gifs.com";
+    return url.protocol === "https:" && allowedHost && /\.(gif|webp)$/i.test(url.pathname)
+      ? url.href
+      : null;
   } catch (_) {
     return null;
   }
 }
 
-function buildMessageBody(container, rawBody) {
+function currentChatTarget() {
+  if (!currentUser) return null;
+  if (activeGroup?.id) return { type: "group", id: activeGroup.id };
+  if (activeConversation?.id) return { type: "private", id: activeConversation.id };
+  return null;
+}
+
+function setMessagePickerTab(tab) {
+  const picker = $("#message-picker");
+  const emojiPanel = $("#emoji-picker-panel");
+  const gifPanel = $("#gif-picker-panel");
+  if (!picker || !emojiPanel || !gifPanel) return;
+  const showEmoji = tab !== "gif";
+  emojiPanel.hidden = !showEmoji;
+  gifPanel.hidden = showEmoji;
+  for (const button of picker.querySelectorAll("[data-message-tab]")) {
+    const active = button.dataset.messageTab === (showEmoji ? "emoji" : "gif");
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  }
+}
+
+async function sendChatBody(body, target = currentChatTarget()) {
+  if (!currentUser || !target || !body) return false;
+  const sendButton = messageForm?.querySelector('button[type="submit"]');
+  if (sendButton) sendButton.disabled = true;
+  showMessage($("#message-status"), "Enviando...");
+  try {
+    if (target.type === "group") {
+      const { data: sentGroupMessage, error } = await supabase.from("chat_group_messages")
+        .insert({ group_id: target.id, sender_id: currentUser.id, body })
+        .select("id").single();
+      if (error) throw error;
+      playAureonTone("bird");
+      showMessage($("#message-status"), "Mensaje enviado al grupo.");
+      notifyAureonPush("group-message", { messageId: sentGroupMessage.id });
+      if (activeGroup?.id === target.id) await loadGroupMessages(target.id);
+      return true;
+    }
+
+    const { data: sentMessage, error } = await supabase.from("messages")
+      .insert({ conversation_id: target.id, sender_id: currentUser.id, body })
+      .select("id").single();
+    if (error) throw error;
+    playAureonTone("bird");
+    showMessage($("#message-status"), "Mensaje enviado.");
+    notifyAureonPush("message", { messageId: sentMessage.id });
+    await supabase.from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", target.id);
+    if (activeConversation?.id === target.id) {
+      await loadMessages(target.id);
+      await loadConversations();
+    }
+    return true;
+  } catch (error) {
+    console.error("No se pudo enviar el mensaje de AUREON:", error);
+    showMessage($("#message-status"), error?.message || "No se pudo enviar. Intenta otra vez.", true);
+    return false;
+  } finally {
+    if (sendButton) sendButton.disabled = false;
+  }
+}
+
+async function uploadAndSendChatMedia(file) {
+  const target = currentChatTarget();
+  if (!target) {
+    showMessage($("#message-status"), "Abre primero una conversación o un grupo.", true);
+    return;
+  }
+  if (!file || !CHAT_MEDIA_TYPES.has(file.type)) {
+    showMessage($("#message-status"), "El archivo debe ser GIF, WEBP, PNG o JPG.", true);
+    return;
+  }
+  if (file.size > CHAT_MEDIA_MAX_BYTES) {
+    showMessage($("#message-status"), "El archivo supera el límite de 5 MB.", true);
+    return;
+  }
+  if (file.size <= 0) {
+    showMessage($("#message-status"), "El archivo está vacío.", true);
+    return;
+  }
+
+  const extension = CHAT_MEDIA_TYPES.get(file.type);
+  const folder = target.type === "group" ? "groups" : "private";
+  const path = folder + "/" + target.id + "/" + currentUser.id + "/" + crypto.randomUUID() + "." + extension;
+  const picker = $("#message-picker");
+  const fileInput = $("#gif-file-input");
+  if (fileInput) fileInput.value = "";
+  if (picker) picker.hidden = true;
+
+  showMessage($("#message-status"), "Subiendo GIF o imagen...");
+  const { error: uploadError } = await supabase.storage.from(CHAT_MEDIA_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false
+  });
+  if (uploadError) {
+    console.error("No se pudo subir el GIF de chat:", uploadError);
+    showMessage($("#message-status"), uploadError.message || "No se pudo subir el archivo.", true);
+    return;
+  }
+
+  const sent = await sendChatBody("AUREON_MEDIA_FILE:" + path, target);
+  if (!sent) {
+    const { error: removeError } = await supabase.storage.from(CHAT_MEDIA_BUCKET).remove([path]);
+    if (removeError) console.warn("No se pudo limpiar el archivo que no se envió:", removeError);
+  }
+}
+
+async function buildMessageBody(container, rawBody) {
   const stickerPrefix = "AUREON_STICKER:";
   const gifPrefix = "AUREON_GIF:";
+  const mediaPrefix = "AUREON_MEDIA_FILE:";
+
   if (rawBody?.startsWith(stickerPrefix)) {
     const emoji = rawBody.slice(stickerPrefix.length);
     if (AUREON_STICKERS.some(sticker => sticker.emoji === emoji)) {
@@ -2510,6 +2635,29 @@ function buildMessageBody(container, rawBody) {
       return;
     }
   }
+
+  if (rawBody?.startsWith(mediaPrefix)) {
+    const path = rawBody.slice(mediaPrefix.length);
+    const safePath = /^(private|groups)\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(gif|webp|png|jpg)$/.test(path);
+    if (!safePath) {
+      container.textContent = "Archivo multimedia no válido.";
+      return;
+    }
+    const { data, error } = await supabase.storage.from(CHAT_MEDIA_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
+    if (error || !data?.signedUrl) {
+      container.textContent = "No se pudo cargar este GIF o sticker.";
+      return;
+    }
+    const image = document.createElement("img");
+    image.src = data.signedUrl;
+    image.alt = "GIF o sticker";
+    image.loading = "lazy";
+    image.className = "message-gif message-media-file";
+    image.onerror = () => image.replaceWith(document.createTextNode("No se pudo cargar este GIF o sticker."));
+    container.append(image);
+    return;
+  }
+
   if (rawBody?.startsWith(gifPrefix)) {
     const gifUrl = isAllowedGifUrl(rawBody.slice(gifPrefix.length));
     if (gifUrl) {
@@ -2530,9 +2678,8 @@ function buildMessageBody(container, rawBody) {
 }
 
 function initializeMessagePickers() {
-  const stickerPicker = $("#sticker-picker");
+  const picker = $("#message-picker");
   const stickerGrid = $("#sticker-grid");
-  const gifPicker = $("#gif-picker");
   if (stickerGrid && !stickerGrid.childElementCount) {
     for (const sticker of AUREON_STICKERS) {
       const button = document.createElement("button");
@@ -2541,49 +2688,89 @@ function initializeMessagePickers() {
       button.textContent = sticker.emoji;
       button.title = sticker.label;
       button.setAttribute("aria-label", "Enviar sticker: " + sticker.label);
-      button.addEventListener("click", () => {
-        const input = $("#message-input");
-        if (!currentUser || (!activeConversation && !activeGroup) || !input) return;
-        input.value = "AUREON_STICKER:" + sticker.emoji;
-        stickerPicker.hidden = true;
-        gifPicker.hidden = true;
-        messageForm.requestSubmit();
+      button.addEventListener("click", async () => {
+        const target = currentChatTarget();
+        if (!target) return;
+        if (picker) picker.hidden = true;
+        await sendChatBody("AUREON_STICKER:" + sticker.emoji, target);
       });
       stickerGrid.append(button);
     }
   }
-  $("#open-stickers")?.addEventListener("click", () => {
-    if (!currentUser || (!activeConversation && !activeGroup)) return;
-    stickerPicker.hidden = !stickerPicker.hidden;
-    gifPicker.hidden = true;
+
+  $("#open-message-picker")?.addEventListener("click", () => {
+    if (!currentChatTarget() || !picker) return;
+    picker.hidden = !picker.hidden;
+    if (picker.hidden) return;
+    setMessagePickerTab("emoji");
   });
-  $("#open-gif")?.addEventListener("click", () => {
-    if (!currentUser || (!activeConversation && !activeGroup)) return;
-    gifPicker.hidden = !gifPicker.hidden;
-    stickerPicker.hidden = true;
-  });
-  $("#search-gif")?.addEventListener("click", () => {
-    const query = $("#gif-search")?.value.trim() || "";
-    if (!query) {
-      showMessage($("#message-status"), "Escribe qué GIF estás buscando.", true);
+
+  for (const button of picker?.querySelectorAll("[data-message-tab]") || []) {
+    button.addEventListener("click", () => setMessagePickerTab(button.dataset.messageTab));
+  }
+
+  $("#choose-gif-file")?.addEventListener("click", () => {
+    if (!currentChatTarget()) {
+      showMessage($("#message-status"), "Abre primero una conversación o un grupo.", true);
       return;
     }
-    const searchUrl = "https://tenor.com/search/" + encodeURIComponent(query) + "-gifs";
-    window.open(searchUrl, "_blank", "noopener,noreferrer");
+    $("#gif-file-input")?.click();
   });
-  $("#send-gif-link")?.addEventListener("click", () => {
-    const url = isAllowedGifUrl($("#gif-url")?.value.trim() || "");
-    if (!url) {
-      showMessage($("#message-status"), "Pega un enlace directo .gif de media.tenor.com o media*.giphy.com.", true);
-      return;
+
+  $("#gif-file-input")?.addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (file) await uploadAndSendChatMedia(file);
+  });
+
+  document.addEventListener("paste", async event => {
+    const targetElement = event.target;
+    if (!(targetElement instanceof HTMLElement) ||
+        !targetElement.closest("#message-input, #gif-paste-zone")) return;
+
+    const clipboardItems = Array.from(event.clipboardData?.items || []);
+    const imageItem = clipboardItems.find(item =>
+      item.kind === "file" && CHAT_MEDIA_TYPES.has(item.type)
+    );
+    if (imageItem) {
+      const file = imageItem.getAsFile();
+      if (file) {
+        event.preventDefault();
+        await uploadAndSendChatMedia(file);
+        return;
+      }
     }
-    const input = $("#message-input");
-    if (!currentUser || (!activeConversation && !activeGroup) || !input) return;
-    input.value = "AUREON_GIF:" + url;
-    $("#gif-url").value = "";
-    if (gifPicker) gifPicker.hidden = true;
-    if (stickerPicker) stickerPicker.hidden = true;
-    messageForm.requestSubmit();
+
+    const html = event.clipboardData?.getData("text/html") || "";
+    if (html) {
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const source = parsed.querySelector("img")?.getAttribute("src") || "";
+      const url = isAllowedGifUrl(source);
+      if (url) {
+        event.preventDefault();
+        const target = currentChatTarget();
+        if (target) await sendChatBody("AUREON_GIF:" + url, target);
+        const zone = $("#gif-paste-zone");
+        if (zone) zone.textContent = "";
+        return;
+      }
+    }
+
+    const plainText = event.clipboardData?.getData("text/plain")?.trim() || "";
+    const directUrl = isAllowedGifUrl(plainText);
+    if (directUrl) {
+      event.preventDefault();
+      const target = currentChatTarget();
+      if (target) await sendChatBody("AUREON_GIF:" + directUrl, target);
+      const zone = $("#gif-paste-zone");
+      if (zone) zone.textContent = "";
+    }
+  });
+
+  $("#gif-paste-zone")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      showMessage($("#message-status"), "Pega aquí una imagen GIF copiada o elige un archivo con el botón de arriba.");
+    }
   });
 }
 initializeMessagePickers();
@@ -2601,7 +2788,7 @@ async function loadMessages(conversationId, quiet = false) {
   for (const message of messages) {
     const bubble = document.createElement("article");
     bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
-    const body = document.createElement("div"); body.className = "message-body"; buildMessageBody(body, message.body);
+    const body = document.createElement("div"); body.className = "message-body"; await buildMessageBody(body, message.body);
     const time = document.createElement("time"); time.dateTime = message.created_at;
     time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     bubble.append(body, time); messageList.append(bubble);
@@ -2611,35 +2798,13 @@ async function loadMessages(conversationId, quiet = false) {
   if (unread.length) await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unread);
 }
 messageForm?.addEventListener("submit", async event => {
-  event.preventDefault(); if (!currentUser || (!activeConversation && !activeGroup)) return;
-  const input = $("#message-input"); const body = input?.value.trim() || "";
-  const button = messageForm.querySelector('button[type="submit"]');
-  if (!body) return; if (button) button.disabled = true;
-  showMessage($("#message-status"), "Enviando...");
-  if (activeGroup) {
-    const { data: sentGroupMessage, error } = await supabase.from("chat_group_messages")
-      .insert({ group_id: activeGroup.id, sender_id: currentUser.id, body })
-      .select("id").single();
-    if (error) { showMessage($("#message-status"), error.message || "No se pudo enviar el mensaje al grupo.", true); console.error(error); }
-    else {
-      input.value = ""; playAureonTone("bird"); showMessage($("#message-status"), "Mensaje enviado al grupo.");
-      notifyAureonPush("group-message", { messageId: sentGroupMessage.id });
-      await loadGroupMessages(activeGroup.id);
-    }
-    if (button) button.disabled = false;
-    return;
-  }
-  const { data: sentMessage, error } = await supabase.from("messages")
-    .insert({ conversation_id: activeConversation.id, sender_id: currentUser.id, body })
-    .select("id").single();
-  if (error) { showMessage($("#message-status"), "No se pudo enviar. Intenta otra vez.", true); console.error(error); }
-  else {
-    input.value = ""; playAureonTone("bird"); showMessage($("#message-status"), "Mensaje enviado.");
-    notifyAureonPush("message", { messageId: sentMessage.id });
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", activeConversation.id);
-    await loadMessages(activeConversation.id); await loadConversations();
-  }
-  if (button) button.disabled = false;
+  event.preventDefault();
+  const input = $("#message-input");
+  const body = input?.value.trim() || "";
+  const target = currentChatTarget();
+  if (!body || !target) return;
+  const sent = await sendChatBody(body, target);
+  if (sent && input?.value.trim() === body) input.value = "";
 });
 $("#new-conversation")?.addEventListener("click", () => peopleSearch?.focus());
 peopleSearch?.addEventListener("input", () => {
@@ -2785,7 +2950,7 @@ async function loadGroupMessages(groupId, quiet = false) {
       sender.textContent = displayName(profiles.get(message.sender_id));
       bubble.append(sender);
     }
-    const body = document.createElement("div"); body.className = "message-body"; buildMessageBody(body, message.body);
+    const body = document.createElement("div"); body.className = "message-body"; await buildMessageBody(body, message.body);
     const time = document.createElement("time"); time.dateTime = message.created_at;
     time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     bubble.append(body, time); messageList.append(bubble);
