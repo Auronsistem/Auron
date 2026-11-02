@@ -3639,6 +3639,44 @@ $("#cancel-friend-request")?.addEventListener("click", async () => {
   }
 });
 
+sendFriendRequestButton?.addEventListener("click", async () => {
+  const peerId = activePeerProfile?.id;
+  if (!currentUser || !peerId || peerId === currentUser.id) {
+    if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo identificar al usuario. Vuelve a abrir su información.";
+    return;
+  }
+  sendFriendRequestButton.disabled = true;
+  if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
+  try {
+    const { data: result, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
+    if (error) throw error;
+    if (result === "friends") {
+      if (userInfoFeedback) userInfoFeedback.textContent = "Ya son amigos.";
+    } else if (result === "pending") {
+      if (userInfoFeedback) userInfoFeedback.textContent = "Ya existe una solicitud pendiente.";
+    } else {
+      if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud enviada correctamente.";
+    }
+    await openUserInfo();
+    await loadFriendRequestsOnly();
+    if (result === "sent" || result === "resent") {
+      const { data: pending } = await supabase.from("friend_requests").select("id")
+        .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (pending?.id) {
+        const { error: pushError } = await invokeAureonPush({
+          action: "friend-request", recipientId: peerId, requestId: pending.id
+        });
+        if (pushError) console.warn("No se pudo enviar notificación push de amistad:", pushError);
+      }
+    }
+  } catch (error) {
+    console.error("AUREON: error enviando solicitud de amistad:", error);
+    if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo enviar la solicitud: " + (error?.message || "error desconocido");
+    sendFriendRequestButton.disabled = false;
+  }
+});
+
 let activeDirectChatBlockStatus = { blockedByMe:false, blockedMe:false };
 function updatePrivateChatControls() {
   const blocked = activeDirectChatBlockStatus.blockedByMe || activeDirectChatBlockStatus.blockedMe;
