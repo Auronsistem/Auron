@@ -1032,3 +1032,52 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 .translation-toggle-row label { font-weight:700; }
 .translation-toggle-row input { width:18px; height:18px; }
 .translation-note { font-size:12px; line-height:1.5; }
+
+
+/* AUREON · interfaz sencilla de llamadas */
+.call-dialog {
+  width:min(100%, 460px); max-width:460px; max-height:92dvh; padding:0;
+  border:1px solid rgba(255,255,255,.1); border-radius:26px; overflow:hidden;
+  color:#f7f8fc; background:#111827;
+}
+.call-dialog::backdrop { background:rgba(3,7,18,.78); backdrop-filter:blur(7px); }
+.call-screen { min-height:520px; max-height:92dvh; padding:20px 18px 24px; gap:0;
+  justify-content:space-between; background:radial-gradient(ellipse at 50% 28%,#253653 0%,#111827 58%,#0b1220 100%); }
+.call-topbar { width:100%; display:flex; justify-content:space-between; align-items:center; }
+.call-brand { font-size:12px; font-weight:800; letter-spacing:2px; color:#b9c9e7; }
+.call-live-indicator { display:flex; align-items:center; gap:7px; color:#cbd5e1; font-size:10px; letter-spacing:1px; }
+.call-live-indicator i { width:7px; height:7px; border-radius:50%; background:#39d98a; box-shadow:0 0 10px #39d98a; }
+.call-person { display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 0 14px; }
+.call-avatar { width:112px; height:112px; display:grid; place-items:center; border-radius:50%;
+  color:white; font-size:42px; font-weight:700; background:linear-gradient(145deg,#526b9b,#283a5a);
+  border:4px solid rgba(255,255,255,.12); box-shadow:0 12px 36px rgba(0,0,0,.24); }
+.call-person h2 { margin:4px 0 0; font-size:24px; }
+.call-person .muted { margin:0; color:#b8c5d9; font-size:14px; }
+.call-media { position:relative; width:100%; min-height:0; display:flex; justify-content:center; align-items:center; }
+#remote-call-video { display:none; width:100%; height: min(48dvh,430px); max-height:430px; aspect-ratio:9/16;
+  background:#050912; border-radius:18px; object-fit:cover; }
+#local-call-video { display:none; position:absolute; right:12px; top:12px; width:94px; height:138px;
+  max-height:none; border:2px solid rgba(255,255,255,.85); border-radius:14px; object-fit:cover; }
+.call-screen.is-video .call-person { display:none; }
+.call-screen.is-video #remote-call-video { display:block; }
+.call-screen.is-video #local-call-video { display:block; }
+.call-screen.is-video .call-media { flex:1; min-height:260px; }
+.call-screen.is-video #group-call-grid { display:grid; }
+.call-actions { width:100%; gap:12px; padding-top:20px; }
+.call-control { min-width:66px; min-height:70px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
+  padding:10px 12px; border:1px solid rgba(255,255,255,.14); border-radius:18px;
+  color:#f8fafc; background:rgba(255,255,255,.10); cursor:pointer; }
+.call-control span { width:38px; height:38px; display:grid; place-items:center; border-radius:50%; font-size:20px; background:rgba(255,255,255,.12); }
+.call-control small { font-size:11px; font-weight:600; }
+.call-control.call-accept span { background:#16a765; }
+.call-control.call-reject span,.call-control.call-end span { background:#e5484d; }
+.call-control.call-end { background:rgba(229,72,77,.13); }
+.call-incoming-actions,.call-active-actions { justify-content:center; }
+.call-dialog .group-call-grid { max-height:44dvh; overflow:auto; }
+.call-dialog .group-call-tile { border-color:rgba(255,255,255,.16); }
+@media(max-width:600px) {
+  .call-dialog { width:100%; max-width:none; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
+  .call-screen { min-height:100dvh; max-height:100dvh; padding:calc(18px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom)); }
+  .call-screen.is-video { padding-left:10px; padding-right:10px; }
+  .call-screen.is-video #remote-call-video { height:68dvh; max-height:68dvh; }
+}
