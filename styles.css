@@ -1287,3 +1287,13 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 }
 .parental-time-lock-panel h2 { margin:12px 0; }
 .parental-time-lock-icon { font-size:52px; }
+
+.side-link[hidden] { display:none !important; }
+.parental-child-list-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.parental-child-list-heading label { margin:0; }
