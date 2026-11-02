@@ -791,6 +791,43 @@ async function saveSelectedChildSettings(event) {
   }
 }
 
+
+async function permanentlyUnlinkSelectedChild() {
+  if (!guardianClient || !guardianUserId) {
+    parentalStatusMessage("Verifica primero el correo del apoderado.", true);
+    return;
+  }
+  const childId = $("#parental-child-select")?.value || "";
+  const select = $("#parental-child-select");
+  const childName = select?.selectedOptions?.[0]?.textContent || "esta cuenta";
+  if (!childId) {
+    parentalStatusMessage("Selecciona primero una cuenta supervisada.", true);
+    return;
+  }
+  const confirmed = window.confirm(
+    "¿Desvincular permanentemente " + childName + "?\n\n" +
+    "Se quitarán sus límites de tiempo y madurez. La cuenta recuperará su propia configuración. " +
+    "Este apoderado no podrá volver a vincular esa misma cuenta."
+  );
+  if (!confirmed) return;
+
+  const button = $("#parental-unlink-child");
+  if (button) button.disabled = true;
+  try {
+    const { data, error } = await guardianClient.rpc("unlink_parental_account", {
+      p_child_id: childId
+    });
+    if (error) throw error;
+    $("#parental-controls-form").hidden = true;
+    parentalStatusMessage(data?.message || "Cuenta desvinculada permanentemente. Ya no tiene controles parentales de este apoderado.");
+    await loadGuardianChildren();
+  } catch (error) {
+    parentalStatusMessage(error.message || "No se pudo desvincular la cuenta.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function showIncomingParentalRequests() {
   const host = $("#parental-child-panel");
   const list = $("#parental-pending-requests");
@@ -927,7 +964,15 @@ async function refreshParentalState() {
         console.warn("No se pudo registrar el tiempo de pantalla:", usageError);
         return;
       }
+      const wasSupervised = Boolean(parentalStatus.supervised);
       parentalStatus = data || parentalStatus;
+      if (wasSupervised && data?.supervised === false) {
+        await refreshParentalState();
+        await loadVideos();
+        await loadRecommendedYouTube();
+        await loadRecommendedShorts();
+        return;
+      }
       if (Number(parentalStatus.maturity_level ?? 0) !== previousMaturity) {
         await loadVideos();
         await loadRecommendedShorts();
@@ -949,6 +994,7 @@ $("#send-parental-request")?.addEventListener("click", requestChildSupervision);
 $("#parental-child-select")?.addEventListener("change", loadSelectedChildSettings);
 $("#refresh-parental-children")?.addEventListener("click", loadGuardianChildren);
 $("#parental-controls-form")?.addEventListener("submit", saveSelectedChildSettings);
+$("#parental-unlink-child")?.addEventListener("click", permanentlyUnlinkSelectedChild);
 
 async function updateSession(session) {
   const nextUser = session?.user || null;
