@@ -742,6 +742,18 @@ async function loadSelectedChildSettings() {
   }
   $("#parental-screen-time").value = String(data?.screen_time_minutes ?? 120);
   $("#parental-maturity").value = String(data?.maturity_level ?? 0);
+  const usageDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
+  const { data: usage } = await guardianClient.from("parental_usage")
+    .select("minutes_used")
+    .eq("user_id", childId)
+    .eq("usage_date", usageDate)
+    .maybeSingle();
+  const usedMinutes = Number(usage?.minutes_used || 0);
+  const maxMinutes = Number(data?.screen_time_minutes ?? 120);
+  const usageInfo = $("#parental-usage-info");
+  if (usageInfo) usageInfo.textContent = "Uso de hoy: " + usedMinutes + " de " + maxMinutes + " minutos.";
   $("#parental-controls-form").hidden = false;
 }
 
@@ -891,7 +903,15 @@ async function refreshParentalState() {
   if (parentalStatus.supervised) {
     setParentalScreenBlock(parentalStatus.blocked);
     parentalMinuteTimer = window.setInterval(async () => {
-      if (!currentUser || !parentalStatus.supervised || document.visibilityState !== "visible" || parentalScreenBlocked) return;
+      if (!currentUser || !parentalStatus.supervised || document.visibilityState !== "visible") return;
+      if (parentalScreenBlocked) {
+        const { data, error: statusError } = await supabase.rpc("get_parental_status");
+        if (!statusError && data) {
+          parentalStatus = data;
+          setParentalScreenBlock(Boolean(data.blocked));
+        }
+        return;
+      }
       const { data, error: usageError } = await supabase.rpc("record_parental_usage", { p_minutes: 1 });
       if (usageError) {
         console.warn("No se pudo registrar el tiempo de pantalla:", usageError);
