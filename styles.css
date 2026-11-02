@@ -1968,3 +1968,20 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 }
 
 .call-voice-waves:not(.is-speaking),.group-call-voice-waves:not(.is-speaking) { display:none; }
+
+/* Indicador también visible sobre el video durante una videollamada privada */
+.call-video-voice-waves {
+  position:absolute;z-index:5;left:50%;bottom:18px;transform:translateX(-50%);
+  display:flex;align-items:center;justify-content:center;gap:3px;
+  height:28px;min-width:52px;padding:3px 10px;border-radius:999px;
+  color:#35d9a0;background:rgba(5,12,22,.78);backdrop-filter:blur(6px);
+}
+.call-video-voice-waves[hidden] { display:none !important; }
+.call-video-voice-waves i { display:block;width:4px;height:5px;border-radius:99px;background:currentColor;opacity:.55; }
+.call-video-voice-waves.is-speaking i { opacity:1;animation:voice-wave 420ms ease-in-out infinite alternate; }
+.call-video-voice-waves.is-speaking i:nth-child(2) { animation-delay:80ms; }
+.call-video-voice-waves.is-speaking i:nth-child(3) { animation-delay:150ms; }
+.call-video-voice-waves.is-speaking i:nth-child(4) { animation-delay:220ms; }
+.call-video-voice-waves.is-speaking i:nth-child(5) { animation-delay:290ms; }
+.call-screen.is-video #call-voice-waves { display:none !important; }
+.call-screen:not(.is-video) #call-video-voice-waves { display:none !important; }
