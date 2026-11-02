@@ -3207,14 +3207,20 @@ sendFriendRequestButton?.addEventListener("click", async () => {
   if (!currentUser || !peerId || peerId === currentUser.id) return;
   sendFriendRequestButton.disabled = true;
   if (userInfoFeedback) userInfoFeedback.textContent = "Enviando solicitud…";
-  const { error } = await supabase.from("friend_requests").insert({sender_id:currentUser.id, recipient_id:peerId, status:"pending"});
+  const { data: requestStatus, error } = await supabase.rpc("send_friend_request", { p_recipient_id: peerId });
   if (error) {
     sendFriendRequestButton.disabled = false;
-    if (userInfoFeedback) userInfoFeedback.textContent = error.code === "23505" ? "Ya existe una solicitud entre estas cuentas." : "No se pudo enviar. La migración de amigos debe estar aplicada y la solicitud no debe existir ya.";
+    if (userInfoFeedback) userInfoFeedback.textContent = error.message || "No se pudo enviar la solicitud. Inténtalo otra vez.";
+    return;
+  }
+  if (requestStatus === "friends") {
+    if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Ya son amigos.";
+    if (userInfoFeedback) userInfoFeedback.textContent = "Esta cuenta ya está en tu lista de amigos.";
+    sendFriendRequestButton.hidden = true;
     return;
   }
   if (userInfoFriendStatus) userInfoFriendStatus.textContent = "Solicitud enviada. La otra persona la verá en Configuración.";
-  if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud de amistad enviada.";
+  if (userInfoFeedback) userInfoFeedback.textContent = requestStatus === "resent" ? "Solicitud de amistad enviada nuevamente." : "Solicitud de amistad enviada.";
   sendFriendRequestButton.textContent = "Solicitud enviada";
 });
 
