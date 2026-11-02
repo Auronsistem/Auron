@@ -53,9 +53,14 @@ self.addEventListener("notificationclick", (event) => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of windows) {
       if (client.url.startsWith(self.registration.scope) && "focus" in client) {
-        await client.focus();
-        client.postMessage({ type: "AUREON_CALL_ACTION", action, callId: data.callId || null });
-        if ("navigate" in client && client.url !== target) await client.navigate(target);
+        let activeClient = client;
+        if ("navigate" in client && client.url !== target) {
+          activeClient = (await client.navigate(target)) || client;
+        }
+        await activeClient.focus();
+        if (["accept", "reject"].includes(action)) {
+          activeClient.postMessage({ type: "AUREON_CALL_ACTION", action, callId: data.callId || null });
+        }
         return;
       }
     }
