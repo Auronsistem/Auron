@@ -3816,6 +3816,7 @@ async function prepareCallPeer() {
     }
     remoteCallVideo.srcObject = callRemoteStream;
     attachVoiceWaveform(callRemoteStream, $("#call-voice-waves"));
+    attachVoiceWaveform(callRemoteStream, $("#call-video-voice-waves"));
     try { await remoteCallVideo.play(); } catch (error) {
       callSubtitle.textContent = "Toca la pantalla del video para permitir la reproducción.";
     }
