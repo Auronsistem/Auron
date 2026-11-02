@@ -476,7 +476,7 @@
       </nav>
     </div>
   </dialog>
-  <dialog id="user-info-dialog" class="user-info-dialog"><form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form><p class="eyebrow">INFORMACIÓN DEL USUARIO</p><div class="user-info-profile"><span id="user-info-avatar" class="avatar-frame avatar-default"><span class="avatar-silhouette" aria-hidden="true"></span></span><div><h2 id="user-info-name">Usuario</h2><p id="user-info-username" class="muted"></p><span id="user-info-friend-badge" class="friend-status-badge is-person">Persona</span></div></div><p id="user-info-friend-status" class="muted"></p><button id="send-friend-request" class="button full" type="button">Enviar solicitud de amigo</button><button id="block-chat-user" class="button button-outline full" type="button">Bloquear usuario</button><button id="clear-private-chat" class="button button-outline full" type="button">Borrar chat</button><p id="user-info-feedback" class="notice" aria-live="polite"></p></dialog>
+  <dialog id="user-info-dialog" class="user-info-dialog"><form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form><p class="eyebrow">INFORMACIÓN DEL USUARIO</p><div class="user-info-profile"><span id="user-info-avatar" class="avatar-frame avatar-default"><span class="avatar-silhouette" aria-hidden="true"></span></span><div><h2 id="user-info-name">Usuario</h2><p id="user-info-username" class="muted"></p><span id="user-info-friend-badge" class="friend-status-badge is-person">Persona</span></div></div><p id="user-info-friend-status" class="muted"></p><button id="send-friend-request" class="button full" type="button">Enviar solicitud de amigo</button><button id="cancel-friend-request" class="button button-outline full" type="button" hidden>Cancelar solicitud</button><button id="block-chat-user" class="button button-outline full" type="button">Bloquear usuario</button><button id="clear-private-chat" class="button button-outline full" type="button">Borrar chat</button><p id="user-info-feedback" class="notice" aria-live="polite"></p></dialog>
   <dialog id="create-group-dialog"><form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form><p class="eyebrow">AUREON · MENSAJES</p><h2>Crear grupo</h2><form id="create-group-form"><label for="group-name">Nombre del grupo</label><input id="group-name" maxlength="60" placeholder="Ej. Equipo gaming" required><label for="group-member-search">Añadir integrantes</label><input id="group-member-search" type="search" placeholder="Busca usuarios por su nombre..." autocomplete="off"><div id="group-member-results" class="group-member-results" hidden></div><p id="group-selected-count" class="notice">0 integrantes seleccionados</p><p id="group-create-status" class="notice" aria-live="polite"></p><button class="button full" type="submit">Crear grupo</button></form></dialog>
 
   <!-- LLAMADAS PRIVADAS -->
@@ -561,6 +561,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=77"></script>
+  <script type="module" src="app.js?v=78"></script>
 </body>
 </html>
