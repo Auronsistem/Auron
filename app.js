@@ -2175,9 +2175,7 @@ async function handleIncomingFriendRequestEvent(row, { notify = true } = {}) {
       console.warn("No se pudo mostrar la notificación de amistad:", error);
     }
   }
-  await openSettings();
-  if (currentUser?.id !== recipientId) return;
-  $("#settings-friend-requests")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  // No abrir Configuración automáticamente al recibir una solicitud.
 }
 
 let friendRequestPollTimer = null;
