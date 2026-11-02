@@ -2261,8 +2261,7 @@ statusForm?.addEventListener("submit", async event => {
       media_type: mediaType,
       media_url: storagePath,
       caption: caption || null,
-      music_title: musicTitle || null,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      music_title: musicTitle || null
     });
     if (insertError) throw insertError;
     statusForm.reset();
