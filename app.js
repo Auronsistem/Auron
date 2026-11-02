@@ -1265,47 +1265,83 @@ function applySubtitlePreference(embedUrl, kind) {
 }
 
 function normalizePeerTubeVideo(video) {
-  const pageUrl = video.url || "";
-  let embedPath = video.embedPath || "";
-  if (!embedPath && pageUrl) {
-    try {
-      const parsed = new URL(pageUrl);
-      const id = video.uuid || parsed.pathname.match(/(?:videos\/watch|w)\/([^/?#]+)/)?.[1];
-      if (id) embedPath = new URL("/videos/embed/" + encodeURIComponent(id), parsed.origin).href;
-    } catch (_) {}
-  }
-  if (embedPath && pageUrl && !/^https?:\/\//i.test(embedPath)) {
-    try { embedPath = new URL(embedPath, pageUrl).href; } catch (_) {}
-  }
-  const thumbnail = video.thumbnailPath
-    ? (video.thumbnailPath.startsWith("http") ? video.thumbnailPath : new URL(video.thumbnailPath, pageUrl || "https://peertube.tv").href)
+  const hostValue = video.channel?.host || video.account?.host || video.host || "";
+  const hostUrl = hostValue
+    ? (/^https?:\/\//i.test(hostValue) ? hostValue : "https://" + hostValue)
     : "";
+  const possiblePage = video.url || video.channel?.url || video.account?.url || "";
+  let origin = "";
+  try {
+    if (possiblePage) origin = new URL(possiblePage, hostUrl || window.location.origin).origin;
+    else if (hostUrl) origin = new URL(hostUrl).origin;
+  } catch (_) {}
+  const videoId = String(video.uuid || video.shortUUID || video.id || "");
+  let pageUrl = "";
+  try {
+    if (video.url) pageUrl = new URL(video.url, origin || window.location.origin).href;
+    else if (origin && videoId) pageUrl = new URL("/videos/watch/" + encodeURIComponent(videoId), origin).href;
+  } catch (_) {}
+
+  let embedPath = "";
+  try {
+    if (video.embedPath) {
+      embedPath = new URL(video.embedPath, origin || pageUrl || window.location.origin).href;
+    } else if (origin && videoId) {
+      embedPath = new URL("/videos/embed/" + encodeURIComponent(videoId), origin).href;
+    }
+  } catch (_) {}
+
+  const thumbnailSource =
+    (Array.isArray(video.thumbnails)
+      ? [...video.thumbnails].sort((a,b) => (Number(b.width||0)*Number(b.height||0)) - (Number(a.width||0)*Number(a.height||0))).find(item => item.fileUrl)?.fileUrl
+      : null) || video.thumbnailPath || video.previewPath || "";
+  let thumbnail = "";
+  try {
+    if (thumbnailSource) thumbnail = new URL(thumbnailSource, origin || pageUrl || window.location.origin).href;
+  } catch (_) {}
+
   return {
-    id: String(video.uuid || video.id || pageUrl || ""),
+    id: videoId || pageUrl || embedPath,
     title: video.name || video.title || "Video de PeerTube",
     thumbnail,
     channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "PeerTube",
     publishedAt: video.publishedAt || video.createdAt || video.originallyPublishedAt || null,
+    duration: Number(video.duration) || 0,
+    aspectRatio: Number(video.aspectRatio) || 0,
+    nsfw: Boolean(video.nsfw),
+    isLive: Boolean(video.isLive),
+    views: Number(video.views) || 0,
     url: pageUrl,
     embedPath,
     platform: "PeerTube"
   };
 }
 
-async function searchPeerTube(query, start = 0) {
-  const key = query.trim().toLowerCase() + "::" + start;
+async function searchPeerTube(query, start = 0, options = {}) {
+  const shortsOnly = Boolean(options.shortsOnly);
+  const key = query.trim().toLowerCase() + "::" + start + (shortsOnly ? "::shorts" : "::all");
   const cached = peerTubeCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.videos;
+
   const url = new URL(PEERTUBE_SEARCH_URL);
   url.searchParams.set("search", query);
   url.searchParams.set("count", "20");
   url.searchParams.set("start", String(start));
   url.searchParams.set("sort", "-publishedAt");
+  if (shortsOnly) {
+    url.searchParams.set("durationMax", "180");
+    url.searchParams.set("nsfw", "false");
+    url.searchParams.set("isLive", "false");
+  }
+
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
   const payload = await response.json();
   const raw = Array.isArray(payload) ? payload : (payload.data || payload.videos || []);
-  const videos = raw.map(normalizePeerTubeVideo).filter(v => v.url || v.embedPath);
+  const videos = raw.map(normalizePeerTubeVideo).filter(video =>
+    video.embedPath && !video.nsfw && !video.isLive &&
+    (!shortsOnly || !video.duration || video.duration <= 180)
+  );
   peerTubeCache.set(key, { videos, expiresAt: Date.now() + 10 * 60 * 1000 });
   return videos;
 }
@@ -1370,11 +1406,25 @@ function renderPeerTubeShortCard(video) {
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", "Ver Short: " + (video.title || "clip"));
+  const thumbnail = document.createElement("div");
+  thumbnail.className = "youtube-short-thumbnail";
   const image = document.createElement("img");
   image.src = video.thumbnail || "";
   image.alt = "";
   image.loading = "lazy";
-  image.onerror = () => { image.style.display = "none"; };
+  image.onerror = () => { image.remove(); thumbnail.classList.add("thumbnail-unavailable"); };
+  if (video.thumbnail) thumbnail.append(image);
+  const playIcon = document.createElement("span");
+  playIcon.className = "youtube-short-play";
+  playIcon.textContent = "▶";
+  playIcon.setAttribute("aria-hidden", "true");
+  thumbnail.append(playIcon);
+  if (video.duration) {
+    const duration = document.createElement("span");
+    duration.className = "youtube-short-duration";
+    duration.textContent = Math.floor(video.duration / 60) + ":" + String(video.duration % 60).padStart(2, "0");
+    thumbnail.append(duration);
+  }
   const info = document.createElement("div");
   info.className = "short-info";
   const heading = document.createElement("h3");
@@ -1383,7 +1433,7 @@ function renderPeerTubeShortCard(video) {
   channel.className = "muted";
   channel.textContent = (video.channelTitle || "Creador") + " · PeerTube";
   info.append(heading, channel);
-  card.append(image, info);
+  card.append(thumbnail, info);
   const open = () => openPeerTubeShortAt(peerTubeShortsQueue.indexOf(video));
   card.addEventListener("click", open);
   card.addEventListener("keydown", event => {
@@ -1395,48 +1445,65 @@ function renderPeerTubeShortCard(video) {
 async function loadMorePeerTubeShorts() {
   const shortsGrid = $("#shorts-grid");
   const loadMore = $("#load-more-shorts");
+  const status = $("#shorts-feed-status");
   if (!shortsGrid || peerTubeShortLoading) return;
+
   peerTubeShortLoading = true;
   if (loadMore) { loadMore.disabled = true; loadMore.textContent = "Cargando Shorts…"; }
+  if (status) status.textContent = peerTubeShortsQueue.length ? "Buscando más clips…" : "Buscando videos cortos…";
+
   const categories = [
-    "funk viral short 2026", "funk automotivo short", "edits funk short 2026",
-    "música viral short 2026", "tendencias virales short 2026",
-    "Roblox trend short 2026", "Clash Royale short reciente",
-    "memes virales short recientes"
+    "Roblox shorts", "Clash Royale shorts", "gaming español",
+    "memes cortos", "edits gaming", "videojuegos clips",
+    "humor español", "clips virales"
   ];
   try {
     const offset = peerTubeShortOffset;
-    const batches = await Promise.all(categories.map(q => searchPeerTube(q + " short", offset).catch(() => [])));
+    const batches = await Promise.all(
+      categories.map(query => searchPeerTube(query, offset, { shortsOnly: true }).catch(error => {
+        console.warn("No se pudo buscar la categoría de Shorts:", query, error);
+        return [];
+      }))
+    );
     const incoming = batches.flat();
     let added = 0;
-    const freshCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+
     for (const video of incoming) {
       const key = video.id || video.url || video.embedPath;
-      if (!key || peerTubeShortSeen.has(key)) continue;
-      const published = video.publishedAt ? Date.parse(video.publishedAt) : NaN;
-      if (Number.isFinite(published) && published < freshCutoff) continue;
+      if (!key || peerTubeShortSeen.has(key) || !video.embedPath || video.nsfw || video.isLive) continue;
+      if (video.duration && video.duration > 180) continue;
       peerTubeShortSeen.add(key);
       peerTubeShortsQueue.push(video);
       shortsGrid.insertBefore(renderPeerTubeShortCard(video), loadMore || null);
       added++;
     }
+
     peerTubeShortOffset += 20;
     let count = $("#shorts-result-count");
     if (!count) {
       count = document.createElement("p");
       count.id = "shorts-result-count";
       count.className = "muted shorts-result-count";
-      shortsGrid.prepend(count);
+      const heading = shortsGrid.querySelector(".shorts-section-heading");
+      if (heading) heading.after(count);
+      else shortsGrid.prepend(count);
     }
-    count.textContent = peerTubeShortsQueue.length + " Shorts cargados";
+    count.textContent = peerTubeShortsQueue.length
+      ? peerTubeShortsQueue.length + " Shorts disponibles"
+      : "No encontramos clips en esta búsqueda.";
+
+    if (status) status.textContent = added
+      ? "Nuevos Shorts listos para ver."
+      : (peerTubeShortsQueue.length ? "No hay más clips nuevos en esta tanda." : "No hubo resultados. Puedes volver a intentar.");
     if (loadMore) {
       loadMore.disabled = false;
-      loadMore.textContent = added ? "Cargar más Shorts" : "No hay más resultados en esta tanda";
-      loadMore.hidden = added === 0;
+      loadMore.textContent = added ? "Cargar más Shorts" : "Volver a intentar";
+      loadMore.hidden = false;
     }
   } catch (error) {
     console.error("Error cargando más Shorts:", error);
-    if (loadMore) { loadMore.disabled = false; loadMore.textContent = "Reintentar cargar Shorts"; }
+    if (status) status.textContent = "No se pudieron cargar los Shorts. Comprueba tu conexión e inténtalo otra vez.";
+    if (loadMore) { loadMore.disabled = false; loadMore.textContent = "Reintentar"; loadMore.hidden = false; }
   } finally {
     peerTubeShortLoading = false;
   }
@@ -1454,6 +1521,11 @@ async function loadRecommendedShorts() {
   heading.className = "shorts-section-heading";
   heading.textContent = "Shorts recomendados";
   shortsGrid.append(heading);
+  const status = document.createElement("p");
+  status.id = "shorts-feed-status";
+  status.className = "muted shorts-feed-status";
+  status.textContent = "Preparando recomendaciones…";
+  shortsGrid.append(status);
   const loadMore = document.createElement("button");
   loadMore.id = "load-more-shorts";
   loadMore.className = "button shorts-load-more";
@@ -1546,10 +1618,11 @@ function openPeerTubeShortAt(index) {
 
   const frame = document.createElement("iframe");
   frame.className = "aureon-short-frame";
-  frame.src = applySubtitlePreference(video.embedPath || video.url, "short");
+  frame.src = video.embedPath || video.url;
   frame.title = video.title || "Short";
-  frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
+  frame.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write; web-share";
   frame.allowFullscreen = true;
+  frame.referrerPolicy = "strict-origin-when-cross-origin";
   frame.setAttribute("loading", "eager");
 
   const gradient = document.createElement("div");
@@ -1575,7 +1648,24 @@ function openPeerTubeShortAt(index) {
   gestureRight.className = "youtube-short-gesture youtube-short-gesture-right";
   gestureRight.setAttribute("aria-hidden", "true");
 
-  stage.append(frame, gradient, metadata, gestureLeft, gestureRight);
+  const actionRail = document.createElement("div");
+  actionRail.className = "youtube-short-action-rail";
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.className = "youtube-short-nav";
+  previous.textContent = "↑";
+  previous.title = "Short anterior";
+  previous.disabled = nextIndex === 0;
+  previous.addEventListener("click", () => navigate(-1));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "youtube-short-nav";
+  next.textContent = "↓";
+  next.title = "Siguiente Short";
+  next.addEventListener("click", () => navigate(1));
+  actionRail.append(previous, next);
+
+  stage.append(frame, gradient, metadata, gestureLeft, gestureRight, actionRail);
   wrapper.append(stage);
   container.append(wrapper);
 
