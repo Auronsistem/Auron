@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON PLAY: videos, Shorts, mensajes y llamadas para tu comunidad.">
-  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="stylesheet" href="styles.css?v=28">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -250,6 +250,8 @@
         <label for="guardian-email">Correo Gmail del apoderado</label>
         <input id="guardian-email" type="email" autocomplete="email" placeholder="apoderado@gmail.com">
         <button id="guardian-send-code" class="button" type="button">Enviar código al apoderado</button>
+        <button id="guardian-signout" class="button button-outline" type="button" hidden>Cerrar sesión del apoderado en este dispositivo</button>
+        <p class="muted">La verificación del apoderado se conserva en este dispositivo para recuperar las cuentas vinculadas al volver a abrir AUREON. Puedes cerrar esa sesión aquí cuando termines.</p>
 
         <div id="guardian-code-step" hidden>
           <label for="guardian-code">Código de 6 dígitos recibido por el apoderado</label>
@@ -392,6 +394,7 @@
       <header class="call-topbar">
         <span class="call-brand">AUREON</span>
         <span class="call-live-indicator"><i></i> <span id="call-state">LLAMADA</span></span>
+        <button id="toggle-call-window" class="call-window-toggle" type="button" aria-expanded="true" aria-label="Minimizar llamada">— Minimizar</button>
       </header>
       <section class="call-person">
         <div id="call-avatar" class="call-avatar" aria-hidden="true">A</div>
@@ -426,11 +429,12 @@
     <h2 id="auth-title">Iniciar sesión</h2>
     <p class="muted">Entra a tu cuenta o crea una nueva.</p>
 
-    <form id="demo-auth">
+    <form id="demo-auth" autocomplete="on">
       <label for="email">Correo electrónico</label>
       <input
         id="email"
         type="email"
+        autocomplete="username"
         placeholder="tu@correo.com"
         required
       >
@@ -439,6 +443,7 @@
       <input
         id="password"
         type="password"
+        autocomplete="current-password"
         placeholder="Mínimo 8 caracteres"
         minlength="8"
         required
@@ -461,6 +466,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=51"></script>
+  <script type="module" src="app.js?v=52"></script>
 </body>
 </html>
