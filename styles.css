@@ -1092,3 +1092,18 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 .presence-offline { background:#89919d; }
 .people-result .presence-line { margin-top:3px; }
 .chat-presence:empty { display:none; }
+
+/* Indicador animado durante el timbrado y la conexión */
+.call-screen.is-connecting #call-subtitle::before {
+  content:"";
+  display:inline-block;
+  width:11px;
+  height:11px;
+  margin-right:8px;
+  vertical-align:-1px;
+  border:2px solid rgba(255,255,255,.25);
+  border-top-color:#38d98b;
+  border-radius:50%;
+  animation:aureon-call-spin .75s linear infinite;
+}
+@keyframes aureon-call-spin { to { transform:rotate(360deg); } }
