@@ -3317,14 +3317,14 @@ sendFriendRequestButton?.addEventListener("click", async () => {
     .eq("sender_id", currentUser.id).eq("recipient_id", peerId).eq("status", "pending").maybeSingle();
   if (pendingRequest?.id) {
     try {
-      const { error: pushError } = await invokeAureonPush({
+      const { data: pushResult, error: pushError } = await invokeAureonPush({
         action:"friend-request",
         recipientId:peerId,
         requestId:pendingRequest.id
       });
-      if (pushError) {
-        console.warn("La solicitud quedó guardada, pero no se pudo enviar la notificación push:", pushError);
-        if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud guardada. La notificación solo llegará si la otra cuenta activó avisos en este dispositivo.";
+      if (pushError || !pushResult?.sent) {
+        console.warn("La solicitud quedó guardada, pero no se pudo enviar la notificación push:", pushError || pushResult);
+        if (userInfoFeedback) userInfoFeedback.textContent = "Solicitud guardada. Para recibir el aviso inmediato, la otra cuenta debe tener activadas las notificaciones de AUREON.";
       }
     } catch (pushError) {
       console.warn("No se pudo avisar de la solicitud:", pushError);
