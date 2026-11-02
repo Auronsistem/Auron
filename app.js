@@ -298,12 +298,13 @@ function updateAuthForm() {
 
   waitingForCode = false;
   waitingForPasswordRecovery = false;
+  authForm.setAttribute("autocomplete", "on");
   authTitle.textContent =
     authMode === "login" ? "Iniciar sesión" : "Crear cuenta";
 
   authForm.innerHTML = `
     <label for="email">Correo electrónico</label>
-    <input id="email" type="email" autocomplete="email"
+    <input id="email" type="email" autocomplete="${authMode === "login" ? "username" : "email"}"
       placeholder="tu@correo.com" required>
 
     <label for="password">Contraseña</label>
@@ -475,6 +476,26 @@ function showRecoveryCodeForm() {
   waitingForPasswordRecovery = true;
 }
 
+async function askToSaveLoginCredentials(email, password) {
+  const save = window.confirm(
+    "¿Quieres guardar tu usuario y contraseña en este dispositivo?\n\n" +
+    "AUREON usará el administrador de contraseñas seguro del navegador. No guardará tu contraseña en su base de datos ni en el almacenamiento de la página."
+  );
+  if (!save) return;
+  try {
+    if (!("PasswordCredential" in window) || !navigator.credentials?.store) {
+      showMessage($("#auth-message"), "Este navegador no permite guardar desde AUREON. Usa el administrador de contraseñas del navegador; AUREON no guardará tu contraseña.", true);
+      return;
+    }
+    const credential = new window.PasswordCredential({ id: email, password, name: email });
+    await navigator.credentials.store(credential);
+    showMessage($("#auth-message"), "Usuario y contraseña enviados al administrador seguro del navegador.");
+  } catch (error) {
+    console.warn("No se pudo guardar la credencial con el navegador:", error);
+    showMessage($("#auth-message"), "El navegador no pudo guardar la contraseña. Comprueba sus ajustes de contraseñas.", true);
+  }
+}
+
 function showCodeForm() {
   if (!authForm || !authTitle || !toggleAuth) return;
 
@@ -599,6 +620,7 @@ authForm?.addEventListener("submit", async (event) => {
 
       if (error) throw error;
 
+      await askToSaveLoginCredentials(email, password);
       if (authDialog?.open) authDialog.close();
       return;
     }
@@ -670,7 +692,7 @@ function updateHeader() {
 
 
 const guardianAuthOptions = {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "aureon-guardian-auth" }
 };
 
 function parentalStatusMessage(message, error = false) {
@@ -731,6 +753,8 @@ async function verifyGuardianCode() {
     $("#guardian-code-step").hidden = true;
     $("#guardian-link-step").hidden = false;
     $("#guardian-email").readOnly = true;
+    $("#guardian-send-code").hidden = true;
+    $("#guardian-signout").hidden = false;
     parentalStatusMessage("Correo verificado. Ahora escribe el correo de la cuenta AUREON que recibirá los controles.");
     await loadGuardianChildren();
   } catch (error) {
@@ -803,6 +827,53 @@ async function loadGuardianChildren() {
     select.append(option);
   }
   $("#parental-controls-form").hidden = true;
+}
+
+async function restoreGuardianSession() {
+  if (!currentUser) return;
+  try {
+    guardianClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
+    const { data, error } = await guardianClient.auth.getSession();
+    if (error) throw error;
+    const guardian = data?.session?.user;
+    if (!guardian) { guardianClient = null; guardianUserId = null; guardianVerifiedEmail = ""; return; }
+    guardianUserId = guardian.id;
+    guardianVerifiedEmail = guardian.email || "";
+    const emailInput = $("#guardian-email");
+    if (emailInput) { emailInput.value = guardianVerifiedEmail; emailInput.readOnly = true; }
+    if ($("#guardian-send-code")) $("#guardian-send-code").hidden = true;
+    if ($("#guardian-code-step")) $("#guardian-code-step").hidden = true;
+    if ($("#guardian-link-step")) $("#guardian-link-step").hidden = false;
+    if ($("#guardian-signout")) $("#guardian-signout").hidden = false;
+    await loadGuardianChildren();
+    parentalStatusMessage("Sesión del apoderado recuperada. Tus cuentas vinculadas y sus límites siguen guardados.");
+  } catch (error) {
+    console.warn("No se pudo recuperar la sesión del apoderado:", error);
+    guardianClient = null; guardianUserId = null; guardianVerifiedEmail = "";
+    parentalStatusMessage("No se pudo recuperar la sesión del apoderado. Vuelve a verificar su correo.", true);
+  }
+}
+
+async function signOutGuardian() {
+  const client = guardianClient;
+  guardianClient = null; guardianUserId = null; guardianVerifiedEmail = "";
+  if (client) { try { await client.auth.signOut({ scope: "local" }); } catch (error) { console.warn(error); } }
+  if ($("#guardian-email")) { $("#guardian-email").value = ""; $("#guardian-email").readOnly = false; }
+  if ($("#guardian-send-code")) $("#guardian-send-code").hidden = false;
+  if ($("#guardian-code-step")) $("#guardian-code-step").hidden = true;
+  if ($("#guardian-link-step")) $("#guardian-link-step").hidden = true;
+  if ($("#guardian-signout")) $("#guardian-signout").hidden = true;
+  if ($("#guardian-code")) $("#guardian-code").value = "";
+  if ($("#parental-controls-form")) $("#parental-controls-form").hidden = true;
+  const select = $("#parental-child-select");
+  if (select) {
+    select.replaceChildren();
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Verifica primero el correo del apoderado";
+    select.append(option);
+  }
+  parentalStatusMessage("Sesión del apoderado cerrada en este dispositivo.");
 }
 
 async function loadSelectedChildSettings() {
@@ -1082,6 +1153,7 @@ async function refreshParentalState() {
 
 $("#guardian-send-code")?.addEventListener("click", sendGuardianVerificationCode);
 $("#guardian-verify-code")?.addEventListener("click", verifyGuardianCode);
+$("#guardian-signout")?.addEventListener("click", signOutGuardian);
 $("#send-parental-request")?.addEventListener("click", requestChildSupervision);
 $("#parental-child-select")?.addEventListener("change", loadSelectedChildSettings);
 $("#refresh-parental-children")?.addEventListener("click", loadGuardianChildren);
@@ -1095,6 +1167,8 @@ async function updateSession(session) {
     guardianClient = null;
     guardianUserId = null;
     guardianVerifiedEmail = "";
+    if ($("#guardian-send-code")) $("#guardian-send-code").hidden = false;
+    if ($("#guardian-signout")) $("#guardian-signout").hidden = true;
     if ($("#guardian-email")) {
       $("#guardian-email").value = "";
       $("#guardian-email").readOnly = false;
@@ -1113,6 +1187,7 @@ async function updateSession(session) {
     }
   }
   currentUser = nextUser;
+  if (currentUser && !guardianClient) await restoreGuardianSession();
   applyTheme(readThemePreference());
   if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
@@ -3102,6 +3177,39 @@ let callRingTimer = null;
 let callAudioContext = null;
 let callOscillator = null;
 let queuedIceCandidates = [];
+let callWindowMinimized = false;
+
+function setCallWindowMinimized(minimized) {
+  if (!callDialog?.open) return;
+  const next = Boolean(minimized);
+  if (next === callWindowMinimized) return;
+  callWindowMinimized = next;
+  callDialog.classList.toggle("is-minimized", next);
+  callDialog.close();
+  if (next) callDialog.show();
+  else callDialog.showModal();
+  const button = $("#toggle-call-window");
+  if (button) {
+    button.textContent = next ? "⤢ Ampliar" : "— Minimizar";
+    button.setAttribute("aria-expanded", String(!next));
+    button.setAttribute("aria-label", next ? "Ampliar llamada" : "Minimizar llamada");
+  }
+}
+
+$("#toggle-call-window")?.addEventListener("click", () => {
+  setCallWindowMinimized(!callWindowMinimized);
+});
+
+function resetCallWindow() {
+  callWindowMinimized = false;
+  callDialog?.classList.remove("is-minimized");
+  const button = $("#toggle-call-window");
+  if (button) {
+    button.textContent = "— Minimizar";
+    button.setAttribute("aria-expanded", "true");
+    button.setAttribute("aria-label", "Minimizar llamada");
+  }
+}
 
 function stopCallAlert() {
   if (callRingTimer) window.clearInterval(callRingTimer);
@@ -3200,7 +3308,10 @@ function startCallAlert() {
   callRingTimer = window.setInterval(() => playAureonTone("call"), 2600);
 }
 function callDisplay(showIncoming = false, showActive = false) {
-  if (callDialog && !callDialog.open) callDialog.showModal();
+  if (callDialog && !callDialog.open) {
+    resetCallWindow();
+    callDialog.showModal();
+  }
   $("#incoming-call-actions").hidden = !showIncoming;
   $("#active-call-actions").hidden = !showActive;
   const videoMode = Boolean(activeCall?.video || activeGroupCall?.video);
@@ -3415,6 +3526,7 @@ function cleanupCall() {
   queuedIceCandidates = [];
   if (localCallVideo) localCallVideo.srcObject = null;
   if (remoteCallVideo) remoteCallVideo.srcObject = null;
+  resetCallWindow();
   if (callDialog?.open) callDialog.close();
   $(".call-screen")?.classList.remove("is-video", "is-connecting");
   activeCall = null;
@@ -3781,6 +3893,7 @@ async function cleanupGroupCall(notify = false) {
   callLocalStream = null; activeGroupCall = null; stopCallAlert();
   const grid = $("#group-call-grid"); if (grid) { grid.replaceChildren(); grid.hidden = true; }
   remoteCallVideo.hidden = false; localCallVideo.hidden = false;
+  resetCallWindow();
   if (callDialog?.open) callDialog.close();
   $(".call-screen")?.classList.remove("is-video");
 }
