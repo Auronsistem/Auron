@@ -10,6 +10,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (selector) => document.querySelector(selector);
 
 let currentUser = null;
+let parentalStatus = { supervised: false, maturity_level: 3 };
+let parentalMinuteTimer = null;
+let guardianClient = null;
+let guardianVerifiedEmail = "";
+let parentalScreenBlocked = false;
 let authMode = "login";
 let waitingForCode = false;
 let waitingForPasswordRecovery = false;
@@ -568,6 +573,8 @@ async function logout() {
 }
 
 function updateHeader() {
+  const settingsLink = $("#open-settings-link");
+  if (settingsLink) settingsLink.hidden = !currentUser || parentalStatus.supervised;
   const actions = $(".header-actions");
   if (!actions) return;
 
@@ -587,6 +594,331 @@ function updateHeader() {
   actions.append(button);
 }
 
+
+const guardianAuthOptions = {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+};
+
+function parentalStatusMessage(message, error = false) {
+  showMessage($("#parental-status"), message, error);
+}
+
+async function sendGuardianVerificationCode() {
+  const email = $("#guardian-email")?.value.trim().toLowerCase() || "";
+  const button = $("#guardian-send-code");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    parentalStatusMessage("Escribe el correo de Gmail del apoderado.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    guardianClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
+    const { error } = await guardianClient.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false }
+    });
+    if (error) throw error;
+    guardianVerifiedEmail = email;
+    $("#guardian-code-step").hidden = false;
+    parentalStatusMessage("Código de 6 dígitos enviado al correo del apoderado. Revisa Recibidos y Spam.");
+  } catch (error) {
+    guardianClient = null;
+    parentalStatusMessage(error.message || "No se pudo enviar el código. Comprueba que el apoderado tenga una cuenta AUREON verificada.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function verifyGuardianCode() {
+  const token = $("#guardian-code")?.value.trim() || "";
+  if (!guardianClient || !guardianVerifiedEmail) {
+    parentalStatusMessage("Primero solicita el código para el apoderado.", true);
+    return;
+  }
+  if (!/^\d{6}$/.test(token)) {
+    parentalStatusMessage("Introduce los 6 dígitos que llegaron al correo del apoderado.", true);
+    return;
+  }
+  const button = $("#guardian-verify-code");
+  if (button) button.disabled = true;
+  try {
+    const { data, error } = await guardianClient.auth.verifyOtp({
+      email: guardianVerifiedEmail,
+      token,
+      type: "email"
+    });
+    if (error) throw error;
+    if (!data?.user || !data?.session) throw new Error("No se pudo verificar la cuenta del apoderado.");
+    await guardianClient.from("profiles").upsert({
+      id: data.user.id,
+      display_name: (guardianVerifiedEmail.split("@")[0] || "Apoderado").slice(0, 40)
+    }, { onConflict: "id" });
+    $("#guardian-code-step").hidden = true;
+    $("#guardian-link-step").hidden = false;
+    $("#guardian-email").readOnly = true;
+    parentalStatusMessage("Correo verificado. Ahora escribe el correo de la cuenta AUREON que recibirá los controles.");
+    await loadGuardianChildren();
+  } catch (error) {
+    parentalStatusMessage(error.message || "El código no es válido o ya venció.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function requestChildSupervision() {
+  if (!guardianClient) {
+    parentalStatusMessage("Verifica primero el correo del apoderado.", true);
+    return;
+  }
+  const childEmail = $("#child-account-email")?.value.trim().toLowerCase() || "";
+  const button = $("#send-parental-request");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(childEmail)) {
+    parentalStatusMessage("Escribe el correo de la cuenta AUREON que recibirá los controles.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    const { data, error } = await guardianClient.rpc("request_parental_link", {
+      p_child_email: childEmail
+    });
+    if (error) throw error;
+    parentalStatusMessage(data?.status === "active"
+      ? "Esta cuenta ya está vinculada a tu perfil de apoderado."
+      : "Solicitud enviada. La cuenta seleccionada debe aceptarla al iniciar sesión en AUREON.");
+    $("#child-account-email").value = "";
+    await loadGuardianChildren();
+  } catch (error) {
+    parentalStatusMessage(error.message || "No se pudo enviar la solicitud.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function loadGuardianChildren() {
+  if (!guardianClient) return;
+  const select = $("#parental-child-select");
+  const { data, error } = await guardianClient.from("parental_links")
+    .select("id,child_id,status")
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
+  if (error) {
+    parentalStatusMessage("No se pudieron cargar las cuentas vinculadas: " + error.message, true);
+    return;
+  }
+  const links = data || [];
+  if (!select) return;
+  select.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = links.length ? "Selecciona una cuenta" : "Todavía no hay cuentas vinculadas";
+  select.append(placeholder);
+  if (!links.length) {
+    $("#parental-controls-form").hidden = true;
+    return;
+  }
+  const ids = links.map(link => link.child_id);
+  const { data: profiles } = await guardianClient.from("profiles")
+    .select("id,display_name").in("id", ids);
+  const names = new Map((profiles || []).map(profile => [profile.id, profile.display_name || "Cuenta supervisada"]));
+  for (const link of links) {
+    const option = document.createElement("option");
+    option.value = link.child_id;
+    option.textContent = names.get(link.child_id) || "Cuenta supervisada";
+    select.append(option);
+  }
+  $("#parental-controls-form").hidden = true;
+}
+
+async function loadSelectedChildSettings() {
+  if (!guardianClient) return;
+  const childId = $("#parental-child-select")?.value || "";
+  if (!childId) {
+    $("#parental-controls-form").hidden = true;
+    return;
+  }
+  const { data, error } = await guardianClient.from("parental_settings")
+    .select("screen_time_minutes,maturity_level")
+    .eq("child_id", childId)
+    .maybeSingle();
+  if (error) {
+    parentalStatusMessage("No se pudieron leer los controles: " + error.message, true);
+    return;
+  }
+  $("#parental-screen-time").value = String(data?.screen_time_minutes ?? 120);
+  $("#parental-maturity").value = String(data?.maturity_level ?? 0);
+  $("#parental-controls-form").hidden = false;
+}
+
+async function saveSelectedChildSettings(event) {
+  event.preventDefault();
+  if (!guardianClient) {
+    parentalStatusMessage("Verifica el correo del apoderado para guardar los cambios.", true);
+    return;
+  }
+  const childId = $("#parental-child-select")?.value || "";
+  const minutes = Number($("#parental-screen-time")?.value);
+  const maturity = Number($("#parental-maturity")?.value);
+  if (!childId) {
+    parentalStatusMessage("Selecciona una cuenta supervisada.", true);
+    return;
+  }
+  const button = $("#parental-save-settings");
+  if (button) button.disabled = true;
+  try {
+    const { error } = await guardianClient.rpc("save_parental_settings", {
+      p_child_id: childId,
+      p_screen_time_minutes: minutes,
+      p_maturity_level: maturity
+    });
+    if (error) throw error;
+    parentalStatusMessage("Controles guardados. Solo se aplicarán a la cuenta seleccionada.");
+  } catch (error) {
+    parentalStatusMessage(error.message || "No se pudieron guardar los controles.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function showIncomingParentalRequests() {
+  const host = $("#parental-child-panel");
+  const list = $("#parental-pending-requests");
+  if (!host || !list || !currentUser) return;
+  const { data, error } = await supabase.from("parental_links")
+    .select("id,parent_id,created_at")
+    .eq("child_id", currentUser.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error || !data?.length) {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  list.replaceChildren();
+  for (const request of data) {
+    const profiles = await fetchProfiles([request.parent_id]);
+    const card = document.createElement("article");
+    card.className = "parental-request-card";
+    const heading = document.createElement("strong");
+    heading.textContent = displayName(profiles.get(request.parent_id)) + " solicita administrar los controles parentales de esta cuenta.";
+    const detail = document.createElement("p");
+    detail.className = "muted";
+    detail.textContent = "Al aceptar, el apoderado podrá establecer el tiempo diario y la clasificación de videos permitida.";
+    const actions = document.createElement("div");
+    actions.className = "parental-request-actions";
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "button";
+    accept.textContent = "Aceptar";
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.className = "button button-outline";
+    reject.textContent = "Rechazar";
+    const respond = async accepted => {
+      accept.disabled = true;
+      reject.disabled = true;
+      const { error: responseError } = await supabase.rpc("respond_parental_link", {
+        p_link_id: request.id,
+        p_accept: accepted
+      });
+      if (responseError) {
+        parentalStatusMessage(responseError.message || "No se pudo responder la solicitud.", true);
+        accept.disabled = false;
+        reject.disabled = false;
+        return;
+      }
+      await refreshParentalState();
+    };
+    accept.addEventListener("click", () => respond(true));
+    reject.addEventListener("click", () => respond(false));
+    actions.append(accept, reject);
+    card.append(heading, detail, actions);
+    list.append(card);
+  }
+}
+
+function setParentalScreenBlock(blocked) {
+  parentalScreenBlocked = Boolean(blocked);
+  let overlay = $("#parental-time-lock");
+  if (!blocked) {
+    overlay?.remove();
+    return;
+  }
+  if (overlay) return;
+  overlay = document.createElement("div");
+  overlay.id = "parental-time-lock";
+  const panel = document.createElement("section");
+  panel.className = "parental-time-lock-panel";
+  const icon = document.createElement("div");
+  icon.textContent = "⏱";
+  icon.className = "parental-time-lock-icon";
+  const title = document.createElement("h2");
+  title.textContent = "Tiempo diario completado";
+  const message = document.createElement("p");
+  message.textContent = "Has alcanzado el límite diario de AUREON establecido por tu apoderado. Podrás volver a usar la app cuando se reinicie el tiempo.";
+  panel.append(icon, title, message);
+  overlay.append(panel);
+  document.body.append(overlay);
+}
+
+async function refreshParentalState() {
+  if (!currentUser) {
+    parentalStatus = { supervised: false, maturity_level: 3 };
+    if (parentalMinuteTimer) window.clearInterval(parentalMinuteTimer);
+    parentalMinuteTimer = null;
+    setParentalScreenBlock(false);
+    if ($("#open-settings-link")) $("#open-settings-link").hidden = true;
+    if ($("#configuracion")) $("#configuracion").hidden = true;
+    if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
+    return;
+  }
+
+  const { data: status, error } = await supabase.rpc("get_parental_status");
+  if (error) console.warn("No se pudo consultar el estado parental:", error);
+  parentalStatus = status || { supervised: false, maturity_level: 3 };
+
+  const { data: activeLinks, error: linkError } = await supabase.from("parental_links")
+    .select("id").eq("child_id", currentUser.id).eq("status", "active").limit(1);
+  const supervisedByAdult = !linkError && Boolean(activeLinks?.length);
+
+  const settingsSection = $("#configuracion");
+  const settingsLink = $("#open-settings-link");
+  if (settingsSection) settingsSection.hidden = supervisedByAdult;
+  if (settingsLink) settingsLink.hidden = supervisedByAdult;
+  if (supervisedByAdult) {
+    if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
+  } else {
+    await showIncomingParentalRequests();
+  }
+
+  if (parentalMinuteTimer) window.clearInterval(parentalMinuteTimer);
+  parentalMinuteTimer = null;
+  if (parentalStatus.supervised) {
+    setParentalScreenBlock(parentalStatus.blocked);
+    parentalMinuteTimer = window.setInterval(async () => {
+      if (!currentUser || !parentalStatus.supervised || document.visibilityState !== "visible" || parentalScreenBlocked) return;
+      const { data, error: usageError } = await supabase.rpc("record_parental_usage", { p_minutes: 1 });
+      if (usageError) {
+        console.warn("No se pudo registrar el tiempo de pantalla:", usageError);
+        return;
+      }
+      parentalStatus = data || parentalStatus;
+      if (data?.blocked) {
+        setParentalScreenBlock(true);
+        cleanupCall();
+        cleanupGroupCall();
+      }
+    }, 60000);
+  } else {
+    setParentalScreenBlock(false);
+  }
+}
+
+$("#guardian-send-code")?.addEventListener("click", sendGuardianVerificationCode);
+$("#guardian-verify-code")?.addEventListener("click", verifyGuardianCode);
+$("#send-parental-request")?.addEventListener("click", requestChildSupervision);
+$("#parental-child-select")?.addEventListener("change", loadSelectedChildSettings);
+$("#parental-controls-form")?.addEventListener("submit", saveSelectedChildSettings);
+
 async function updateSession(session) {
   currentUser = session?.user || null;
   if (currentUser) startPresence(); else stopPresence();
@@ -599,6 +931,7 @@ async function updateSession(session) {
   if (currentUser) {
     removeLockScreen();
     void syncExistingAureonPushSubscription();
+    await refreshParentalState();
     await loadVideos();
     await loadConversations();
     await loadRecommendedYouTube();
@@ -613,6 +946,7 @@ async function updateSession(session) {
     $("#video-grid")?.replaceChildren();
     $("#shorts-grid")?.replaceChildren();
     shortsQueue = [];
+    await refreshParentalState();
   }
 }
 
@@ -657,6 +991,7 @@ uploadForm?.addEventListener("submit", async (event) => {
   const title = $("#upload-title")?.value.trim() || "";
   const description = $("#upload-description")?.value.trim() || "";
   const type = $("#upload-type")?.value || "video";
+  const maturityLevel = Number($("#upload-maturity")?.value || 0);
   const file = $("#upload-file")?.files?.[0];
   const button = uploadForm.querySelector('button[type="submit"]');
 
@@ -705,6 +1040,7 @@ uploadForm?.addEventListener("submit", async (event) => {
       title,
       description,
       video_type: type,
+      maturity_level: maturityLevel,
       storage_path: storagePath,
       status: "pending",
       published: false
@@ -758,9 +1094,10 @@ async function loadVideos() {
     return;
   }
 
+  const maxMaturity = parentalStatus.supervised ? Number(parentalStatus.maturity_level || 0) : 3;
   const visible = (data || []).filter((video) =>
-    (video.status === "approved" && video.published === true) ||
-    video.user_id === currentUser.id
+    Number(video.maturity_level || 0) <= maxMaturity &&
+    ((video.status === "approved" && video.published === true) || video.user_id === currentUser.id)
   );
 
   const videos = visible.filter((item) => item.video_type === "video");
@@ -1348,6 +1685,10 @@ async function searchPeerTube(query, start = 0, options = {}) {
 
 async function loadRecommendedYouTube() {
   if (!youtubeResults) return;
+  if (parentalStatus.supervised) {
+    showEmpty(youtubeResults, "Las recomendaciones externas están ocultas para esta cuenta porque no tienen una clasificación de edad verificada. Puedes ver videos de AUREON con clasificación.");
+    return;
+  }
   showEmpty(youtubeResults, "Cargando recomendaciones de PeerTube...");
   try {
     const categories = [
@@ -1512,6 +1853,10 @@ async function loadMorePeerTubeShorts() {
 async function loadRecommendedShorts() {
   const shortsGrid = $("#shorts-grid");
   if (!shortsGrid) return;
+  if (parentalStatus.supervised) {
+    showEmpty(shortsGrid, "Los Shorts externos sin clasificación de edad verificada están ocultos en esta cuenta.");
+    return;
+  }
   const communityCards = Array.from(shortsGrid.children);
   shortsGrid.replaceChildren();
   peerTubeShortOffset = 0;
@@ -1993,6 +2338,119 @@ async function openConversation(conversation, profile = null) {
   messageRefreshTimer = window.setInterval(() => { if (activeConversation?.id === conversation.id) loadMessages(conversation.id, true); }, 5000);
   presenceRefreshTimer = window.setInterval(refreshChatPresence, 30000);
 }
+
+const AUREON_STICKERS = [
+  { emoji: "😂", label: "Risa" }, { emoji: "🔥", label: "Fuego" },
+  { emoji: "😎", label: "Genial" }, { emoji: "❤️", label: "Corazón" },
+  { emoji: "👏", label: "Aplausos" }, { emoji: "🤝", label: "Amistad" },
+  { emoji: "🎮", label: "Gaming" }, { emoji: "🏆", label: "Victoria" },
+  { emoji: "😱", label: "Sorpresa" }, { emoji: "🥳", label: "Celebración" },
+  { emoji: "💀", label: "Risa" }, { emoji: "🚀", label: "Cohete" },
+  { emoji: "⭐", label: "Estrella" }, { emoji: "👀", label: "Ojos" },
+  { emoji: "💯", label: "Cien" }, { emoji: "👍", label: "Me gusta" }
+];
+
+function isAllowedGifUrl(raw) {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    const allowedHost = host === "media.tenor.com" || /^media\d*\.giphy\.com$/.test(host);
+    return url.protocol === "https:" && allowedHost && /\.gif$/i.test(url.pathname) ? url.href : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function buildMessageBody(container, rawBody) {
+  const stickerPrefix = "AUREON_STICKER:";
+  const gifPrefix = "AUREON_GIF:";
+  if (rawBody?.startsWith(stickerPrefix)) {
+    const emoji = rawBody.slice(stickerPrefix.length);
+    if (AUREON_STICKERS.some(sticker => sticker.emoji === emoji)) {
+      container.classList.add("message-sticker");
+      container.textContent = emoji;
+      container.setAttribute("aria-label", "Sticker " + emoji);
+      return;
+    }
+  }
+  if (rawBody?.startsWith(gifPrefix)) {
+    const gifUrl = isAllowedGifUrl(rawBody.slice(gifPrefix.length));
+    if (gifUrl) {
+      const image = document.createElement("img");
+      image.src = gifUrl;
+      image.alt = "GIF";
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+      image.className = "message-gif";
+      image.onerror = () => image.replaceWith(document.createTextNode("No se pudo cargar este GIF."));
+      container.append(image);
+      return;
+    }
+    container.textContent = "GIF no disponible: el enlace no es válido.";
+    return;
+  }
+  container.textContent = rawBody || "";
+}
+
+function initializeMessagePickers() {
+  const stickerPicker = $("#sticker-picker");
+  const stickerGrid = $("#sticker-grid");
+  const gifPicker = $("#gif-picker");
+  if (stickerGrid && !stickerGrid.childElementCount) {
+    for (const sticker of AUREON_STICKERS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "sticker-option";
+      button.textContent = sticker.emoji;
+      button.title = sticker.label;
+      button.setAttribute("aria-label", "Enviar sticker: " + sticker.label);
+      button.addEventListener("click", () => {
+        const input = $("#message-input");
+        if (!currentUser || (!activeConversation && !activeGroup) || !input) return;
+        input.value = "AUREON_STICKER:" + sticker.emoji;
+        stickerPicker.hidden = true;
+        gifPicker.hidden = true;
+        messageForm.requestSubmit();
+      });
+      stickerGrid.append(button);
+    }
+  }
+  $("#open-stickers")?.addEventListener("click", () => {
+    if (!currentUser || (!activeConversation && !activeGroup)) return;
+    stickerPicker.hidden = !stickerPicker.hidden;
+    gifPicker.hidden = true;
+  });
+  $("#open-gif")?.addEventListener("click", () => {
+    if (!currentUser || (!activeConversation && !activeGroup)) return;
+    gifPicker.hidden = !gifPicker.hidden;
+    stickerPicker.hidden = true;
+  });
+  $("#search-gif")?.addEventListener("click", () => {
+    const query = $("#gif-search")?.value.trim() || "";
+    if (!query) {
+      showMessage($("#message-status"), "Escribe qué GIF estás buscando.", true);
+      return;
+    }
+    const searchUrl = "https://tenor.com/search/" + encodeURIComponent(query) + "-gifs";
+    window.open(searchUrl, "_blank", "noopener,noreferrer");
+  });
+  $("#send-gif-link")?.addEventListener("click", () => {
+    const url = isAllowedGifUrl($("#gif-url")?.value.trim() || "");
+    if (!url) {
+      showMessage($("#message-status"), "Pega un enlace directo .gif de media.tenor.com o media*.giphy.com.", true);
+      return;
+    }
+    const input = $("#message-input");
+    if (!currentUser || (!activeConversation && !activeGroup) || !input) return;
+    input.value = "AUREON_GIF:" + url;
+    $("#gif-url").value = "";
+    if (gifPicker) gifPicker.hidden = true;
+    if (stickerPicker) stickerPicker.hidden = true;
+    messageForm.requestSubmit();
+  });
+}
+initializeMessagePickers();
+
 async function loadMessages(conversationId, quiet = false) {
   if (!currentUser || !messageList) return;
   const { data, error } = await supabase.from("messages").select("id, conversation_id, sender_id, body, created_at, read_at")
@@ -2006,7 +2464,7 @@ async function loadMessages(conversationId, quiet = false) {
   for (const message of messages) {
     const bubble = document.createElement("article");
     bubble.className = "message-bubble" + (message.sender_id === currentUser.id ? " mine" : "");
-    const body = document.createElement("p"); body.textContent = message.body;
+    const body = document.createElement("div"); body.className = "message-body"; buildMessageBody(body, message.body);
     const time = document.createElement("time"); time.dateTime = message.created_at;
     time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     bubble.append(body, time); messageList.append(bubble);
@@ -2190,7 +2648,7 @@ async function loadGroupMessages(groupId, quiet = false) {
       sender.textContent = displayName(profiles.get(message.sender_id));
       bubble.append(sender);
     }
-    const body = document.createElement("p"); body.textContent = message.body;
+    const body = document.createElement("div"); body.className = "message-body"; buildMessageBody(body, message.body);
     const time = document.createElement("time"); time.dateTime = message.created_at;
     time.textContent = new Date(message.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     bubble.append(body, time); messageList.append(bubble);
