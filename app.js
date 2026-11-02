@@ -49,6 +49,21 @@ async function enableAureonPushNotifications() {
     say("Inicia sesión antes de activar las notificaciones.", true);
     return;
   }
+
+  // En iOS, Web Push solo está disponible para la web app añadida a la pantalla de inicio.
+  const isAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia?.("(display-mode: standalone)").matches ||
+    navigator.standalone === true;
+  if (isAppleMobile && !isStandalone) {
+    say("En iPhone, primero abre esta página en Safari, pulsa Compartir > Añadir a pantalla de inicio y luego abre AUREON desde su ícono. Después vuelve aquí para activar las notificaciones.", true);
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    say("Las notificaciones necesitan una conexión segura HTTPS. Abre AUREON desde su dirección oficial.", true);
+    return;
+  }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     say("Este navegador no admite notificaciones push. Actualiza Chrome e inténtalo de nuevo.", true);
     return;
