@@ -2313,6 +2313,13 @@ function statusNotice(message, error = false) {
   statusFeedback.textContent = message || "";
   statusFeedback.style.color = error ? "#ff7777" : "";
 }
+function withStatusTimeout(promise, operation, timeoutMs = 120000) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${operation} está tardando demasiado. Comprueba tu conexión e inténtalo otra vez.`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 function statusText(value) {
   return String(value ?? "").trim();
 }
@@ -2881,7 +2888,7 @@ statusForm?.addEventListener("submit", async event => {
   }
 
   if (button) button.disabled = true;
-  statusNotice("Publicando tu estado...");
+  statusNotice(file ? "Preparando la publicación..." : "Publicando tu estado...");
   let storagePath = null;
   let musicStoragePath = null;
   try {
@@ -2893,33 +2900,36 @@ statusForm?.addEventListener("submit", async event => {
         : file.type === "image/webp" ? "webp"
         : file.type === "video/mp4" ? "mp4" : "webm";
       storagePath = currentUser.id + "/" + crypto.randomUUID() + "." + extension;
-      const { error: uploadError } = await supabase.storage.from("aureon-statuses").upload(storagePath, file, {
+      statusNotice(file.type.startsWith("video/") ? "Subiendo video… no cierres AUREON." : "Subiendo foto…");
+      const { error: uploadError } = await withStatusTimeout(supabase.storage.from("aureon-statuses").upload(storagePath, file, {
         contentType: file.type,
         cacheControl: "3600",
         upsert: false
-      });
+      }), "La subida del archivo");
       if (uploadError) throw uploadError;
     }
     if (musicFile) {
       const extension = audioExtensions.get(musicFile.type);
       musicStoragePath = currentUser.id + "/music-" + crypto.randomUUID() + "." + extension;
-      const { error: musicUploadError } = await supabase.storage.from("aureon-statuses").upload(musicStoragePath, musicFile, {
+      statusNotice("Subiendo música…");
+      const { error: musicUploadError } = await withStatusTimeout(supabase.storage.from("aureon-statuses").upload(musicStoragePath, musicFile, {
         contentType: musicFile.type,
         cacheControl: "3600",
         upsert: false
-      });
+      }), "La subida de la música");
       if (musicUploadError) throw musicUploadError;
     }
 
     const guessedTitle = musicFile ? musicFile.name.replace(/\.[^.]+$/, "") : "";
-    const { error: insertError } = await supabase.from("status_posts").insert({
+    statusNotice("Guardando tu estado…");
+    const { error: insertError } = await withStatusTimeout(supabase.from("status_posts").insert({
       user_id: currentUser.id,
       media_type: mediaType,
       media_url: storagePath,
       caption: caption || null,
       music_title: musicTitleInput || guessedTitle || null,
       music_url: musicStoragePath
-    });
+    }), "El guardado del estado");
     if (insertError) throw insertError;
     statusForm.reset();
     statusNotice("¡Estado publicado! Tus amigos podrán verlo durante 24 horas y la música sonará al abrirlo.");
