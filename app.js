@@ -178,13 +178,13 @@ async function enableAureonPushNotifications() {
       });
     }
     const serialized = subscription.toJSON();
-    const { error: saveError } = await supabase.from("push_subscriptions").upsert({
-      user_id: currentUser.id,
-      endpoint: serialized.endpoint,
-      subscription: serialized,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "endpoint" });
-    if (saveError) throw saveError;
+    const { data: registrationResult, error: saveError } = await invokeAureonPush({
+      action: "register",
+      subscription: serialized
+    });
+    if (saveError || registrationResult?.error) {
+      throw new Error(registrationResult?.error || saveError?.message || "No se pudo vincular este dispositivo a tu cuenta.");
+    }
     say("¡Notificaciones activadas en este dispositivo! Haz una prueba con otra cuenta.");
     if (button) button.textContent = "Actualizar notificaciones";
   } catch (error) {
@@ -211,14 +211,14 @@ async function syncExistingAureonPushSubscription() {
     const serialized = subscription.toJSON();
     if (!serialized?.endpoint || currentUser?.id !== userId) return;
 
-    const { error } = await supabase.from("push_subscriptions").upsert({
-      user_id: userId,
-      endpoint: serialized.endpoint,
-      subscription: serialized,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "endpoint" });
+    const { data: registrationResult, error } = await invokeAureonPush({
+      action: "register",
+      subscription: serialized
+    });
 
-    if (error) throw error;
+    if (error || registrationResult?.error) {
+      throw new Error(registrationResult?.error || error?.message || "No se pudo vincular este dispositivo a la cuenta activa.");
+    }
     if (currentUser?.id !== userId) return;
 
     const button = $("#enable-call-notifications");
