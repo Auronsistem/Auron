@@ -1,5 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#090d18"/>
-  <path d="M110 360 222 112h68l112 248h-74l-26-63h-96l-26 63z" fill="#20d9ed"/>
-  <path d="M230 240h48l-24-60z" fill="#090d18"/>
+  <defs>
+    <linearGradient id="aureonBlue" x1="80" y1="420" x2="410" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1263e8"/>
+      <stop offset=".52" stop-color="#168cff"/>
+      <stop offset="1" stop-color="#20e0ed"/>
+    </linearGradient>
+    <linearGradient id="playGlow" x1="180" y1="220" x2="340" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bafaff"/>
+      <stop offset="1" stop-color="#20d9ed"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#080e1c"/>
+  <path d="M108 372 211 126c9-22 27-35 45-35s36 13 45 35l103 246c11 27-9 54-37 54h-48L256 222l-63 157h-48c-28 0-48-27-37-54Z" fill="url(#aureonBlue)"/>
+  <path d="M257 288 330 426h-74l-42-80 43-58Z" fill="url(#playGlow)" opacity=".95"/>
+  <path d="M256 222 294 310l-38 39-38-39 38-88Z" fill="#080e1c" opacity=".96"/>
 </svg>
