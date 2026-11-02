@@ -1656,3 +1656,156 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
     padding:8px;
   }
 }
+
+
+/* ÁREA CENTRAL: estilo limpio y nítido tipo plataforma de videos.
+   Se conservan intactos el menú lateral y los accesos laterales. */
+#main-content {
+  font-family: Roboto, "Arial", sans-serif;
+}
+#main-content .hero {
+  min-height:230px;
+  padding:34px 38px;
+  border:1px solid rgba(148,163,184,.16);
+  border-radius:16px;
+  background:#151b27;
+  background-image:none;
+  box-shadow:none;
+}
+#main-content .hero h1 {
+  max-width:620px;
+  font-size:clamp(34px,4.8vw,52px);
+  line-height:1.08;
+  letter-spacing:-1.5px;
+}
+#main-content .hero h1 span { color:#3ea6ff; }
+#main-content .eyebrow {
+  color:var(--muted);
+  font-size:10px;
+  letter-spacing:1.25px;
+}
+#main-content .section { padding-top:44px; }
+#main-content .section-head { margin-bottom:18px; }
+#main-content .section h2 {
+  font-size:23px;
+  font-weight:700;
+  letter-spacing:-.35px;
+}
+#main-content .video-grid {
+  grid-template-columns:repeat(auto-fill,minmax(245px,1fr));
+  column-gap:22px;
+  row-gap:26px;
+}
+#main-content .video-card {
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  transition:none;
+}
+#main-content .video-card:hover {
+  transform:none;
+  border-color:transparent;
+}
+#main-content .video-card img,
+#main-content .video-card .video-thumbnail {
+  border-radius:12px;
+  background:#0b0f17;
+}
+#main-content .video-info { padding:11px 2px 4px; }
+#main-content .video-info h3 {
+  font-size:15px;
+  line-height:1.4;
+  font-weight:700;
+  letter-spacing:0;
+}
+#main-content .video-info p {
+  font-size:13px;
+  line-height:1.45;
+}
+#main-content .shorts-grid { gap:18px; }
+#main-content .short-card {
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  transition:none;
+}
+#main-content .short-card:hover,
+#main-content .short-card:focus-visible {
+  transform:none;
+  border-color:transparent;
+  box-shadow:none;
+}
+#main-content .short-card video,
+#main-content .short-card img,
+#main-content .short-card .short-preview {
+  border-radius:12px;
+}
+#main-content .short-info { padding:10px 2px 4px; }
+#main-content .content-panel {
+  max-width:760px;
+  padding:24px;
+  border:1px solid rgba(148,163,184,.16);
+  border-radius:12px;
+  box-shadow:none;
+  background:var(--panel);
+}
+#main-content .content-panel h3 {
+  font-size:18px;
+  letter-spacing:-.2px;
+}
+#main-content .large-icon {
+  font-size:34px;
+  color:#3ea6ff;
+}
+#main-content .button {
+  border-radius:8px;
+  box-shadow:none;
+  transition:background-color .16s ease,border-color .16s ease;
+}
+#main-content .button:hover:not(:disabled) {
+  transform:none;
+  filter:brightness(1.08);
+}
+#main-content .button:not(.button-outline) {
+  background:#2563a6;
+}
+#main-content .button-outline {
+  border-color:rgba(148,163,184,.3);
+  background:transparent;
+}
+:root[data-theme="light"] #main-content .hero {
+  color:#0f172a;
+  border-color:#e0e4eb;
+  background:#f1f3f5;
+  background-image:none;
+}
+:root[data-theme="light"] #main-content .hero h1 { color:#0f172a; }
+:root[data-theme="light"] #main-content .hero h1 span { color:#065fd4; }
+:root[data-theme="light"] #main-content .video-card,
+:root[data-theme="light"] #main-content .short-card {
+  color:#0f172a;
+  background:transparent;
+}
+:root[data-theme="light"] #main-content .video-info h3,
+:root[data-theme="light"] #main-content .short-info h3 { color:#0f172a; }
+:root[data-theme="light"] #main-content .video-info p,
+:root[data-theme="light"] #main-content .short-info p { color:#60646c; }
+:root[data-theme="light"] #main-content .content-panel {
+  background:#fff;
+  border-color:#e1e4e8;
+}
+:root[data-theme="light"] #main-content .button:not(.button-outline) {
+  background:#065fd4;
+}
+@media(max-width:850px) {
+  #main-content .hero { min-height:210px; padding:26px; }
+  #main-content .video-grid { grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); }
+}
+@media(max-width:650px) {
+  #main-content .section { padding-top:34px; }
+  #main-content .hero h1 { font-size:36px; }
+  #main-content .video-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px 12px; }
+  #main-content .content-panel { padding:18px; }
+}
