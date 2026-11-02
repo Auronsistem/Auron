@@ -1081,3 +1081,5 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .call-screen.is-video { padding-left:10px; padding-right:10px; }
   .call-screen.is-video #remote-call-video { height:68dvh; max-height:68dvh; }
 }
+
+.call-dialog [hidden] { display:none !important; }
