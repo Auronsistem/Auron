@@ -81,8 +81,8 @@ button:disabled {
 }
 
 .brand-icon {
-  color: var(--primary);
-  margin-right: 8px;
+  display:block; flex:0 0 36px; width:36px; height:36px;
+  margin-right:8px; object-fit:contain;
 }
 
 .header-actions {
@@ -1478,4 +1478,79 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .message-picker-unified { max-height:42dvh; padding:12px; }
   .sticker-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .message-picker-tab { flex:1; }
+}
+
+
+/* Configuración privada: solo se abre al pulsar el acceso del menú */
+#configuracion[hidden] { display:none !important; }
+.settings-nav-button { font:inherit; }
+.settings-section { min-height:calc(100vh - 130px); }
+.settings-section-head { align-items:center; }
+.appearance-panel { max-width:760px; margin-bottom:18px; }
+.theme-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:16px; }
+.theme-option {
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  min-height:54px; padding:12px; border:1px solid var(--border);
+  border-radius:12px; color:var(--text); background:var(--panel-light); font-weight:700;
+}
+.theme-option[aria-pressed="true"] { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(32,217,237,.15); }
+.theme-option span { font-size:20px; }
+.settings-section .parental-panel[hidden] { display:none !important; }
+
+/* Tema claro */
+:root[data-theme="light"] {
+  color-scheme:light; --bg:#f3f6fb; --panel:#fff; --panel-light:#e8eef7;
+  --text:#172238; --muted:#5d6a7f; --primary:#5946d7; --cyan:#087e9a; --border:#d5deeb;
+}
+:root[data-theme="dark"] { color-scheme:dark; }
+:root[data-theme="light"] body { background:var(--bg); color:var(--text); }
+:root[data-theme="light"] .topbar { background:rgba(255,255,255,.96); border-bottom-color:var(--border); }
+:root[data-theme="light"] .sidebar { background:#fff; border-right-color:var(--border); }
+:root[data-theme="light"] .side-link:hover,
+:root[data-theme="light"] .side-link.active { color:#172238; background:#e8eef7; }
+:root[data-theme="light"] .hero {
+  border-color:#cbd8ee;
+  background:radial-gradient(circle at 85% 25%,rgba(8,126,154,.14),transparent 30%),
+    linear-gradient(120deg,#e5eaff,#edf6ff 65%,#e5f7fa);
+}
+:root[data-theme="light"] .hero h1 { color:#14213a; }
+:root[data-theme="light"] input,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] select { background:#fff; color:#172238; border-color:#cbd5e1; }
+:root[data-theme="light"] dialog { color:#172238; background:#fff; border-color:#d5deeb; }
+:root[data-theme="light"] .dialog-close button { color:#172238; }
+:root[data-theme="light"] .content-panel,
+:root[data-theme="light"] .conversation-panel,
+:root[data-theme="light"] .chat-panel,
+:root[data-theme="light"] .conversation-item,
+:root[data-theme="light"] .message-picker,
+:root[data-theme="light"] .parental-request-card,
+:root[data-theme="light"] .parental-time-lock-panel,
+:root[data-theme="light"] .group-member-option {
+  color:#172238; background:#fff; border-color:#d5deeb;
+}
+:root[data-theme="light"] .mobile-nav { background:rgba(255,255,255,.97); border-top-color:#d5deeb; }
+:root[data-theme="light"] .mobile-nav a,
+:root[data-theme="light"] .mobile-nav button { color:#5d6a7f; }
+:root[data-theme="light"] .mobile-nav #mobile-settings-link { color:#087e9a; }
+:root[data-theme="light"] .message-bubble { color:#172238; background:#edf2fa; border-color:#d5deeb; }
+:root[data-theme="light"] .message-bubble.mine { color:#172238; background:#dfe8ff; border-color:#b9c9ee; }
+:root[data-theme="light"] .message-bubble time { color:#68758a; }
+:root[data-theme="light"] .theme-option { background:#f4f7fc; color:#172238; }
+:root[data-theme="light"] .gif-paste-zone { color:#172238; background:#f4f7fc; }
+:root[data-theme="light"] .message-picker-tab { color:#172238; background:#f4f7fc; }
+:root[data-theme="light"] .message-picker-tab.active { color:#fff; background:#087e9a; }
+:root[data-theme="light"] .chat-header,
+:root[data-theme="light"] .chat-header h3 { color:#172238; }
+:root[data-theme="light"] .presence-line,
+:root[data-theme="light"] .chat-presence { color:#5d6a7f; }
+
+@media (max-width:650px) {
+  .mobile-nav { gap:0; }
+  .mobile-nav a,.mobile-nav button { flex:1 1 0; min-width:0; justify-content:center; }
+  .mobile-nav small { font-size:9px; white-space:nowrap; }
+  .settings-section { padding-bottom:24px; }
+  .settings-section-head { flex-direction:row; align-items:center; }
+  .settings-section-head h2 { font-size:24px; }
+  .theme-options { grid-template-columns:1fr 1fr; }
 }
