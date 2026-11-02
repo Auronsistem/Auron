@@ -11,6 +11,7 @@ const $ = (selector) => document.querySelector(selector);
 
 let currentUser = null;
 let parentalStatus = { supervised: false, maturity_level: 3 };
+let parentalSettingsRestricted = true;
 let parentalMinuteTimer = null;
 let guardianClient = null;
 let guardianUserId = null;
@@ -89,7 +90,7 @@ function openSettings() {
   const section = $("#configuracion");
   if (!section) return;
   const parentalPanel = $("#parental-settings-panel");
-  if (parentalPanel) parentalPanel.hidden = Boolean(parentalStatus.supervised);
+  if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
   setSettingsVisibility(true);
   showSection("configuracion");
   section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -987,6 +988,7 @@ function setParentalScreenBlock(blocked) {
 async function refreshParentalState() {
   if (!currentUser) {
     parentalStatus = { supervised: false, maturity_level: 3 };
+    parentalSettingsRestricted = true;
     if (parentalMinuteTimer) window.clearInterval(parentalMinuteTimer);
     parentalMinuteTimer = null;
     setParentalScreenBlock(false);
@@ -1005,6 +1007,7 @@ async function refreshParentalState() {
   const { data: activeLinks, error: linkError } = await supabase.from("parental_links")
     .select("id").eq("child_id", currentUser.id).eq("status", "active").limit(1);
   const supervisedByAdult = !linkError && Boolean(activeLinks?.length);
+  parentalSettingsRestricted = supervisedByAdult || Boolean(parentalStatus.supervised);
 
   const settingsSection = $("#configuracion");
   const settingsLink = $("#open-settings-link");
@@ -1013,7 +1016,7 @@ async function refreshParentalState() {
   if (settingsLink) settingsLink.hidden = false;
   if (mobileSettingsLink) mobileSettingsLink.hidden = false;
   const parentalPanel = $("#parental-settings-panel");
-  if (parentalPanel) parentalPanel.hidden = supervisedByAdult || Boolean(parentalStatus.supervised);
+  if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
   if (supervisedByAdult) {
     if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
   } else {
