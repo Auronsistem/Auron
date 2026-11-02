@@ -2237,3 +2237,23 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 :root[data-theme="light"] #estados .status-feed-wrap { background:#fff; }
 :root[data-theme="light"] .status-story-label,
 :root[data-theme="light"] .status-update-row { color:#172238; }
+
+
+/* Identidad en el encabezado y etiqueta de amistad */
+.chat-identity { display:flex; align-items:center; gap:11px; min-width:0; }
+.chat-identity-copy { display:flex; flex-direction:column; align-items:flex-start; min-width:0; gap:3px; }
+.chat-peer-avatar { width:48px; height:48px; flex:0 0 48px; }
+.friend-status-badge {
+  display:inline-flex; align-items:center; width:max-content; max-width:100%;
+  padding:3px 9px; border-radius:6px; font-size:10px; font-weight:800;
+  letter-spacing:.2px; color:#d7e0ec; background:#536174; border:1px solid rgba(255,255,255,.12);
+}
+.friend-status-badge.is-friend { color:#fff; background:#18834e; border-color:#25b86e; }
+.friend-status-badge.is-person { color:#e5e7eb; background:#526071; border-color:#68778b; }
+.user-info-dialog .friend-status-badge { margin-top:7px; }
+.user-info-dialog #block-chat-user.button-danger { background:#a9323b !important; }
+@media(max-width:650px) {
+  .chat-identity { flex:1 1 100%; }
+  .chat-peer-avatar { width:42px;height:42px;flex-basis:42px; }
+  .chat-header .call-actions { justify-content:flex-start; }
+}
