@@ -558,6 +558,7 @@ async function updateSession(session) {
   updateHeader();
   subscribeToCallSignals();
   subscribeToGroupCallSignals();
+  if (currentUser) loadPendingNotificationCall();
 
   if (currentUser) {
     removeLockScreen();
@@ -2141,10 +2142,12 @@ function playAureonTone(kind = "message") {
 
 // El service worker avisa a esta pestaña cuando llega un push mientras está visible.
 let pendingNotificationCallAction = null;
+let pendingNotificationCallId = null;
 try {
   const params = new URLSearchParams(window.location.search);
   const action = params.get("notificationAction");
   const callId = params.get("callId");
+  if (callId) pendingNotificationCallId = callId;
   if (callId && ["accept", "reject"].includes(action)) pendingNotificationCallAction = { action, callId };
 } catch (_) {}
 navigator.serviceWorker?.addEventListener("message", (event) => {
@@ -2160,6 +2163,17 @@ function processPendingNotificationCallAction() {
   pendingNotificationCallAction = null;
   const button = action === "accept" ? $("#accept-call") : $("#reject-call");
   if (button) window.setTimeout(() => button.click(), 250);
+}
+async function loadPendingNotificationCall() {
+  if (!currentUser || !pendingNotificationCallId || activeCall) return;
+  const callId = pendingNotificationCallId;
+  const { data, error } = await supabase.from("call_signals").select("*")
+    .eq("call_id", callId).eq("recipient_id", currentUser.id)
+    .eq("signal_type", "invite")
+    .gte("created_at", new Date(Date.now() - 120000).toISOString())
+    .maybeSingle();
+  if (error) { console.warn("No se pudo recuperar la invitación desde la notificación:", error); return; }
+  if (data && !activeCall) await processCallSignal(data);
 }
 
 function startCallAlert() {
