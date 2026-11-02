@@ -2074,7 +2074,16 @@ function setStatusCameraMode(mode) {
 function setStatusFileFromBlob(blob, filename) {
   if (!statusMediaInput || !blob) return false;
   try {
-    const file = new File([blob], filename, { type: blob.type || "video/webm", lastModified: Date.now() });
+    // MediaRecorder puede incluir parámetros de códec en el MIME (video/webm;codecs=vp8,opus).
+    // El formulario valida el tipo MIME base, así que lo normalizamos sin recodificar el video.
+    const rawType = String(blob.type || "").toLowerCase();
+    const normalizedType = rawType.startsWith("video/mp4") ? "video/mp4"
+      : rawType.startsWith("video/webm") ? "video/webm"
+      : rawType.startsWith("image/jpeg") ? "image/jpeg"
+      : rawType.startsWith("image/png") ? "image/png"
+      : rawType.startsWith("image/webp") ? "image/webp"
+      : rawType || (filename.endsWith(".jpg") ? "image/jpeg" : "video/webm");
+    const file = new File([blob], filename, { type: normalizedType, lastModified: Date.now() });
     const transfer = new DataTransfer();
     transfer.items.add(file);
     statusMediaInput.files = transfer.files;
