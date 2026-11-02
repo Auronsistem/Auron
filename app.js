@@ -660,7 +660,7 @@ authForm?.addEventListener("submit", async (event) => {
   }
 });
 
-async async function logout() {
+async function logout() {
   stopPlayer(); const {error}=await supabase.auth.signOut();
   if(error) alert("No se pudo cerrar sesión: "+error.message);
 }
