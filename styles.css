@@ -1966,3 +1966,5 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .voice-record-button { padding:9px 11px; font-size:12px; }
   .local-call-avatar { width:88px !important;height:88px !important;right:10px;bottom:10px; }
 }
+
+.call-voice-waves:not(.is-speaking),.group-call-voice-waves:not(.is-speaking) { display:none; }
