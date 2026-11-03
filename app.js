@@ -237,6 +237,39 @@ async function syncExistingAureonPushSubscription() {
 
 $("#enable-call-notifications")?.addEventListener("click", enableAureonPushNotifications);
 
+async function testAureonPushNotifications() {
+  const button = $("#test-call-notifications");
+  const status = $("#call-notification-status");
+  const say = (message, error = false) => showMessage(status, message, error);
+  if (!currentUser) {
+    say("Inicia sesión antes de probar las notificaciones.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      throw new Error("Primero activa las notificaciones en este dispositivo.");
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      throw new Error("Este dispositivo aún no está registrado. Pulsa primero «Activar notificaciones».");
+    }
+    const { data, error } = await invokeAureonPush({ action: "test" });
+    if (error || data?.error) throw new Error(data?.error || error?.message || "No se pudo enviar la prueba.");
+    if (!data?.sent) {
+      throw new Error(data?.message || "No hay dispositivos registrados en esta cuenta.");
+    }
+    say("Prueba enviada a " + data.sent + " de " + data.total + " dispositivo(s). Bloquea el teléfono o cierra AUREON para comprobar la recepción.");
+  } catch (error) {
+    console.error("AUREON: falló la prueba push:", error);
+    say(error?.message || "No se pudo enviar la notificación de prueba.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("#test-call-notifications")?.addEventListener("click", testAureonPushNotifications);
+
 function showEmpty(container, message) {
   if (!container) return;
 
