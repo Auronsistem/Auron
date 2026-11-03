@@ -553,6 +553,42 @@
     </button>
   </dialog>
 
+
+  <!-- SOPORTE OFICIAL AUREON AI -->
+  <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title">
+    <div class="support-shell">
+      <header class="support-header">
+        <div class="support-brand">
+          <span class="support-brand-icon" aria-hidden="true">✦</span>
+          <div><p class="eyebrow">ASISTENTE OFICIAL</p><h2 id="support-title">AUREON AI</h2></div>
+        </div>
+        <button id="support-close" class="support-close" type="button" aria-label="Cerrar soporte">×</button>
+      </header>
+      <div class="support-layout">
+        <section class="support-chat" aria-label="Chat con AUREON AI">
+          <div class="support-intro"><strong>¿En qué puedo ayudarte?</strong><p class="muted">Pregúntame sobre AUREON, tecnología, programación, estudios y mucho más.</p></div>
+          <div id="support-messages" class="support-messages" role="log" aria-live="polite">
+            <div class="support-message assistant"><strong>AUREON AI</strong><p>¡Hola! Soy AUREON AI. Estoy aquí para ayudarte. ¿Qué te gustaría saber?</p></div>
+          </div>
+          <form id="support-form" class="support-form">
+            <label class="sr-only" for="support-input">Escribe tu pregunta</label>
+            <textarea id="support-input" maxlength="2000" rows="2" placeholder="Escribe tu pregunta..." required></textarea>
+            <button id="support-send" class="button" type="submit">Enviar</button>
+          </form>
+          <p id="support-status" class="notice" aria-live="polite">AUREON AI puede equivocarse. No compartas contraseñas ni códigos privados.</p>
+        </section>
+        <aside class="support-contact">
+          <span class="support-contact-icon" aria-hidden="true">✉</span>
+          <h3>¿Necesitas más ayuda?</h3>
+          <p class="muted">Si tienes más preguntas, puedes contactar al soporte real.</p>
+          <p class="support-contact-label">Correo de soporte</p>
+          <a class="support-email" href="mailto:aureonaureonnoreply@gmail.com?subject=&body=">aureonaureonnoreply@gmail.com</a>
+          <p class="muted support-contact-note">Al pulsar el correo se abrirá tu aplicación de email con el destinatario preparado.</p>
+        </aside>
+      </div>
+    </div>
+  </dialog>
+
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -562,6 +598,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=84"></script>
+  <script type="module" src="app.js?v=85"></script>
 </body>
 </html>
