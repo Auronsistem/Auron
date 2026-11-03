@@ -2344,3 +2344,51 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .status-camera-dialog { width:100vw; height:100dvh; max-width:none; max-height:100dvh; border-radius:0; border:0; }
   .status-camera-controls { padding-bottom:max(16px, env(safe-area-inset-bottom)); }
 }
+
+
+/* AUREON AI · soporte adaptable */
+.header-support-button { white-space:nowrap; }
+.support-dialog {
+  width:min(960px,96vw); max-width:960px; max-height:min(90dvh,850px);
+  padding:0; overflow:hidden; color:var(--text); background:var(--panel);
+  border:1px solid var(--border); border-radius:22px; box-shadow:0 24px 80px rgba(0,0,0,.5);
+}
+.support-dialog::backdrop { background:rgba(2,6,18,.78); backdrop-filter:blur(5px); }
+.support-shell { display:flex; flex-direction:column; min-height:560px; max-height:min(90dvh,850px); }
+.support-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); background:var(--panel-light); }
+.support-brand { display:flex; align-items:center; gap:12px; }
+.support-brand h2 { font-size:22px; margin-top:2px; }
+.support-brand .eyebrow { margin:0; }
+.support-brand-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; color:#fff; background:linear-gradient(135deg,#7357ff,#20d9ed); font-size:25px; }
+.support-close { width:38px; height:38px; border:0; border-radius:50%; color:var(--text); background:rgba(255,255,255,.08); font-size:27px; cursor:pointer; }
+.support-layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(230px,.8fr); flex:1; min-height:0; }
+.support-chat { display:flex; flex-direction:column; min-height:0; padding:18px; }
+.support-intro strong { font-size:18px; }
+.support-intro p { margin-top:5px; font-size:13px; }
+.support-messages { display:flex; flex-direction:column; gap:12px; flex:1; min-height:180px; max-height:440px; overflow-y:auto; padding:18px 2px; }
+.support-message { max-width:88%; padding:11px 13px; border:1px solid var(--border); border-radius:15px; background:var(--panel-light); overflow-wrap:anywhere; }
+.support-message.user { align-self:flex-end; border-color:rgba(115,87,255,.45); background:rgba(115,87,255,.15); }
+.support-message strong { display:block; margin-bottom:5px; font-size:12px; color:var(--cyan); }
+.support-message p { margin:0; line-height:1.5; white-space:pre-wrap; font-size:14px; }
+.support-form { display:flex; align-items:flex-end; gap:9px; }
+.support-form textarea { flex:1; min-width:0; min-height:48px; max-height:120px; resize:vertical; padding:12px; border:1px solid var(--border); border-radius:13px; color:var(--text); background:var(--bg); font:inherit; }
+.support-form button { min-height:46px; }
+.support-chat > .notice { margin-top:8px; font-size:11px; }
+.support-contact { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:24px; border-left:1px solid var(--border); background:rgba(255,255,255,.025); }
+.support-contact-icon { display:grid; place-items:center; width:48px; height:48px; margin-bottom:16px; border-radius:15px; color:var(--cyan); background:rgba(32,217,237,.1); font-size:24px; }
+.support-contact h3 { margin-bottom:8px; }
+.support-contact p { font-size:13px; line-height:1.5; }
+.support-contact-label { margin-top:24px; margin-bottom:7px; font-size:11px !important; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+.support-email { color:var(--cyan); font-weight:700; overflow-wrap:anywhere; }
+.support-contact-note { margin-top:12px; }
+@media(max-width:680px) {
+  .support-dialog { width:100vw; max-width:none; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
+  .support-shell { min-height:100dvh; max-height:100dvh; }
+  .support-layout { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto; overflow:auto; }
+  .support-chat { min-height:0; padding:14px; }
+  .support-messages { max-height:none; }
+  .support-contact { padding:16px; border-left:0; border-top:1px solid var(--border); }
+  .support-contact-icon { display:none; }
+  .support-contact-label { margin-top:12px; }
+  .header-support-button { padding:8px 10px; font-size:12px; }
+}
