@@ -5217,6 +5217,8 @@ let callReconnectTimer = null;
 let activeCall = null;
 let callPeer = null;
 let callLocalStream = null;
+let callCameraFacing = "user";
+let callCameraSwitching = false;
 let callRemoteStream = null;
 let callRingTimer = null;
 let callAudioContext = null;
@@ -5759,33 +5761,58 @@ $("#switch-call-camera")?.addEventListener("click", async () => {
     callSubtitle.textContent = "Para usar la cámara, inicia una videollamada.";
     return;
   }
+  if (callCameraSwitching) return;
   const currentTrack = callLocalStream.getVideoTracks()[0];
-  if (!currentTrack) {
+  if (!currentTrack || currentTrack.readyState !== "live") {
     callSubtitle.textContent = "No hay una cámara activa. Pulsa Activar cámara.";
     return;
   }
+
+  callCameraSwitching = true;
+  const nextFacing = callCameraFacing === "user" ? "environment" : "user";
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cameras = devices.filter(device => device.kind === "videoinput");
-    if (cameras.length < 2) {
-      callSubtitle.textContent = "Este dispositivo solo detecta una cámara.";
-      return;
+    // Cambia directamente entre frontal y trasera; el siguiente toque vuelve a alternar.
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { exact: nextFacing },
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        },
+        audio: false
+      });
+    } catch (firstError) {
+      // Algunos navegadores móviles no admiten exact; se intenta con facingMode ideal.
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
     }
-    const currentIndex = cameras.findIndex(device => device.deviceId === currentTrack.getSettings().deviceId);
-    const nextCamera = cameras[(currentIndex + 1 + cameras.length) % cameras.length];
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: nextCamera.deviceId } }, audio: false });
+
     const nextTrack = stream.getVideoTracks()[0];
+    if (!nextTrack || nextTrack.readyState !== "live") {
+      stream.getTracks().forEach(track => track.stop());
+      throw new Error("La cámara seleccionada no está disponible.");
+    }
+
     const sender = callPeer?.getSenders().find(item => item.track?.kind === "video");
     if (sender) await sender.replaceTrack(nextTrack);
+
     callLocalStream.removeTrack(currentTrack);
     currentTrack.stop();
     callLocalStream.addTrack(nextTrack);
-    localCallVideo.srcObject = callLocalStream;
-    await localCallVideo.play().catch(() => {});
-    callSubtitle.textContent = "Cámara cambiada.";
+    callCameraFacing = nextFacing;
+    if (localCallVideo) {
+      localCallVideo.srcObject = callLocalStream;
+      await localCallVideo.play().catch(() => {});
+    }
+    callSubtitle.textContent = nextFacing === "user" ? "Cámara frontal." : "Cámara trasera.";
   } catch (error) {
     console.error("No se pudo cambiar la cámara:", error);
-    callSubtitle.textContent = "No se pudo cambiar la cámara. Revisa los permisos del navegador.";
+    callSubtitle.textContent = "No se pudo cambiar la cámara. Este dispositivo puede tener una sola cámara o no permitir el cambio.";
+  } finally {
+    callCameraSwitching = false;
   }
 });
 callDialog?.addEventListener("close", () => {
