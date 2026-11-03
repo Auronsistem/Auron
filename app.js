@@ -769,7 +769,7 @@ async function generateAureonStream(engine, messages, paragraph, settings) {
 }
 
 function looksLikeCorruptedAureonText(value) {
-  const unusual = (value.match(/[\\u3400-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF\\uAC00-\\uD7AF\\uFFFD]/g) || []).length;
+  const unusual = (value.match(/[\p{Script=Han}\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}\uFFFD]/gu) || []).length;
   return unusual > Math.max(2, value.length * 0.03);
 }
 
