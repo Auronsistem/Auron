@@ -33,6 +33,7 @@ const toggleAuth = $("#toggle-auth");
 const uploadDialog = $("#upload-dialog");
 const uploadForm = $("#upload-form");
 const playerDialog = $("#player-dialog");
+const supportDialog = $("#support-dialog");
 
 function showMessage(element, message, error = false) {
   if (!element) return;
@@ -673,6 +674,10 @@ function updateHeader() {
   const settingsLink=$("#open-settings-link"); if(settingsLink) settingsLink.hidden=false;
   const mobileSettingsLink=$("#mobile-settings-link"); if(mobileSettingsLink) mobileSettingsLink.hidden=false;
   const actions=$(".header-actions"); if(!actions) return; actions.replaceChildren();
+  const supportButton=document.createElement("button");
+  supportButton.type="button"; supportButton.className="button button-outline header-support-button";
+  supportButton.textContent="✦ Soporte"; supportButton.setAttribute("aria-label","Abrir soporte de AUREON AI");
+  supportButton.addEventListener("click",openAureonSupport); actions.append(supportButton);
   const button=document.createElement("button"); button.type="button"; button.className="header-profile-button";
   button.setAttribute("aria-label",currentUser?"Abrir configuración de perfil":"Iniciar sesión");
   button.append(createAvatar(currentProfile,"header-profile-avatar"));
@@ -680,6 +685,72 @@ function updateHeader() {
   const signout=$("#settings-signout"); if(signout) signout.hidden=!currentUser;
 }
 
+
+
+// SOPORTE CON AUREON AI. El historial vive solo en esta pestaña y no guarda datos sensibles.
+const aureonSupportHistory = [];
+function appendAureonSupportMessage(role, content) {
+  const host = $("#support-messages");
+  if (!host) return;
+  const item = document.createElement("article");
+  item.className = "support-message " + (role === "user" ? "user" : "assistant");
+  const label = document.createElement("strong");
+  label.textContent = role === "user" ? "Tú" : "AUREON AI";
+  const paragraph = document.createElement("p");
+  paragraph.textContent = content;
+  item.append(label, paragraph);
+  host.append(item);
+  host.scrollTop = host.scrollHeight;
+}
+function openAureonSupport() {
+  if (!supportDialog) return;
+  if (!supportDialog.open) supportDialog.showModal();
+  $("#support-input")?.focus();
+}
+$("#support-close")?.addEventListener("click", () => supportDialog?.close());
+supportDialog?.addEventListener("click", event => {
+  if (event.target === supportDialog) supportDialog.close();
+});
+$("#support-form")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const input = $("#support-input");
+  const send = $("#support-send");
+  const status = $("#support-status");
+  const question = input?.value.trim() || "";
+  if (!question || question.length > 2000) return;
+  if (!currentUser) {
+    showMessage(status, "Inicia sesión para conversar con AUREON AI. El soporte por correo sigue disponible.", true);
+    openAuth();
+    return;
+  }
+  input.value = "";
+  aureonSupportHistory.push({ role: "user", content: question });
+  appendAureonSupportMessage("user", question);
+  if (send) send.disabled = true;
+  if (input) input.disabled = true;
+  showMessage(status, "AUREON AI está preparando una respuesta…");
+  try {
+    const messages = aureonSupportHistory.slice(-12).map(message => ({
+      role: message.role,
+      content: message.content.slice(0, 2000)
+    }));
+    const { data, error } = await supabase.functions.invoke("aureon-ai", { body: { messages } });
+    if (error) throw error;
+    const answer = String(data?.reply || "").trim();
+    if (!answer) throw new Error(data?.error || "AUREON AI no devolvió una respuesta.");
+    aureonSupportHistory.push({ role: "assistant", content: answer });
+    appendAureonSupportMessage("assistant", answer);
+    showMessage(status, "AUREON AI · Respuesta generada automáticamente.");
+  } catch (error) {
+    console.warn("AUREON AI no está disponible:", error);
+    const fallback = "Ahora mismo no puedo conectar con mi cerebro de IA. Puedes contactar al soporte real en aureonaureonnoreply@gmail.com. No compartas contraseñas ni códigos de acceso.";
+    appendAureonSupportMessage("assistant", fallback);
+    showMessage(status, "El servicio de IA todavía necesita que conectemos su servidor.", true);
+  } finally {
+    if (send) send.disabled = false;
+    if (input) { input.disabled = false; input.focus(); }
+  }
+});
 
 
 const guardianAuthOptions = {
