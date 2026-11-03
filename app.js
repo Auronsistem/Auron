@@ -687,11 +687,8 @@ function updateHeader() {
 
 
 
-// AUREON AI LOCAL: el modelo se ejecuta en el navegador; no se envían los chats a una API.
+// AUREON AI alojada: el historial solo vive en memoria durante esta sesión.
 const aureonSupportHistory = [];
-const AUREON_LOCAL_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-let aureonLocalEngine = null;
-let aureonLocalEnginePromise = null;
 
 function appendAureonSupportMessage(role, content) {
   const host = $("#support-messages");
@@ -713,65 +710,10 @@ function openAureonSupport() {
   $("#support-input")?.focus();
 }
 
-async function getAureonLocalEngine(status) {
-  if (aureonLocalEngine) return aureonLocalEngine;
-  if (aureonLocalEnginePromise) return aureonLocalEnginePromise;
-  if (!navigator.gpu) {
-    throw new Error("Este navegador no tiene WebGPU disponible. Prueba con una versión reciente de Chrome o Edge en un dispositivo compatible.");
-  }
-
-  aureonLocalEnginePromise = (async () => {
-    showMessage(status, "Preparando el motor local de AUREON AI…");
-    const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.87");
-    const engine = await webllm.CreateMLCEngine(AUREON_LOCAL_MODEL, {
-      initProgressCallback: progress => {
-        const detail = progress?.text || "Descargando y preparando el modelo…";
-        showMessage(status, "AUREON AI · " + detail);
-      }
-    });
-    aureonLocalEngine = engine;
-    return engine;
-  })();
-
-  try {
-    return await aureonLocalEnginePromise;
-  } catch (error) {
-    aureonLocalEnginePromise = null;
-    throw error;
-  }
-}
-
 $("#support-close")?.addEventListener("click", () => supportDialog?.close());
 supportDialog?.addEventListener("click", event => {
   if (event.target === supportDialog) supportDialog.close();
 });
-
-async function generateAureonStream(engine, messages, paragraph, settings) {
-  const stream = await engine.chat.completions.create({
-    messages,
-    stream: true,
-    temperature: settings.temperature,
-    top_p: 0.85,
-    repetition_penalty: 1.08,
-    max_tokens: 160
-  });
-  let answer = "";
-  for await (const chunk of stream) {
-    const piece = chunk?.choices?.[0]?.delta?.content;
-    if (typeof piece === "string" && piece) {
-      answer += piece;
-      paragraph.textContent = answer;
-      const host = $("#support-messages");
-      if (host) host.scrollTop = host.scrollHeight;
-    }
-  }
-  return answer.trim();
-}
-
-function looksLikeCorruptedAureonText(value) {
-  const unusual = (value.match(/[\p{Script=Han}\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}\uFFFD]/gu) || []).length;
-  return unusual > Math.max(2, value.length * 0.03);
-}
 
 $("#support-form")?.addEventListener("submit", async event => {
   event.preventDefault();
@@ -782,7 +724,7 @@ $("#support-form")?.addEventListener("submit", async event => {
   if (!question || question.length > 2000) return;
 
   if (!currentUser) {
-    showMessage(status, "Inicia sesión para conversar con AUREON AI. El soporte por correo sigue disponible.", true);
+    showMessage(status, "Inicia sesión para conversar con AUREON AI.", true);
     openAuth();
     return;
   }
@@ -795,48 +737,47 @@ $("#support-form")?.addEventListener("submit", async event => {
   let assistantParagraph = null;
 
   try {
-    const engine = await getAureonLocalEngine(status);
-    showMessage(status, "AUREON AI está generando tu respuesta…");
-    const messages = [
-      {
-        role: "system",
-        content: "Eres AUREON AI, el asistente integrado en AUREON PLAY. Responde SIEMPRE en español natural y claro, salvo que el usuario pida expresamente otro idioma. No mezcles idiomas, caracteres asiáticos ni fragmentos de código en respuestas normales. Usa frases breves y directas. Ayuda con tecnología, estudios, programación y uso de AUREON. Sé honesto cuando no sepas algo; no inventes datos ni afirmes tener acceso a internet o a cuentas privadas. No solicites contraseñas, códigos OTP, claves API, datos bancarios ni información personal sensible. No des instrucciones peligrosas. Si preguntan por una emergencia o riesgo inmediato, recomienda acudir a un adulto de confianza y a los servicios locales de emergencia."
-      },
-      ...aureonSupportHistory.slice(-5).map(message => ({
-        role: message.role,
-        content: message.content.slice(0, 900)
-      }))
-    ];
-
+    showMessage(status, "Conectando con AUREON AI…");
     appendAureonSupportMessage("assistant", "");
     assistantParagraph = $("#support-messages")?.lastElementChild?.querySelector("p") || null;
     if (!assistantParagraph) throw new Error("No se pudo preparar el espacio de respuesta.");
 
-    let answer = await generateAureonStream(engine, messages, assistantParagraph, {
-      temperature: 0.2
+    const { data, error } = await supabase.functions.invoke("aureon-ai", {
+      body: {
+        messages: aureonSupportHistory.slice(-10).map(message => ({
+          role: message.role,
+          content: message.content.slice(0, 2000)
+        }))
+      }
     });
 
-    if (looksLikeCorruptedAureonText(answer)) {
-      showMessage(status, "AUREON AI está corrigiendo una respuesta que no salió clara…");
-      assistantParagraph.textContent = "";
-      answer = await generateAureonStream(engine, messages, assistantParagraph, {
-        temperature: 0.1
-      });
+    if (error) {
+      let message = data?.error || error.message || "No se pudo conectar con el servidor de AUREON AI.";
+      try {
+        const context = error.context;
+        if (context && typeof context.json === "function") {
+          const details = await context.clone().json();
+          if (details?.error) message = details.error;
+        }
+      } catch (_) {}
+      const providerMissing = data?.code === "AI_PROVIDER_NOT_CONFIGURED" ||
+        String(message).toLowerCase().includes("falta configurar un proveedor");
+      throw new Error(providerMissing
+        ? "El servidor de AUREON AI ya está preparado y conoce AUREON, pero todavía falta conectar el proveedor de IA."
+        : message);
     }
 
-    if (!answer || looksLikeCorruptedAureonText(answer)) {
-      throw new Error("El modelo no logró generar una respuesta clara en español. Inténtalo otra vez.");
-    }
-
+    const answer = typeof data?.reply === "string" ? data.reply.trim() : "";
+    if (!answer) throw new Error(data?.error || "AUREON AI no devolvió una respuesta.");
+    assistantParagraph.textContent = answer;
     aureonSupportHistory.push({ role: "assistant", content: answer });
-    showMessage(status, "AUREON AI · Respuesta generada localmente.");
+    showMessage(status, "AUREON AI · Respuesta recibida del servidor.");
   } catch (error) {
-    console.warn("AUREON AI local:", error);
-    const detail = String(error?.message || "").slice(0, 260);
-    const friendly = "No pude generar una respuesta clara esta vez. Puedes intentarlo de nuevo.";
-    if (assistantParagraph) assistantParagraph.textContent = friendly;
-    else appendAureonSupportMessage("assistant", friendly);
-    showMessage(status, detail || "No se pudo generar la respuesta.", true);
+    console.warn("AUREON AI:", error);
+    const detail = String(error?.message || "").slice(0, 300);
+    if (assistantParagraph) assistantParagraph.textContent = detail;
+    else appendAureonSupportMessage("assistant", detail);
+    showMessage(status, detail, true);
   } finally {
     if (send) send.disabled = false;
     if (input) { input.disabled = false; input.focus(); }
