@@ -746,6 +746,33 @@ supportDialog?.addEventListener("click", event => {
   if (event.target === supportDialog) supportDialog.close();
 });
 
+async function generateAureonStream(engine, messages, paragraph, settings) {
+  const stream = await engine.chat.completions.create({
+    messages,
+    stream: true,
+    temperature: settings.temperature,
+    top_p: 0.85,
+    repetition_penalty: 1.08,
+    max_tokens: 160
+  });
+  let answer = "";
+  for await (const chunk of stream) {
+    const piece = chunk?.choices?.[0]?.delta?.content;
+    if (typeof piece === "string" && piece) {
+      answer += piece;
+      paragraph.textContent = answer;
+      const host = $("#support-messages");
+      if (host) host.scrollTop = host.scrollHeight;
+    }
+  }
+  return answer.trim();
+}
+
+function looksLikeCorruptedAureonText(value) {
+  const unusual = (value.match(/[\\u3400-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF\\uAC00-\\uD7AF\\uFFFD]/g) || []).length;
+  return unusual > Math.max(2, value.length * 0.03);
+}
+
 $("#support-form")?.addEventListener("submit", async event => {
   event.preventDefault();
   const input = $("#support-input");
@@ -765,36 +792,51 @@ $("#support-form")?.addEventListener("submit", async event => {
   appendAureonSupportMessage("user", question);
   if (send) send.disabled = true;
   if (input) input.disabled = true;
+  let assistantParagraph = null;
 
   try {
     const engine = await getAureonLocalEngine(status);
-    showMessage(status, "AUREON AI está pensando en este dispositivo…");
+    showMessage(status, "AUREON AI está generando tu respuesta…");
     const messages = [
       {
         role: "system",
-        content: "Eres AUREON AI, el asistente integrado en AUREON PLAY. Responde en español claro, amable y apropiado para adolescentes. Ayuda con tecnología, estudios, programación y uso de AUREON. Sé honesto cuando no sepas algo; no inventes datos ni afirmes tener acceso a internet o a cuentas privadas. No solicites contraseñas, códigos OTP, claves API, datos bancarios ni información personal sensible. No des instrucciones peligrosas. Si preguntan por una emergencia o riesgo inmediato, recomienda acudir a un adulto de confianza y a los servicios locales de emergencia. Mantén respuestas útiles y relativamente breves."
+        content: "Eres AUREON AI, el asistente integrado en AUREON PLAY. Responde SIEMPRE en español natural y claro, salvo que el usuario pida expresamente otro idioma. No mezcles idiomas, caracteres asiáticos ni fragmentos de código en respuestas normales. Usa frases breves y directas. Ayuda con tecnología, estudios, programación y uso de AUREON. Sé honesto cuando no sepas algo; no inventes datos ni afirmes tener acceso a internet o a cuentas privadas. No solicites contraseñas, códigos OTP, claves API, datos bancarios ni información personal sensible. No des instrucciones peligrosas. Si preguntan por una emergencia o riesgo inmediato, recomienda acudir a un adulto de confianza y a los servicios locales de emergencia."
       },
-      ...aureonSupportHistory.slice(-10).map(message => ({
+      ...aureonSupportHistory.slice(-5).map(message => ({
         role: message.role,
-        content: message.content.slice(0, 1800)
+        content: message.content.slice(0, 900)
       }))
     ];
 
-    const result = await engine.chat.completions.create({
-      messages,
-      temperature: 0.65,
-      max_tokens: 420
+    appendAureonSupportMessage("assistant", "");
+    assistantParagraph = $("#support-messages")?.lastElementChild?.querySelector("p") || null;
+    if (!assistantParagraph) throw new Error("No se pudo preparar el espacio de respuesta.");
+
+    let answer = await generateAureonStream(engine, messages, assistantParagraph, {
+      temperature: 0.2
     });
-    const answer = String(result?.choices?.[0]?.message?.content || "").trim();
-    if (!answer) throw new Error("El modelo local no devolvió una respuesta.");
+
+    if (looksLikeCorruptedAureonText(answer)) {
+      showMessage(status, "AUREON AI está corrigiendo una respuesta que no salió clara…");
+      assistantParagraph.textContent = "";
+      answer = await generateAureonStream(engine, messages, assistantParagraph, {
+        temperature: 0.1
+      });
+    }
+
+    if (!answer || looksLikeCorruptedAureonText(answer)) {
+      throw new Error("El modelo no logró generar una respuesta clara en español. Inténtalo otra vez.");
+    }
+
     aureonSupportHistory.push({ role: "assistant", content: answer });
-    appendAureonSupportMessage("assistant", answer);
-    showMessage(status, "AUREON AI · Respuesta generada localmente en este dispositivo.");
+    showMessage(status, "AUREON AI · Respuesta generada localmente.");
   } catch (error) {
     console.warn("AUREON AI local:", error);
     const detail = String(error?.message || "").slice(0, 260);
-    appendAureonSupportMessage("assistant", "No pude iniciar el modelo local en este dispositivo. Comprueba que tu navegador admita WebGPU y que tengas memoria y espacio disponibles. Puedes volver a intentarlo más tarde.");
-    showMessage(status, detail || "No se pudo iniciar la IA local.", true);
+    const friendly = "No pude generar una respuesta clara esta vez. Puedes intentarlo de nuevo.";
+    if (assistantParagraph) assistantParagraph.textContent = friendly;
+    else appendAureonSupportMessage("assistant", friendly);
+    showMessage(status, detail || "No se pudo generar la respuesta.", true);
   } finally {
     if (send) send.disabled = false;
     if (input) { input.disabled = false; input.focus(); }
