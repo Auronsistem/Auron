@@ -3358,7 +3358,7 @@ function renderPeerTubeShortCard(video) {
   heading.textContent = video.title || "Short";
   const channel = document.createElement("p");
   channel.className = "muted";
-  channel.textContent = (video.channelTitle || "Creador") + " · PeerTube";
+  channel.textContent = (video.channelTitle || "Creador") + " · Fuente independiente";
   info.append(heading, channel);
   card.append(thumbnail, info);
   const open = () => openPeerTubeShortAt(peerTubeShortsQueue.indexOf(video));
@@ -3696,7 +3696,7 @@ function openPeerTubeVideo(video) {
   heading.textContent = video.title || "Vídeo de AUREON VISION";
   const frame = document.createElement("iframe");
   frame.src = applySubtitlePreference(video.embedPath || video.url, "video");
-  frame.title = video.title || "Video de PeerTube";
+  frame.title = video.title || "Vídeo de AUREON VISION";
   frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   frame.allowFullscreen = true;
   frame.loading = "lazy";
