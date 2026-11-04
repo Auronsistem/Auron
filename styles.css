@@ -2393,3 +2393,24 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
   .support-contact-label { margin-top:12px; }
   .header-support-button { padding:8px 10px; font-size:12px; }
 }
+
+
+/* AUREON VISION */
+.vision-category-bar { display:flex; flex-wrap:wrap; gap:9px; margin:0 0 18px; }
+.vision-category {
+  border:1px solid var(--border-color, rgba(255,255,255,.12));
+  border-radius:999px; padding:9px 15px;
+  background:rgba(255,255,255,.045); color:inherit;
+  font:inherit; font-size:13px; font-weight:650; cursor:pointer;
+  transition:background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.vision-category:hover { transform:translateY(-1px); }
+.vision-category.active {
+  background:linear-gradient(120deg,rgba(125,75,255,.28),rgba(35,190,255,.18));
+  border-color:rgba(142,110,255,.7); color:#fff;
+}
+.vision-feed-heading { grid-column:1 / -1; margin:8px 0 0; }
+@media (max-width:600px) {
+  .vision-category-bar { gap:7px; }
+  .vision-category { padding:8px 12px; font-size:12px; }
+}
