@@ -3108,15 +3108,24 @@ const youtubeForm = $("#youtube-search-form");
 const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
-// RECOMENDACIONES Y BÚSQUEDA SIN YOUTUBE DATA API
-// SepiaSearch indexa videos públicos de PeerTube. El catálogo propio sigue viniendo de Supabase.
+// AUREON VISION: catálogo híbrido de YouTube, PeerTube y creadores de AUREON.
 const PEERTUBE_SEARCH_URL = "https://sepiasearch.org/api/v1/search/videos";
-const PEERTUBE_DEFAULT_QUERY = "gaming Clash Royale Roblox español";
+const PEERTUBE_DEFAULT_QUERY = "gaming videos español";
 const peerTubeCache = new Map();
+const youtubeVisionCache = new Map();
 let peerTubeShortsQueue = [];
 let peerTubeShortIndex = -1;
+let visionCategory = "all";
 
-// Preferencias de subtítulos separadas por cuenta
+const VISION_CATEGORIES = {
+  all: ["videos virales recientes español", "gaming español", "deportes destacados", "música tendencias", "tecnología y curiosidades"],
+  gaming: ["Roblox español", "Clash Royale español", "gaming español"],
+  humor: ["humor español", "memes recientes", "videos divertidos"],
+  sports: ["tenis mejores puntos", "fútbol mejores jugadas", "deportes destacados"],
+  music: ["música tendencias", "funk automotivo", "edits musicales"],
+  tech: ["tecnología novedades", "inteligencia artificial", "curiosidades ciencia"]
+};
+
 function translationStorageKey() { return "aureon-translation-settings:" + (currentUser?.id || "guest"); }
 function readTranslationSettings() {
   try { return JSON.parse(localStorage.getItem(translationStorageKey()) || "{}"); }
@@ -3151,9 +3160,7 @@ function applySubtitlePreference(embedUrl, kind) {
 
 function normalizePeerTubeVideo(video) {
   const hostValue = video.channel?.host || video.account?.host || video.host || "";
-  const hostUrl = hostValue
-    ? (/^https?:\/\//i.test(hostValue) ? hostValue : "https://" + hostValue)
-    : "";
+  const hostUrl = hostValue ? (/^https?:\/\//i.test(hostValue) ? hostValue : "https://" + hostValue) : "";
   const possiblePage = video.url || video.channel?.url || video.account?.url || "";
   let origin = "";
   try {
@@ -3166,30 +3173,22 @@ function normalizePeerTubeVideo(video) {
     if (video.url) pageUrl = new URL(video.url, origin || window.location.origin).href;
     else if (origin && videoId) pageUrl = new URL("/videos/watch/" + encodeURIComponent(videoId), origin).href;
   } catch (_) {}
-
   let embedPath = "";
   try {
-    if (video.embedPath) {
-      embedPath = new URL(video.embedPath, origin || pageUrl || window.location.origin).href;
-    } else if (origin && videoId) {
-      embedPath = new URL("/videos/embed/" + encodeURIComponent(videoId), origin).href;
-    }
+    if (video.embedPath) embedPath = new URL(video.embedPath, origin || pageUrl || window.location.origin).href;
+    else if (origin && videoId) embedPath = new URL("/videos/embed/" + encodeURIComponent(videoId), origin).href;
   } catch (_) {}
-
-  const thumbnailSource =
-    (Array.isArray(video.thumbnails)
-      ? [...video.thumbnails].sort((a,b) => (Number(b.width||0)*Number(b.height||0)) - (Number(a.width||0)*Number(a.height||0))).find(item => item.fileUrl)?.fileUrl
-      : null) || video.thumbnailPath || video.previewPath || "";
+  const thumbnailSource = (Array.isArray(video.thumbnails)
+    ? [...video.thumbnails].sort((a,b) => (Number(b.width||0)*Number(b.height||0)) - (Number(a.width||0)*Number(a.height||0))).find(item => item.fileUrl)?.fileUrl
+    : null) || video.thumbnailPath || video.previewPath || "";
   let thumbnail = "";
-  try {
-    if (thumbnailSource) thumbnail = new URL(thumbnailSource, origin || pageUrl || window.location.origin).href;
-  } catch (_) {}
-
+  try { if (thumbnailSource) thumbnail = new URL(thumbnailSource, origin || pageUrl || window.location.origin).href; } catch (_) {}
   return {
     id: videoId || pageUrl || embedPath,
-    title: video.name || video.title || "Video de PeerTube",
+    title: video.name || video.title || "Video de la comunidad",
+    description: video.description || "",
     thumbnail,
-    channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "PeerTube",
+    channelTitle: video.channel?.displayName || video.account?.displayName || video.channel?.name || "Creador independiente",
     publishedAt: video.publishedAt || video.createdAt || video.originallyPublishedAt || null,
     duration: Number(video.duration) || 0,
     aspectRatio: Number(video.aspectRatio) || 0,
@@ -3208,7 +3207,6 @@ async function searchPeerTube(query, start = 0, options = {}) {
   const key = query.trim().toLowerCase() + "::" + start + (shortsOnly ? "::shorts" : "::all");
   const cached = peerTubeCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.videos;
-
   const url = new URL(PEERTUBE_SEARCH_URL);
   url.searchParams.set("search", query);
   url.searchParams.set("count", "20");
@@ -3219,72 +3217,111 @@ async function searchPeerTube(query, start = 0, options = {}) {
     url.searchParams.set("nsfw", "false");
     url.searchParams.set("isLive", "false");
   }
-
   const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error("La búsqueda de PeerTube respondió HTTP " + response.status);
+  if (!response.ok) throw new Error("La búsqueda independiente respondió HTTP " + response.status);
   const payload = await response.json();
   const raw = Array.isArray(payload) ? payload : (payload.data || payload.videos || []);
   const videos = raw.map(normalizePeerTubeVideo).filter(video =>
-    video.embedPath && !video.nsfw && !video.isLive &&
-    (!shortsOnly || !video.duration || video.duration <= 180)
+    video.embedPath && !video.nsfw && !video.isLive && (!shortsOnly || !video.duration || video.duration <= 180)
   );
   peerTubeCache.set(key, { videos, expiresAt: Date.now() + 10 * 60 * 1000 });
   return videos;
 }
 
-async function loadRecommendedYouTube() {
+function normalizeYouTubeVisionVideo(video) {
+  const id = String(video.id || video.videoId || "");
+  if (!id) return null;
+  return {
+    id,
+    title: video.title || "Video de YouTube",
+    description: video.description || "",
+    thumbnail: video.thumbnail || "",
+    channelTitle: video.channelTitle || "YouTube",
+    publishedAt: video.publishedAt || null,
+    duration: Number(video.duration) || 0,
+    nsfw: false,
+    isLive: false,
+    url: video.url || "https://www.youtube.com/watch?v=" + encodeURIComponent(id),
+    embedPath: "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?rel=0",
+    platform: "YouTube"
+  };
+}
+
+async function searchYouTubeVision(query) {
+  if (parentalStatus.supervised) return [];
+  const key = query.trim().toLowerCase();
+  const cached = youtubeVisionCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.videos;
+  const { data, error } = await supabase.functions.invoke(YOUTUBE_FUNCTION, { body: { query } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  const videos = (data?.videos || []).map(normalizeYouTubeVisionVideo).filter(Boolean);
+  youtubeVisionCache.set(key, { videos, expiresAt: Date.now() + 30 * 60 * 1000 });
+  return videos;
+}
+
+function visionFreshAndUnique(videos) {
+  const seen = new Set();
+  const freshCutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
+  return videos.filter(video => {
+    const key = video.id || video.url || video.embedPath;
+    if (!key || seen.has(key) || !video.embedPath) return false;
+    const published = video.publishedAt ? Date.parse(video.publishedAt) : NaN;
+    if (Number.isFinite(published) && published < freshCutoff) return false;
+    seen.add(key);
+    return true;
+  }).sort((a,b) => (Date.parse(b.publishedAt || "") || 0) - (Date.parse(a.publishedAt || "") || 0));
+}
+
+async function loadRecommendedYouTube(category = visionCategory) {
   if (!youtubeResults) return;
   if (parentalStatus.supervised) {
-    showEmpty(youtubeResults, "Las recomendaciones externas están ocultas para esta cuenta porque no tienen una clasificación de edad verificada. Puedes ver videos de AUREON con clasificación.");
+    showEmpty(youtubeResults, "El contenido externo no tiene clasificación de edad verificada. Aquí puedes ver vídeos de AUREON aprobados.");
     return;
   }
-  showEmpty(youtubeResults, "Cargando recomendaciones de PeerTube...");
-  try {
-    const categories = [
-      "funk viral 2026", "funk automotivo 2026", "música viral tendencias 2026",
-      "edits funk 2026", "videos virales recientes", "tendencias de internet 2026",
-      "Roblox tendencias 2026", "Clash Royale novedades", "gaming español reciente",
-      "memes virales recientes"
-    ];
-    const batches = await Promise.all(categories.map(q => searchPeerTube(q).catch(() => [])));
-    const seen = new Set();
-    const freshCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
-    const videos = batches.flat().filter(video => {
-      const key = video.id || video.url;
-      if (!key || seen.has(key)) return false;
-      const published = video.publishedAt ? Date.parse(video.publishedAt) : NaN;
-      if (Number.isFinite(published) && published < freshCutoff) return false;
-      seen.add(key);
-      return true;
-    });
-    youtubeResults.replaceChildren();
-    const heading = document.createElement("p");
-    heading.className = "muted";
-    heading.textContent = "Videos públicos de PeerTube · fuente independiente de YouTube";
-    youtubeResults.append(heading);
-    if (!videos.length) showEmpty(youtubeResults, "No encontramos videos en PeerTube. Prueba otra búsqueda.");
-    else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
-    const videoGrid = $("#video-grid");
-    if (videoGrid) {
-      const communityCards = Array.from(videoGrid.children);
-      videoGrid.replaceChildren();
-      if (videos.length) {
-        const recHeading = document.createElement("h3");
-        recHeading.textContent = "Recomendados de PeerTube";
-        videoGrid.append(recHeading);
-        videos.slice(0, 24).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
-      }
-      if (communityCards.length && !communityCards.every(node => node.matches("p.muted"))) {
-        const communityHeading = document.createElement("h3");
-        communityHeading.textContent = "Videos de la comunidad";
-        videoGrid.append(communityHeading, ...communityCards);
-      } else if (!videos.length) showEmpty(videoGrid, "Todavía no hay videos propios ni recomendaciones disponibles.");
+  visionCategory = VISION_CATEGORIES[category] ? category : "all";
+  showEmpty(youtubeResults, "AUREON VISION está buscando vídeos recientes…");
+  const queries = VISION_CATEGORIES[visionCategory] || VISION_CATEGORIES.all;
+  const tasks = [
+    searchYouTubeVision(queries[0]).catch(error => { console.warn("YouTube no disponible temporalmente:", error); return []; }),
+    ...queries.slice(0, 4).map(query => searchPeerTube(query).catch(error => {
+      console.warn("Fuente independiente no disponible:", query, error); return [];
+    }))
+  ];
+  const batches = await Promise.all(tasks);
+  const videos = visionFreshAndUnique(batches.flat());
+  youtubeResults.replaceChildren();
+  const heading = document.createElement("p");
+  heading.className = "muted";
+  heading.textContent = "Recomendaciones recientes · YouTube + creadores independientes";
+  youtubeResults.append(heading);
+  if (!videos.length) showEmpty(youtubeResults, "No encontramos vídeos nuevos en este momento. Prueba otra categoría o la búsqueda.");
+  else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
+
+  const videoGrid = $("#video-grid");
+  if (videoGrid) {
+    const communityCards = Array.from(videoGrid.children).filter(node => !node.matches("h3.vision-feed-heading"));
+    videoGrid.replaceChildren();
+    const recHeading = document.createElement("h3");
+    recHeading.className = "vision-feed-heading";
+    recHeading.textContent = "Descubrir en AUREON VISION";
+    videoGrid.append(recHeading);
+    if (videos.length) videos.slice(0, 12).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
+    else showEmpty(videoGrid, "No hay recomendaciones externas disponibles ahora mismo.");
+    if (communityCards.some(node => !node.matches("p.muted"))) {
+      const communityHeading = document.createElement("h3");
+      communityHeading.textContent = "Vídeos de la comunidad";
+      videoGrid.append(communityHeading, ...communityCards);
     }
-  } catch (error) {
-    console.error("Error en recomendaciones de PeerTube:", error);
-    showEmpty(youtubeResults, "No se pudieron cargar recomendaciones de PeerTube. Puedes usar la búsqueda manual o ver los videos de la comunidad.");
   }
 }
+
+document.querySelectorAll("[data-vision-category]").forEach(button => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-vision-category]").forEach(item => item.classList.toggle("active", item === button));
+    loadRecommendedYouTube(button.dataset.visionCategory || "all");
+  });
+});
 
 let peerTubeShortOffset = 0;
 let peerTubeShortSeen = new Set();
@@ -3457,7 +3494,7 @@ youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const query = youtubeInput?.value.trim() || "";
   if (parentalStatus.supervised) {
-    showEmpty(youtubeResults, "La búsqueda de videos externos está desactivada en esta cuenta porque no tienen una clasificación de edad verificada.");
+    showEmpty(youtubeResults, "La búsqueda externa no está disponible para esta cuenta. Puedes explorar vídeos de AUREON con clasificación.");
     return;
   }
   if (query.length < 2 || query.length > 100) {
@@ -3466,18 +3503,22 @@ youtubeForm?.addEventListener("submit", async (event) => {
   }
   const button = youtubeForm.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
-  showEmpty(youtubeResults, "Buscando en PeerTube...");
+  showEmpty(youtubeResults, "Buscando en YouTube y fuentes independientes…");
   try {
-    const videos = await searchPeerTube(query);
+    const results = await Promise.all([
+      searchYouTubeVision(query).catch(error => { console.warn("YouTube no respondió:", error); return []; }),
+      searchPeerTube(query).catch(error => { console.warn("Fuente independiente no respondió:", error); return []; })
+    ]);
+    const videos = visionFreshAndUnique(results.flat());
     youtubeResults.replaceChildren();
     const heading = document.createElement("h2");
-    heading.textContent = "Resultados de PeerTube";
+    heading.textContent = "Resultados de AUREON VISION";
     youtubeResults.append(heading);
     if (!videos.length) showEmpty(youtubeResults, "No encontramos resultados. Prueba con otras palabras.");
     else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
   } catch (error) {
-    console.error("Error en búsqueda de PeerTube:", error);
-    showEmpty(youtubeResults, "No se pudo conectar con PeerTube ahora. Inténtalo de nuevo más tarde.");
+    console.error("Error en AUREON VISION:", error);
+    showEmpty(youtubeResults, "No se pudo completar la búsqueda. Inténtalo otra vez.");
   } finally {
     if (button) button.disabled = false;
   }
@@ -3500,7 +3541,7 @@ function createYouTubeVideoCard(video) {
   heading.textContent = video.title || "Video sin título";
   const channel = document.createElement("p");
   channel.className = "muted";
-  channel.textContent = (video.channelTitle || "PeerTube") + " · " + (video.platform || "PeerTube");
+  channel.textContent = (video.channelTitle || "Creador") + " · " + (video.platform || "AUREON VISION");
   const play = document.createElement("button");
   play.className = "button full";
   play.textContent = "▶ Ver video";
@@ -3651,7 +3692,7 @@ function openPeerTubeVideo(video) {
   }
   stopPlayerContent();
   const heading = document.createElement("h2");
-  heading.textContent = video.title || "Video de PeerTube";
+  heading.textContent = video.title || "Vídeo de AUREON VISION";
   const frame = document.createElement("iframe");
   frame.src = applySubtitlePreference(video.embedPath || video.url, "video");
   frame.title = video.title || "Video de PeerTube";
