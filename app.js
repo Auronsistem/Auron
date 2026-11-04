@@ -709,7 +709,7 @@ function updateHeader() {
   const actions=$(".header-actions"); if(!actions) return; actions.replaceChildren();
   const supportButton=document.createElement("button");
   supportButton.type="button"; supportButton.className="button button-outline header-support-button";
-  supportButton.textContent="✦ Soporte"; supportButton.setAttribute("aria-label","Abrir soporte de AUREON AI");
+  const supportIcon=document.createElement("img"); supportIcon.className="header-support-icon"; supportIcon.src="./icons/aureon-ai.svg?v=2"; supportIcon.alt=""; supportIcon.setAttribute("aria-hidden","true"); supportButton.append(supportIcon,document.createTextNode(" Soporte")); supportButton.setAttribute("aria-label","Abrir soporte de AUREON AI");
   supportButton.addEventListener("click",openAureonSupport); actions.append(supportButton);
   const button=document.createElement("button"); button.type="button"; button.className="header-profile-button";
   button.setAttribute("aria-label",currentUser?"Abrir configuración de perfil":"Iniciar sesión");
