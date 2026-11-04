@@ -3300,7 +3300,7 @@ async function loadRecommendedYouTube(category = visionCategory) {
 
   const videoGrid = $("#video-grid");
   if (videoGrid) {
-    const communityCards = Array.from(videoGrid.children).filter(node => !node.matches("h3.vision-feed-heading") && node.dataset.visionExternal !== "true");
+    const communityCards = Array.from(videoGrid.children).filter(node => !node.matches("h3.vision-feed-heading, p.muted") && node.dataset.visionExternal !== "true");
     videoGrid.replaceChildren();
     const recHeading = document.createElement("h3");
     recHeading.className = "vision-feed-heading";
