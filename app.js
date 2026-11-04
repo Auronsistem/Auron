@@ -3262,7 +3262,7 @@ async function searchYouTubeVision(query) {
 
 function visionFreshAndUnique(videos) {
   const seen = new Set();
-  const freshCutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
+  const freshCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
   return videos.filter(video => {
     const key = video.id || video.url || video.embedPath;
     if (!key || seen.has(key) || !video.embedPath) return false;
@@ -3300,7 +3300,7 @@ async function loadRecommendedYouTube(category = visionCategory) {
 
   const videoGrid = $("#video-grid");
   if (videoGrid) {
-    const communityCards = Array.from(videoGrid.children).filter(node => !node.matches("h3.vision-feed-heading"));
+    const communityCards = Array.from(videoGrid.children).filter(node => !node.matches("h3.vision-feed-heading") && node.dataset.visionExternal !== "true");
     videoGrid.replaceChildren();
     const recHeading = document.createElement("h3");
     recHeading.className = "vision-feed-heading";
@@ -3527,6 +3527,7 @@ youtubeForm?.addEventListener("submit", async (event) => {
 function createYouTubeVideoCard(video) {
   const card = document.createElement("article");
   card.className = "video-card";
+  card.dataset.visionExternal = "true";
   if (video.thumbnail) {
     const image = document.createElement("img");
     image.src = video.thumbnail;
@@ -3538,7 +3539,7 @@ function createYouTubeVideoCard(video) {
   const info = document.createElement("div");
   info.className = "video-info";
   const heading = document.createElement("h3");
-  heading.textContent = video.title || "Video sin título";
+  heading.textContent = video.title || "Vídeo sin título";
   const channel = document.createElement("p");
   channel.className = "muted";
   channel.textContent = (video.channelTitle || "Creador") + " · " + (video.platform || "AUREON VISION");
