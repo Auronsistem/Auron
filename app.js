@@ -5690,6 +5690,7 @@ function cleanupCall() {
   activeCall = null;
 }
 async function beginCall(video) {
+  callCameraSequenceStep = 0; callCameraFacing = "user";
   if (!currentUser || !activeConversation) {
     showMessage($("#message-status"), "Abre una conversación e inicia sesión para llamar.", true);
     return;
@@ -5713,6 +5714,7 @@ async function beginCall(video) {
 $("#start-audio-call")?.addEventListener("click", () => beginCall(false));
 $("#start-video-call")?.addEventListener("click", () => beginCall(true));
 $("#accept-call")?.addEventListener("click", async () => {
+  callCameraSequenceStep = 0; callCameraFacing = "user";
   if (activeGroupCall?.incoming) { await acceptGroupCall(); return; }
   if (!activeCall?.incoming) return;
   stopCallAlert();
@@ -6117,6 +6119,7 @@ function stopIncomingCallFallback() {
 }
 
 async function beginGroupCall(video) {
+  callCameraSequenceStep = 0; callCameraFacing = "user";
   if (!currentUser || !activeGroup) return;
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
     showMessage($("#message-status"), "Este navegador no permite llamadas. Usa Chrome actualizado y HTTPS.", true); return;
@@ -6148,6 +6151,7 @@ async function beginGroupCall(video) {
   }
 }
 async function acceptGroupCall() {
+  callCameraSequenceStep = 0; callCameraFacing = "user";
   if (!activeGroupCall?.incoming) return;
   stopCallAlert();
   try {
