@@ -5845,9 +5845,9 @@ $("#switch-call-camera")?.addEventListener("click", () => {
     // Toque 1: frontal; toque 2: trasera; toque 3: frontal y reinicia la secuencia.
     const sequence = ["user", "environment", "user"];
     const nextFacing = sequence[callCameraSequenceStep];
-    callCameraSequenceStep = (callCameraSequenceStep + 1) % sequence.length;
     try {
       await switchCallCameraTo(nextFacing);
+      callCameraSequenceStep = (callCameraSequenceStep + 1) % sequence.length;
     } catch (error) {
       console.error("No se pudo cambiar la cámara:", error);
       callSubtitle.textContent = error.message || "No se pudo cambiar la cámara. Comprueba los permisos del dispositivo.";
