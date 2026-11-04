@@ -5219,6 +5219,8 @@ let callPeer = null;
 let callLocalStream = null;
 let callCameraFacing = "user";
 let callCameraSwitching = false;
+let callCameraSequenceStep = 0;
+let callCameraSwitchQueue = Promise.resolve();
 let callRemoteStream = null;
 let callRingTimer = null;
 let callAudioContext = null;
@@ -5756,64 +5758,101 @@ $("#toggle-call-camera")?.addEventListener("click", () => {
   if(localAvatar){renderAvatar(localAvatar,currentProfile,"local-call-avatar");localAvatar.hidden=cameraOn;}
   if(localCallVideo) localCallVideo.hidden=!cameraOn;
 });
-$("#switch-call-camera")?.addEventListener("click", async () => {
-  if (!activeCall?.video || !callLocalStream) {
-    callSubtitle.textContent = "Para usar la cámara, inicia una videollamada.";
-    return;
-  }
-  if (callCameraSwitching) return;
+async function switchCallCameraTo(nextFacing) {
+  const videoMode = Boolean(activeCall?.video || activeGroupCall?.video);
+  if (!videoMode || !callLocalStream) throw new Error("La cámara solo está disponible en videollamadas.");
   const currentTrack = callLocalStream.getVideoTracks()[0];
-  if (!currentTrack || currentTrack.readyState !== "live") {
-    callSubtitle.textContent = "No hay una cámara activa. Pulsa Activar cámara.";
-    return;
-  }
+  if (!currentTrack || currentTrack.readyState !== "live") throw new Error("Activa la cámara antes de cambiarla.");
 
-  callCameraSwitching = true;
-  const nextFacing = callCameraFacing === "user" ? "environment" : "user";
+  const previousFacing = callCameraFacing;
+  // En móviles, liberar la cámara actual antes de solicitar la otra evita bloqueos del dispositivo.
+  currentTrack.stop();
+  callLocalStream.removeTrack(currentTrack);
+
+  let nextStream;
   try {
-    // Cambia directamente entre frontal y trasera; el siguiente toque vuelve a alternar.
-    let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { exact: nextFacing },
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        },
-        audio: false
+      nextStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } }
       });
-    } catch (firstError) {
-      // Algunos navegadores móviles no admiten exact; se intenta con facingMode ideal.
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false
+    } catch (exactError) {
+      nextStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } }
       });
     }
+    const nextTrack = nextStream.getVideoTracks()[0];
+    if (!nextTrack || nextTrack.readyState !== "live") throw new Error("La cámara seleccionada no está disponible.");
 
-    const nextTrack = stream.getVideoTracks()[0];
-    if (!nextTrack || nextTrack.readyState !== "live") {
-      stream.getTracks().forEach(track => track.stop());
-      throw new Error("La cámara seleccionada no está disponible.");
-    }
-
-    const sender = callPeer?.getSenders().find(item => item.track?.kind === "video");
-    if (sender) await sender.replaceTrack(nextTrack);
-
-    callLocalStream.removeTrack(currentTrack);
-    currentTrack.stop();
+    const senders = [];
+    if (callPeer) senders.push(...callPeer.getSenders().filter(sender => sender.track?.kind === "video"));
+    for (const peer of groupCallPeers.values()) senders.push(...peer.getSenders().filter(sender => sender.track?.kind === "video"));
+    await Promise.all(senders.map(sender => sender.replaceTrack(nextTrack)));
     callLocalStream.addTrack(nextTrack);
     callCameraFacing = nextFacing;
+
     if (localCallVideo) {
       localCallVideo.srcObject = callLocalStream;
+      localCallVideo.hidden = false;
       await localCallVideo.play().catch(() => {});
     }
-    callSubtitle.textContent = nextFacing === "user" ? "Cámara frontal." : "Cámara trasera.";
+    const localTile = $("#group-call-grid")?.querySelector('[data-user-id="' + currentUser?.id + '"]');
+    const tileVideo = localTile?.querySelector("video");
+    if (tileVideo) { tileVideo.srcObject = callLocalStream; tileVideo.play().catch(() => {}); }
+    const avatar = localTile?.querySelector(".group-call-avatar");
+    if (avatar) avatar.hidden = true;
+    callSubtitle.textContent = nextFacing === "user" ? "Cámara frontal activada." : "Cámara trasera activada.";
   } catch (error) {
-    console.error("No se pudo cambiar la cámara:", error);
-    callSubtitle.textContent = "No se pudo cambiar la cámara. Este dispositivo puede tener una sola cámara o no permitir el cambio.";
-  } finally {
-    callCameraSwitching = false;
+    if (nextStream) nextStream.getTracks().forEach(track => track.stop());
+    // Recupera la cámara anterior si el cambio falla.
+    try {
+      const restore = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: previousFacing }, width: { ideal: 640 }, height: { ideal: 480 } }
+      });
+      const restoredTrack = restore.getVideoTracks()[0];
+      if (restoredTrack?.readyState === "live") {
+        const senders = [];
+        if (callPeer) senders.push(...callPeer.getSenders().filter(sender => sender.track?.kind === "video"));
+        for (const peer of groupCallPeers.values()) senders.push(...peer.getSenders().filter(sender => sender.track?.kind === "video"));
+        await Promise.all(senders.map(sender => sender.replaceTrack(restoredTrack)));
+        callLocalStream.addTrack(restoredTrack);
+        callCameraFacing = previousFacing;
+        if (localCallVideo) { localCallVideo.srcObject = callLocalStream; localCallVideo.play().catch(() => {}); }
+        const localTile = $("#group-call-grid")?.querySelector('[data-user-id="' + currentUser?.id + '"]');
+        const tileVideo = localTile?.querySelector("video");
+        if (tileVideo) { tileVideo.srcObject = callLocalStream; tileVideo.play().catch(() => {}); }
+      }
+    } catch (restoreError) {
+      console.error("No se pudo recuperar la cámara anterior:", restoreError);
+    }
+    throw error;
   }
+}
+
+$("#switch-call-camera")?.addEventListener("click", () => {
+  callCameraSwitchQueue = callCameraSwitchQueue.catch(() => {}).then(async () => {
+    const videoMode = Boolean(activeCall?.video || activeGroupCall?.video);
+    if (!videoMode || !callLocalStream) {
+      callSubtitle.textContent = "Inicia una videollamada para cambiar de cámara.";
+      return;
+    }
+    if (callCameraSwitching) return;
+    callCameraSwitching = true;
+    // Toque 1: frontal; toque 2: trasera; toque 3: frontal y reinicia la secuencia.
+    const sequence = ["user", "environment", "user"];
+    const nextFacing = sequence[callCameraSequenceStep];
+    callCameraSequenceStep = (callCameraSequenceStep + 1) % sequence.length;
+    try {
+      await switchCallCameraTo(nextFacing);
+    } catch (error) {
+      console.error("No se pudo cambiar la cámara:", error);
+      callSubtitle.textContent = error.message || "No se pudo cambiar la cámara. Comprueba los permisos del dispositivo.";
+    } finally {
+      callCameraSwitching = false;
+    }
+  });
 });
 callDialog?.addEventListener("close", () => {
   if (suppressedCallCloseEvents > 0) {
