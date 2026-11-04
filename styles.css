@@ -2347,7 +2347,8 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 
 
 /* AUREON AI · soporte adaptable */
-.header-support-button { white-space:nowrap; }
+.header-support-button { white-space:nowrap; display:inline-flex; align-items:center; gap:7px; }
+.header-support-icon { width:20px; height:20px; object-fit:contain; display:block; flex:0 0 20px; border-radius:6px; }
 .support-dialog {
   width:min(960px,96vw); max-width:960px; max-height:min(90dvh,850px);
   padding:0; overflow:hidden; color:var(--text); background:var(--panel);
