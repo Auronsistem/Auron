@@ -4118,6 +4118,8 @@ let activePeerProfile = null;
 let activeGroup = null;
 let groupCache = [];
 let selectedGroupUsers = new Map();
+let addingMembersToGroupId = null;
+let existingGroupMemberIds = new Set();
 let conversationCache = [];
 let messageRefreshTimer = null;
 let peopleSearchTimer = null;
@@ -5330,6 +5332,45 @@ const createGroupForm = $("#create-group-form");
 const groupMemberSearch = $("#group-member-search");
 const groupMemberResults = $("#group-member-results");
 const groupCreateStatus = $("#group-create-status");
+const groupNameField = $("#group-name");
+const groupNameLabel = document.querySelector('label[for="group-name"]');
+const groupDialogTitle = createGroupDialog?.querySelector("h2");
+const groupSubmitButton = createGroupForm?.querySelector('button[type="submit"]');
+
+function setGroupDialogMode(mode) {
+  const adding = mode === "add";
+  if (!adding) addingMembersToGroupId = null;
+  if (groupDialogTitle) groupDialogTitle.textContent = adding ? "Añadir personas al grupo" : "Crear grupo";
+  if (groupNameField) {
+    groupNameField.hidden = adding;
+    groupNameField.required = !adding;
+    groupNameField.value = "";
+  }
+  if (groupNameLabel) groupNameLabel.hidden = adding;
+  if (groupSubmitButton) groupSubmitButton.textContent = adding ? "Añadir al grupo" : "Crear grupo";
+  if (groupMemberSearch) groupMemberSearch.placeholder = adding ? "Busca por nombre o usuario..." : "Busca usuarios por su nombre...";
+}
+
+async function openAddGroupMembers(group) {
+  if (!currentUser || !group?.id) return;
+  const { data: members, error } = await supabase.from("chat_group_members")
+    .select("user_id").eq("group_id", group.id);
+  if (error) {
+    alert("No se pudieron cargar los integrantes actuales: " + error.message);
+    return;
+  }
+  addingMembersToGroupId = group.id;
+  existingGroupMemberIds = new Set((members || []).map(row => row.user_id));
+  selectedGroupUsers = new Map();
+  createGroupForm?.reset();
+  setGroupDialogMode("add");
+  if (groupMemberSearch) groupMemberSearch.value = "";
+  groupMemberResults?.replaceChildren();
+  if (groupMemberResults) groupMemberResults.hidden = true;
+  updateGroupSelectionCount();
+  showMessage(groupCreateStatus, "");
+  if (createGroupDialog && !createGroupDialog.open) createGroupDialog.showModal();
+}
 
 async function loadGroupConversations(append = false) {
   if (!currentUser || !conversationList) return;
@@ -5467,14 +5508,18 @@ async function searchGroupMembers(query) {
   const clean = query.trim();
   groupMemberResults.replaceChildren();
   if (clean.length < 2) { groupMemberResults.hidden = true; return; }
-  const safeQuery = clean.replace(/[%,()]/g, "").replace(/[_]/g, "");
+  const safeQuery = clean.replace(/[%,()_.]/g, "").replace(/,/g, "");
+  if (!safeQuery) { groupMemberResults.hidden = true; return; }
+  const pattern = "%" + safeQuery + "%";
   const { data, error } = await supabase.from("profiles").select("id, username, display_name, avatar_url")
-    .neq("id", currentUser.id).ilike("username", "%" + safeQuery + "%")
-    .order("username").limit(30);
+    .neq("id", currentUser.id)
+    .or("username.ilike." + pattern + ",display_name.ilike." + pattern)
+    .order("username").limit(50);
   groupMemberResults.hidden = false;
   if (error) { showEmpty(groupMemberResults, "No se pudieron buscar usuarios."); return; }
-  if (!data?.length) { showEmpty(groupMemberResults, "No encontramos usuarios."); return; }
-  for (const profile of data) {
+  const candidates = (data || []).filter(profile => !existingGroupMemberIds.has(profile.id));
+  if (!candidates.length) { showEmpty(groupMemberResults, "No encontramos personas nuevas con esa búsqueda."); return; }
+  for (const profile of candidates) {
     const label = document.createElement("label");
     label.className = "group-member-option";
     const check = document.createElement("input");
@@ -5495,7 +5540,10 @@ function updateGroupSelectionCount() {
 $("#new-group")?.addEventListener("click", () => {
   if (!currentUser) { openAuth(); return; }
   selectedGroupUsers = new Map();
+  existingGroupMemberIds = new Set();
+  setGroupDialogMode("create");
   createGroupForm?.reset();
+  if (groupMemberSearch) groupMemberSearch.value = "";
   groupMemberResults.replaceChildren();
   groupMemberResults.hidden = true;
   updateGroupSelectionCount();
@@ -5506,12 +5554,34 @@ groupMemberSearch?.addEventListener("input", () => searchGroupMembers(groupMembe
 createGroupForm?.addEventListener("submit", async event => {
   event.preventDefault();
   if (!currentUser) return;
-  const name = $("#group-name")?.value.trim() || "";
-  if (!name) { showMessage(groupCreateStatus, "Escribe un nombre para el grupo.", true); return; }
   const button = createGroupForm.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
-  showMessage(groupCreateStatus, "Creando grupo...");
   try {
+    if (addingMembersToGroupId) {
+      const groupId = addingMembersToGroupId;
+      const newUserIds = [...selectedGroupUsers.keys()].filter(id => !existingGroupMemberIds.has(id));
+      if (!newUserIds.length) {
+        showMessage(groupCreateStatus, "Selecciona al menos una persona nueva.", true);
+        return;
+      }
+      showMessage(groupCreateStatus, "Añadiendo personas...");
+      const members = newUserIds.map(user_id => ({ group_id: groupId, user_id }));
+      const { error } = await supabase.from("chat_group_members").insert(members);
+      if (error) throw error;
+      createGroupDialog.close();
+      setGroupDialogMode("create");
+      selectedGroupUsers = new Map();
+      existingGroupMemberIds = new Set();
+      await loadConversations();
+      if (activeGroup?.id === groupId) {
+        const addedNames = newUserIds.length === 1 ? "1 persona añadida al grupo." : newUserIds.length + " personas añadidas al grupo.";
+        showMessage($("#message-status"), addedNames);
+      }
+      return;
+    }
+    const name = groupNameField?.value.trim() || "";
+    if (!name) { showMessage(groupCreateStatus, "Escribe un nombre para el grupo.", true); return; }
+    showMessage(groupCreateStatus, "Creando grupo...");
     const { data: group, error } = await supabase.from("chat_groups")
       .insert({ name, created_by: currentUser.id }).select("id, name, created_by, created_at, avatar_url").single();
     if (error) throw error;
@@ -5519,11 +5589,12 @@ createGroupForm?.addEventListener("submit", async event => {
     const { error: memberError } = await supabase.from("chat_group_members").insert(members);
     if (memberError) throw memberError;
     createGroupDialog.close();
+    setGroupDialogMode("create");
     await loadConversations();
     await openGroup(group);
   } catch (error) {
-    console.error("Error creando grupo:", error);
-    showMessage(groupCreateStatus, error.message || "No se pudo crear el grupo.", true);
+    console.error("Error administrando integrantes del grupo:", error);
+    showMessage(groupCreateStatus, error.message || "No se pudo completar la acción.", true);
   } finally {
     if (button) button.disabled = false;
   }
@@ -5625,6 +5696,12 @@ async function openGroup(group) {
   }
   if (groupActions) {
     groupActions.replaceChildren();
+    const addPeopleButton = document.createElement("button");
+    addPeopleButton.type = "button";
+    addPeopleButton.className = "button button-outline";
+    addPeopleButton.textContent = "＋ Añadir personas";
+    addPeopleButton.addEventListener("click", () => openAddGroupMembers(group));
+    groupActions.append(addPeopleButton);
     const isCreator = group.created_by === currentUser.id;
     const leaveButton = document.createElement("button");
     leaveButton.type = "button";
