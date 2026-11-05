@@ -2038,72 +2038,354 @@ const sidebarSearchClear = $("#sidebar-search-clear");
 const sidebarSearchHint = $("#sidebar-search-hint");
 const sidebarNoResults = $("#sidebar-no-results");
 const moduleDescriptions = {
-  communities: "Espacios públicos o privados con administradores, miembros y canales para organizar conversaciones.",
-  watch: "Salas para compartir vídeos y verlos sincronizados con amigos mientras conversan.",
-  music: "Biblioteca musical, reproductor y listas de reproducción para organizar canciones.",
-  collections: "Carpetas personales para guardar vídeos, publicaciones y música favorita.",
-  creator: "Panel para creadores con estadísticas de publicaciones, visualizaciones y rendimiento.",
-  lab: "Espacio creativo para preparar imágenes, fondos y diseños con herramientas de creación.",
-  ai: "Asistente de AUREON para ayudar con preguntas, ideas y creación de contenido.",
-  levels: "Progreso, experiencia, insignias y logros por participar de forma positiva en AUREON.",
-  galaxy: "Espacio personal con actividad, colecciones, amigos y logros.",
-  notifications: "Centro unificado para solicitudes, mensajes, llamadas, comentarios y menciones.",
-  premium: "Información de futuras opciones de personalización y ventajas adicionales."
+  communities: "Tus grupos de AUREON, accesibles desde esta sección.",
+  watch: "Prepara una sala para compartir un video con tus amigos.",
+  music: "Reproduce archivos de audio desde este dispositivo.",
+  collections: "Guarda enlaces y recursos en una colección privada de esta cuenta.",
+  creator: "Consulta el estado de tus publicaciones y tu actividad como creador.",
+  lab: "Crea fondos con degradados y copia el estilo para tus diseños.",
+  ai: "Abre el asistente inteligente de AUREON.",
+  levels: "Consulta tu progreso y tus logros de participación.",
+  galaxy: "Un resumen de tu espacio y actividad en AUREON.",
+  notifications: "Consulta solicitudes de amistad y mensajes pendientes.",
+  premium: "Consulta el estado de tu suscripción AUREON."
 };
 
-function filterSidebarItems() {
-  if (!sidebarSearch) return;
-  const query = sidebarSearch.value.trim().toLocaleLowerCase("es");
-  let visibleCount = 0;
-  document.querySelectorAll(".sidebar .side-link").forEach(link => {
-    const haystack = (link.textContent + " " + (link.dataset.searchTerms || "")).toLocaleLowerCase("es");
-    const matches = !query || haystack.includes(query);
-    link.hidden = !matches;
-    if (matches) visibleCount++;
-  });
-  document.querySelectorAll(".sidebar-group").forEach(group => {
-    group.hidden = !group.querySelector(".side-link:not([hidden])");
-  });
-  if (sidebarNoResults) sidebarNoResults.hidden = visibleCount !== 0;
-  if (sidebarSearchClear) sidebarSearchClear.hidden = !query;
-  if (sidebarSearchHint) sidebarSearchHint.textContent = query
-    ? (visibleCount ? visibleCount + " resultado(s) para «" + sidebarSearch.value.trim() + "»." : "Prueba con otro nombre o palabra.")
-    : "Busca secciones y funciones de AUREON.";
+function moduleStorageKey(name) {
+  return "aureon-module:" + (currentUser?.id || "guest") + ":" + name;
 }
-sidebarSearch?.addEventListener("input", filterSidebarItems);
-sidebarSearchClear?.addEventListener("click", () => {
-  sidebarSearch.value = "";
-  filterSidebarItems();
-  sidebarSearch.focus();
-});
-
-function openAureonModule(button) {
-  const page = $("#aureon-module-page");
-  const title = button?.dataset.moduleTitle || "Nueva función";
-  const description = moduleDescriptions[button?.dataset.module] || "Esta función se incorporará en una actualización posterior.";
-  if (!page) return;
-  document.querySelectorAll("#main-content > .section").forEach(section => {
-    if (section.id !== "configuracion") section.hidden = true;
-  });
-  if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
-  page.hidden = false;
-  $("#aureon-module-title").textContent = title;
-  $("#aureon-module-heading").textContent = title + " llegará próximamente";
-  $("#aureon-module-description").textContent = description + " Estamos preparando su implementación y todavía no está activa.";
-  document.querySelectorAll(".sidebar .side-link").forEach(link => link.classList.toggle("active", link === button));
-  page.scrollIntoView({ behavior: "smooth", block: "start" });
+function moduleNode(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
-document.querySelectorAll(".module-nav-link").forEach(button => {
-  button.addEventListener("click", () => openAureonModule(button));
-});
-$("#module-back-home")?.addEventListener("click", () => {
-  $("#aureon-module-page").hidden = true;
-  document.querySelectorAll("#main-content > .section").forEach(section => {
-    if (["inicio", "videos", "youtube", "shorts", "mensajes", "cuenta"].includes(section.id)) section.hidden = false;
+function moduleButton(label, action, className = "button button-outline") {
+  const button = moduleNode("button", className, label);
+  button.type = "button";
+  button.addEventListener("click", action);
+  return button;
+}
+function moduleCard(title, detail) {
+  const card = moduleNode("article", "content-panel aureon-tool-card");
+  card.append(moduleNode("h3", "", title), moduleNode("p", "muted", detail));
+  return card;
+}
+function moduleStatus(host, message, error = false) {
+  const status = $("#aureon-module-status");
+  if (status) {
+    status.textContent = message;
+    status.classList.toggle("error", error);
+  }
+}
+function moduleRequireLogin() {
+  if (currentUser) return true;
+  moduleStatus($("#aureon-module-content"), "Inicia sesión para usar esta sección.", true);
+  openAuth();
+  return false;
+}
+function moduleSetContent(title, subtitle) {
+  const host = $("#aureon-module-content");
+  if (!host) return null;
+  host.replaceChildren();
+  const intro = moduleNode("div", "aureon-module-intro");
+  intro.append(moduleNode("h3", "", title), moduleNode("p", "muted", subtitle));
+  host.append(intro);
+  moduleStatus(host, "");
+  return host;
+}
+function moduleInput(placeholder, type = "text") {
+  const input = moduleNode("input", "aureon-module-input");
+  input.type = type;
+  input.placeholder = placeholder;
+  return input;
+}
+function moduleEmpty(host, message) {
+  host.append(moduleNode("p", "muted aureon-module-empty", message));
+}
+function readModuleList(name) {
+  try {
+    const value = JSON.parse(localStorage.getItem(moduleStorageKey(name)) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch (_) { return []; }
+}
+function writeModuleList(name, items) {
+  localStorage.setItem(moduleStorageKey(name), JSON.stringify(items));
+}
+function renderSavedItems(host, items, onRemove) {
+  if (!items.length) { moduleEmpty(host, "Todavía no has guardado elementos aquí."); return; }
+  const list = moduleNode("div", "aureon-module-list");
+  items.forEach((item, index) => {
+    const row = moduleNode("div", "aureon-module-row");
+    const copy = moduleNode("div", "aureon-module-row-copy");
+    copy.append(moduleNode("strong", "", item.title || "Elemento guardado"));
+    const link = moduleNode("a", "muted", item.url);
+    link.href = item.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    copy.append(link);
+    row.append(copy, moduleButton("Quitar", () => onRemove(index), "button button-danger button-small"));
+    list.append(row);
   });
+  host.append(list);
+}
+function youtubeVideoId(value) {
+  try {
+    const url = new URL(value);
+    if (url.hostname.endsWith("youtu.be")) return url.pathname.slice(1).split("/")[0];
+    if (url.hostname.includes("youtube.com")) {
+      if (url.pathname === "/watch") return url.searchParams.get("v");
+      const parts = url.pathname.split("/");
+      if (["embed", "shorts", "live"].includes(parts[1])) return parts[2];
+    }
+  } catch (_) {}
+  return null;
+}
+async function loadModuleCommunity(host) {
+  const card = moduleCard("Tus comunidades y grupos", "Los grupos existentes de Mensajes también aparecen aquí.");
+  card.append(moduleButton("＋ Crear grupo", () => {
+    const dialog = $("#create-group-dialog");
+    if (dialog && !dialog.open) dialog.showModal();
+  }));
+  host.append(card);
+  const list = moduleNode("div", "aureon-module-list");
+  host.append(list);
+  const { data: memberships, error } = await supabase.from("chat_group_members")
+    .select("group_id").eq("user_id", currentUser.id);
+  if (error) { moduleEmpty(list, "No se pudieron cargar tus grupos: " + error.message); return; }
+  const ids = [...new Set((memberships || []).map(item => item.group_id))];
+  if (!ids.length) { moduleEmpty(list, "Aún no participas en grupos. Puedes crear uno desde aquí o desde Mensajes."); return; }
+  const { data: groups, error: groupError } = await supabase.from("chat_groups")
+    .select("id,name,created_at").in("id", ids).order("created_at", { ascending: false });
+  if (groupError) { moduleEmpty(list, "No se pudieron cargar los grupos."); return; }
+  (groups || []).forEach(group => {
+    const row = moduleNode("div", "aureon-module-row");
+    const copy = moduleNode("div", "aureon-module-row-copy");
+    copy.append(moduleNode("strong", "", group.name), moduleNode("span", "muted", "Grupo de AUREON"));
+    row.append(copy, moduleButton("Abrir chat", () => {
+      const link = [...document.querySelectorAll(".conversation-item.group-conversation")].find(item => item.textContent.includes(group.name));
+      if (link) link.click();
+      else { showSection("mensajes"); $("#conversation-search")?.focus(); }
+    }));
+    list.append(row);
+  });
+}
+function loadModuleWatch(host) {
+  const card = moduleCard("Crear sala de video", "Pega un enlace de YouTube. La sala genera un enlace compartible; la reproducción sincronizada entre dispositivos aún requiere un servicio de sala en tiempo real.");
+  const input = moduleInput("https://www.youtube.com/watch?v=...");
+  const preview = moduleNode("div", "aureon-watch-preview");
+  const actions = moduleNode("div", "aureon-module-actions");
+  actions.append(moduleButton("Abrir video", () => {
+    const id = youtubeVideoId(input.value.trim());
+    if (!id) { moduleStatus(host, "Pega un enlace válido de YouTube.", true); return; }
+    preview.replaceChildren();
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
+    frame.title = "Video para ver juntos";
+    frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    frame.allowFullscreen = true;
+    preview.append(frame);
+    const share = "https://www.youtube.com/watch?v=" + id;
+    actions.append(moduleButton("Copiar enlace", () => GenUI.copy(share)));
+    moduleStatus(host, "Video listo. Comparte el enlace con tus amigos para abrirlo.");
+  }));
+  card.append(input, actions, preview);
+  host.append(card);
+}
+function loadModuleMusic(host) {
+  const card = moduleCard("Reproductor local", "Elige un archivo de audio de tu dispositivo. No se sube a AUREON ni se comparte con otras cuentas.");
+  const input = moduleInput("Seleccionar archivo de audio", "file");
+  input.accept = "audio/*";
+  const player = document.createElement("audio");
+  player.controls = true;
+  player.preload = "metadata";
+  player.className = "aureon-audio-player";
+  let objectUrl = "";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(file);
+    player.src = objectUrl;
+    moduleStatus(host, "Reproduciendo: " + file.name);
+  });
+  card.append(input, player);
+  host.append(card);
+}
+function loadModuleCollections(host) {
+  const card = moduleCard("Tu colección privada", "Guarda enlaces a videos, música o páginas. Estos marcadores se guardan en este navegador y en esta cuenta de dispositivo.");
+  const title = moduleInput("Nombre del elemento");
+  const url = moduleInput("Enlace https://...");
+  const add = moduleButton("Guardar en Colecciones", () => {
+    if (!title.value.trim() || !/^https?:\/\//i.test(url.value.trim())) {
+      moduleStatus(host, "Escribe un nombre y un enlace http o https válido.", true); return;
+    }
+    const items = readModuleList("collections");
+    items.unshift({ title: title.value.trim().slice(0,100), url: url.value.trim().slice(0,1000) });
+    writeModuleList("collections", items.slice(0,100));
+    title.value = ""; url.value = "";
+    loadModuleCollections(host);
+  });
+  card.append(title, url, add);
+  host.append(card);
+  const list = moduleNode("div", "aureon-module-list");
+  renderSavedItems(list, readModuleList("collections"), index => {
+    const items = readModuleList("collections"); items.splice(index,1); writeModuleList("collections",items); loadModuleCollections(host);
+  });
+  host.append(list);
+}
+async function loadModuleCreator(host) {
+  const { data, error } = await supabase.from("videos").select("id,title,video_type,status,published,created_at")
+    .eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(100);
+  if (error) { moduleEmpty(host, "No se pudieron consultar tus publicaciones."); return; }
+  const videos = data || [];
+  const stats = moduleNode("div", "aureon-module-stats");
+  const published = videos.filter(v => v.status === "approved" && v.published).length;
+  const pending = videos.filter(v => v.status === "pending").length;
+  [[videos.length,"Publicaciones"],[published,"Publicadas"],[pending,"En revisión"]].forEach(([value,label]) => {
+    const tile = moduleNode("div","content-panel aureon-stat-tile");
+    tile.append(moduleNode("strong","",String(value)),moduleNode("span","muted",label)); stats.append(tile);
+  });
+  host.append(stats);
+  const list = moduleNode("div","aureon-module-list");
+  videos.forEach(video => {
+    const row = moduleNode("div","aureon-module-row");
+    const copy = moduleNode("div","aureon-module-row-copy");
+    copy.append(moduleNode("strong","",video.title),moduleNode("span","muted",(video.video_type === "short" ? "Short" : "Video")+" · "+(video.published && video.status==="approved" ? "Publicado" : "Pendiente de revisión")));
+    row.append(copy); list.append(row);
+  });
+  if (!videos.length) moduleEmpty(list,"Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
+  host.append(list, moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
+}
+function loadModuleLab(host) {
+  const card = moduleCard("Generador de fondos", "Crea una combinación de colores para usarla como fondo o inspiración de diseño.");
+  const first = moduleInput("#6d5dfc","text"); first.value="#6d5dfc";
+  const second = moduleInput("#13c8d8","text"); second.value="#13c8d8";
+  const preview = moduleNode("div","aureon-gradient-preview");
+  const output = moduleNode("code","aureon-gradient-code","linear-gradient(135deg, #6d5dfc, #13c8d8)");
+  const update = () => {
+    const valid = value => /^#[0-9a-fA-F]{6}$/.test(value.trim());
+    if (!valid(first.value) || !valid(second.value)) { moduleStatus(host,"Usa colores hexadecimales como #6d5dfc.",true); return; }
+    const css = "linear-gradient(135deg, "+first.value.trim()+", "+second.value.trim()+")";
+    preview.style.background = css; output.textContent = "background: "+css+";";
+    moduleStatus(host,"Fondo actualizado.");
+  };
+  preview.style.background="linear-gradient(135deg,#6d5dfc,#13c8d8)";
+  card.append(moduleNode("label","","Color inicial"),first,moduleNode("label","","Color final"),second,
+    moduleButton("Generar fondo",update),preview,output,moduleButton("Copiar CSS",()=>GenUI.copy(output.textContent)));
+  host.append(card);
+}
+async function loadModuleLevels(host) {
+  const [videos, statuses, friendships] = await Promise.all([
+    supabase.from("videos").select("id",{count:"exact",head:true}).eq("user_id",currentUser.id),
+    supabase.from("status_posts").select("id",{count:"exact",head:true}).eq("user_id",currentUser.id),
+    supabase.from("friendships").select("friend_id",{count:"exact",head:true}).eq("user_id",currentUser.id)
+  ]);
+  const xp = Math.max(0,(videos.count||0)*25+(statuses.count||0)*10+(friendships.count||0)*15);
+  const level = Math.floor(xp/100)+1;
+  const progress = xp%100;
+  const card=moduleCard("Nivel "+level, "Experiencia estimada según publicaciones, estados y amistades registradas en tu cuenta.");
+  const stats=moduleNode("div","aureon-module-stats");
+  [[xp+" XP","Experiencia"],[videos.count||0,"Videos"],[statuses.count||0,"Estados"],[friendships.count||0,"Amigos"]].forEach(([v,l])=>{
+    const tile=moduleNode("div","content-panel aureon-stat-tile"); tile.append(moduleNode("strong","",String(v)),moduleNode("span","muted",l));stats.append(tile);
+  });
+  const track=moduleNode("div","aureon-xp-track"); const fill=moduleNode("span","");fill.style.width=progress+"%";track.append(fill);
+  card.append(stats,moduleNode("p","muted",progress+" / 100 XP para el siguiente nivel"),track,moduleNode("p","muted","Los puntos son orientativos; no otorgan premios ni ventajas pagadas."));
+  host.append(card);
+}
+async function loadModuleGalaxy(host) {
+  const [profile,videos,friendships,groups] = await Promise.all([
+    supabase.from("profiles").select("display_name,username,avatar_url").eq("id",currentUser.id).maybeSingle(),
+    supabase.from("videos").select("id",{count:"exact",head:true}).eq("user_id",currentUser.id),
+    supabase.from("friendships").select("friend_id",{count:"exact",head:true}).eq("user_id",currentUser.id),
+    supabase.from("chat_group_members").select("group_id",{count:"exact",head:true}).eq("user_id",currentUser.id)
+  ]);
+  const name=profile.data?.display_name||profile.data?.username||currentUser.email||"Tu perfil";
+  const card=moduleCard("Bienvenido a tu Galaxy, "+name,"Este es tu resumen personal de AUREON.");
+  const stats=moduleNode("div","aureon-module-stats");
+  [[videos.count||0,"Videos"],[friendships.count||0,"Amigos"],[groups.count||0,"Grupos"],[readModuleList("collections").length,"Guardados"]].forEach(([v,l])=>{
+    const tile=moduleNode("div","content-panel aureon-stat-tile");tile.append(moduleNode("strong","",String(v)),moduleNode("span","muted",l));stats.append(tile);
+  });
+  card.append(stats,moduleButton("Abrir mi canal",()=>showSection("cuenta")),moduleButton("Ver mis amigos",()=>showSection("mensajes")));
+  host.append(card);
+}
+async function loadModuleNotifications(host) {
+  const [requests,messages] = await Promise.all([
+    supabase.from("friend_requests").select("id,sender_id,created_at").eq("recipient_id",currentUser.id).eq("status","pending").order("created_at",{ascending:false}).limit(30),
+    supabase.from("messages").select("id,conversation_id,sender_id,body,created_at").neq("sender_id",currentUser.id).is("read_at",null).order("created_at",{ascending:false}).limit(30)
+  ]);
+  if (requests.error) moduleEmpty(host,"No se pudieron consultar las solicitudes de amistad.");
+  else {
+    const card=moduleCard("Solicitudes de amistad",String(requests.data?.length||0)+" solicitud(es) pendiente(s).");
+    card.append(moduleButton("Abrir Mensajes y solicitudes",()=>showSection("mensajes")));
+    host.append(card);
+  }
+  if (messages.error) moduleEmpty(host,"Los mensajes pendientes no se pudieron consultar.");
+  else {
+    const card=moduleCard("Mensajes sin leer",String(messages.data?.length||0)+" mensaje(s) pendiente(s) visibles para esta cuenta.");
+    card.append(moduleButton("Abrir Mensajes",()=>showSection("mensajes")));
+    host.append(card);
+  }
+  const note=moduleNode("p","muted","Las alertas push y los timbres siguen usando el sistema de notificaciones existente; esta pantalla es un resumen dentro de AUREON.");
+  host.append(note);
+}
+async function loadModulePremium(host) {
+  const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
+  if(error){moduleEmpty(host,"No se pudo consultar el estado de tu suscripción.");return;}
+  const active=(data||[]).find(item=>item.status==="active"&&(!item.expires_at||new Date(item.expires_at)>new Date()));
+  const card=moduleCard(active?"AUREON Premium activo":"AUREON Premium",active?"Tu cuenta tiene una suscripción activa.":"Tu cuenta no tiene una suscripción Premium activa.");
+  if(active?.expires_at) card.append(moduleNode("p","muted","Vence: "+new Date(active.expires_at).toLocaleString("es-PE")));
+  card.append(moduleNode("p","muted","No se realizarán cobros desde esta pantalla. Los pagos necesitan una pasarela configurada y validación segura en el servidor."));
+  host.append(card);
+}
+async function renderAureonModule(button) {
+  const page=$("#aureon-module-page");
+  const key=button?.dataset.module||"";
+  const title=button?.dataset.moduleTitle||"AUREON";
+  if(!page)return;
+  document.querySelectorAll("#main-content > .section").forEach(section=>{if(section.id!=="configuracion")section.hidden=true;});
+  if(document.body.classList.contains("settings-open"))setSettingsVisibility(false);
+  page.hidden=false;
+  $("#aureon-module-title").textContent=title;
+  $("#aureon-module-heading").textContent=title;
+  $("#aureon-module-description").textContent=moduleDescriptions[key]||"Herramientas de AUREON";
+  document.querySelectorAll(".sidebar .side-link").forEach(link=>link.classList.toggle("active",link===button));
+  const host=moduleSetContent(title,moduleDescriptions[key]||"Herramientas de AUREON");
+  if(!host)return;
+  if(key!=="lab"&&key!=="watch"&&key!=="music"&&key!=="ai"&&!moduleRequireLogin())return;
+  try {
+    switch(key){
+      case "communities": await loadModuleCommunity(host); break;
+      case "watch": loadModuleWatch(host); break;
+      case "music": loadModuleMusic(host); break;
+      case "collections": loadModuleCollections(host); break;
+      case "creator": await loadModuleCreator(host); break;
+      case "lab": loadModuleLab(host); break;
+      case "ai": {
+        const card=moduleCard("Asistente inteligente","Usa el asistente alojado de AUREON AI.");
+        card.append(moduleButton("Abrir AUREON AI",()=>openAureonSupport()));
+        host.append(card);
+        if(currentUser) openAureonSupport(); else moduleStatus(host,"Inicia sesión para conversar con AUREON AI.");
+        break;
+      }
+      case "levels": await loadModuleLevels(host); break;
+      case "galaxy": await loadModuleGalaxy(host); break;
+      case "notifications": await loadModuleNotifications(host); break;
+      case "premium": await loadModulePremium(host); break;
+      default: moduleEmpty(host,"Este módulo todavía no está disponible.");
+    }
+  } catch(error) {
+    console.error("Error en módulo AUREON "+key,error);
+    moduleStatus(host,error?.message||"No se pudo cargar esta sección.",true);
+  }
+  page.scrollIntoView({behavior:"smooth",block:"start"});
+}
+document.querySelectorAll(".module-nav-link").forEach(button=>button.addEventListener("click",()=>renderAureonModule(button)));
+$("#module-back-home")?.addEventListener("click",()=>{
+  $("#aureon-module-page").hidden=true;
+  document.querySelectorAll("#main-content > .section").forEach(section=>{if(["inicio","videos","youtube","shorts","mensajes","cuenta"].includes(section.id))section.hidden=false;});
   showSection("inicio");
 });
-
 
 
 /* AUREON FRIENDS + WHATSAPP-STYLE STATUSES */
