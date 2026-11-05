@@ -797,6 +797,8 @@ select:focus-visible {
 /* LLAMADAS PRIVADAS */
 .chat-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .call-actions { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; }
+.group-management-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.group-management-actions .button { white-space:nowrap; }
 .call-dialog { width:min(94%, 620px); max-width:620px; }
 .call-screen { display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
 #remote-call-video { width:100%; max-height:52vh; aspect-ratio:16/9; background:#02040a; border-radius:12px; object-fit:contain; }
