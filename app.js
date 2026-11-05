@@ -4128,7 +4128,7 @@ async function searchPeople(query) {
       item.querySelector(".presence-line")?.remove();
       if (item.dataset.userId) renderPresenceLine(item, item.dataset.userId);
     }
-  }, 30000);
+  }, 10000);
 }
 async function startConversation(profile) {
   if (!currentUser || !profile || profile.id === currentUser.id) return;
