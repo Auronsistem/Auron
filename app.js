@@ -3925,6 +3925,7 @@ function stopPresence() {
   presenceTimer = null;
   presenceRefreshTimer = null;
   peoplePresenceTimer = null;
+  activePresenceRefresh = null;
   if (presenceChannel) {
     const channel = presenceChannel;
     presenceChannel = null;
