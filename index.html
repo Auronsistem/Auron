@@ -28,32 +28,59 @@
     </div>
   </header>
 
-  <!-- MENÚ LATERAL -->
-  <aside class="sidebar">
-    <a href="#inicio" class="side-link active">
-      <span>⌂</span> Inicio
-    </a>
-    <a href="#videos" class="side-link">
-      <span>▶</span> AUREON VISION
-    </a>
-    <a href="#mensajes" class="side-link">
-      <span>☁</span> Mensajes
-    </a>
-    <button type="button" class="side-link" id="states-nav-link" aria-expanded="false" aria-controls="estados">
-      <span>◉</span> Estados
-    </button>
-    <button id="open-upload" class="side-link">
-      <span>＋</span> Publicar
-    </button>
-    <a href="#shorts" class="side-link">
-      <span>▣</span> Shorts
-    </a>
-    <a href="#cuenta" class="side-link">
-      <span>◉</span> Mi canal
-    </a>
-    <button type="button" class="side-link settings-nav-button" id="open-settings-link">
-      <span>⚙</span> Configuración <span id="friend-request-count" class="nav-count" hidden></span>
-    </button>
+  <!-- MENÚ LATERAL AUREON -->
+  <aside class="sidebar" aria-label="Navegación principal de AUREON">
+    <div class="sidebar-search-wrap">
+      <label class="sr-only" for="sidebar-search">Buscar una función de AUREON</label>
+      <span aria-hidden="true">⌕</span>
+      <input id="sidebar-search" type="search" placeholder="Buscar una función..." autocomplete="off">
+      <button id="sidebar-search-clear" type="button" aria-label="Limpiar búsqueda" hidden>×</button>
+    </div>
+    <p class="sidebar-search-hint" id="sidebar-search-hint" aria-live="polite">Busca secciones y funciones de AUREON.</p>
+
+    <div class="sidebar-group" data-sidebar-group="principal">
+      <p class="sidebar-group-title">PRINCIPAL</p>
+      <a href="#inicio" class="side-link active" data-search-terms="inicio principal home"><span>⌂</span> Inicio</a>
+      <a href="#videos" class="side-link" data-search-terms="vision videos explorar contenido"><span>▶</span> AUREON VISION</a>
+      <a href="#mensajes" class="side-link" data-search-terms="mensajes chat conversaciones"><span>☁</span> Mensajes</a>
+      <button type="button" class="side-link" id="states-nav-link" aria-expanded="false" aria-controls="estados" data-search-terms="estados historias stories"><span>◉</span> Estados</button>
+      <button id="open-upload" class="side-link" data-search-terms="publicar subir crear contenido"><span>＋</span> Publicar</button>
+      <a href="#shorts" class="side-link" data-search-terms="shorts videos cortos verticales"><span>▣</span> Shorts</a>
+      <a href="#cuenta" class="side-link" data-search-terms="mi canal perfil cuenta"><span>◉</span> Mi canal</a>
+    </div>
+
+    <div class="sidebar-group" data-sidebar-group="social">
+      <p class="sidebar-group-title">SOCIAL Y COMUNIDAD</p>
+      <button type="button" class="side-link module-nav-link" data-module="communities" data-module-title="Comunidades" data-search-terms="comunidades grupos canales miembros"><span>♧</span> Comunidades <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="watch" data-module-title="Ver juntos" data-search-terms="ver juntos watch party videos sincronizados"><span>▷</span> Ver juntos <small>Nuevo</small></button>
+    </div>
+
+    <div class="sidebar-group" data-sidebar-group="music">
+      <p class="sidebar-group-title">ENTRETENIMIENTO</p>
+      <button type="button" class="side-link module-nav-link" data-module="music" data-module-title="AUREON Music" data-search-terms="musica reproductor canciones listas playlist"><span>♫</span> AUREON Music <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="collections" data-module-title="Colecciones" data-search-terms="colecciones guardados favoritos marcadores"><span>▤</span> Colecciones <small>Nuevo</small></button>
+    </div>
+
+    <div class="sidebar-group" data-sidebar-group="creators">
+      <p class="sidebar-group-title">CREADORES</p>
+      <button type="button" class="side-link module-nav-link" data-module="creator" data-module-title="Creator Studio" data-search-terms="creator studio estadisticas creadores rendimiento"><span>▣</span> Creator Studio <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="lab" data-module-title="Laboratorio creativo" data-search-terms="laboratorio creativo imagenes disenos fondos"><span>✧</span> Laboratorio creativo <small>Nuevo</small></button>
+    </div>
+
+    <div class="sidebar-group" data-sidebar-group="explore">
+      <p class="sidebar-group-title">EXPLORAR</p>
+      <button type="button" class="side-link module-nav-link" data-module="ai" data-module-title="AUREON AI" data-search-terms="inteligencia artificial asistente ia"><span>✦</span> AUREON AI <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="levels" data-module-title="Niveles y recompensas" data-search-terms="niveles xp experiencia insignias logros"><span>♛</span> Niveles y recompensas <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="galaxy" data-module-title="AUREON Galaxy" data-search-terms="galaxy espacio personal actividad amigos"><span>✧</span> AUREON Galaxy <small>Nuevo</small></button>
+    </div>
+
+    <div class="sidebar-group" data-sidebar-group="account">
+      <p class="sidebar-group-title">TU CUENTA</p>
+      <button type="button" class="side-link module-nav-link" data-module="notifications" data-module-title="Centro de notificaciones" data-search-terms="notificaciones avisos alertas llamadas"><span>♧</span> Notificaciones <small>Nuevo</small></button>
+      <button type="button" class="side-link module-nav-link" data-module="premium" data-module-title="AUREON Premium" data-search-terms="premium suscripcion membresia"><span>♕</span> AUREON Premium <small>Nuevo</small></button>
+      <button type="button" class="side-link settings-nav-button" id="open-settings-link"><span>⚙</span> Configuración <span id="friend-request-count" class="nav-count" hidden></span></button>
+    </div>
+    <p id="sidebar-no-results" class="sidebar-no-results" hidden>No se encontraron funciones.</p>
   </aside>
 
   <!-- CONTENIDO PRINCIPAL -->
@@ -391,6 +418,23 @@
         <h3>Un apoderado quiere vincular esta cuenta</h3>
         <p class="muted">Revisa la solicitud. Solo al aceptarla se activarán los controles parentales para esta cuenta.</p>
         <div id="parental-pending-requests"></div>
+      </div>
+    </section>
+
+    <!-- DIRECTORIO DE FUNCIONES NUEVAS -->
+    <section class="section aureon-module-section" id="aureon-module-page" hidden aria-live="polite">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">NUEVO ESPACIO DE AUREON</p>
+          <h2 id="aureon-module-title">Nueva función</h2>
+        </div>
+        <span class="module-status-pill">En desarrollo</span>
+      </div>
+      <div class="content-panel module-coming-soon">
+        <span class="large-icon" aria-hidden="true">✧</span>
+        <h3 id="aureon-module-heading">Estamos preparando esta función</h3>
+        <p class="muted" id="aureon-module-description">Este apartado ya está organizado en el menú. Su funcionamiento se incorporará en una actualización posterior, sin afectar tus mensajes, estados, llamadas ni publicaciones.</p>
+        <button type="button" class="button button-outline" id="module-back-home">Volver al inicio</button>
       </div>
     </section>
 
