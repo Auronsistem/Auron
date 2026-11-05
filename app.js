@@ -5411,7 +5411,7 @@ function playAureonTone(kind = "message") {
       oscillator.stop(now + note.start + note.duration + 0.02);
     }
     context.resume?.().catch(() => {});
-    window.setTimeout(() => context.close().catch(() => {}), 1200);
+    window.setTimeout(() => context.close().catch(() => {}), kind === "call" ? 2100 : 1200);
   } catch (error) {
     console.info("El navegador no permitió reproducir el tono de AUREON.", error);
   }
