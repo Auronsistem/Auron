@@ -5383,18 +5383,23 @@ function playAureonTone(kind = "message") {
     const context = new AudioContextClass();
     const now = context.currentTime;
     const notes = kind === "call"
-      ? [{ start: 0, duration: 0.16, from: 1450, to: 2050 }, { start: 0.19, duration: 0.22, from: 1850, to: 1250 }]
+      ? [
+          { start: 0, duration: 0.42, from: 440, to: 440 },
+          { start: 0, duration: 0.42, from: 480, to: 480 },
+          { start: 0.62, duration: 0.42, from: 440, to: 440 },
+          { start: 0.62, duration: 0.42, from: 480, to: 480 }
+        ]
       : kind === "bird"
       ? [{ start: 0, duration: 0.075, from: 1750, to: 2450 }, { start: 0.10, duration: 0.085, from: 2200, to: 2850 }, { start: 0.23, duration: 0.11, from: 1900, to: 2550 }]
       : [{ start: 0, duration: 0.10, from: 1100, to: 1550 }];
     for (const note of notes) {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = kind === "bird" ? "triangle" : "sine";
+      oscillator.type = kind === "bird" ? "triangle" : kind === "call" ? "square" : "sine";
       oscillator.frequency.setValueAtTime(note.from, now + note.start);
-      oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
+      if (note.to !== note.from) oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
       gain.gain.setValueAtTime(0.0001, now + note.start);
-      const peakGain = kind === "call" ? 0.42 : kind === "bird" ? 0.26 : 0.18;
+      const peakGain = kind === "call" ? 0.13 : kind === "bird" ? 0.26 : 0.18;
       gain.gain.exponentialRampToValueAtTime(peakGain, now + note.start + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
       oscillator.connect(gain);
@@ -5403,7 +5408,7 @@ function playAureonTone(kind = "message") {
       oscillator.stop(now + note.start + note.duration + 0.02);
     }
     context.resume?.().catch(() => {});
-    window.setTimeout(() => context.close().catch(() => {}), 700);
+    window.setTimeout(() => context.close().catch(() => {}), 1200);
   } catch (error) {
     console.info("El navegador no permitió reproducir el tono de AUREON.", error);
   }
