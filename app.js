@@ -5384,10 +5384,13 @@ function playAureonTone(kind = "message") {
     const now = context.currentTime;
     const notes = kind === "call"
       ? [
-          { start: 0, duration: 0.42, from: 440, to: 440 },
-          { start: 0, duration: 0.42, from: 480, to: 480 },
-          { start: 0.62, duration: 0.42, from: 440, to: 440 },
-          { start: 0.62, duration: 0.42, from: 480, to: 480 }
+          // Melodía digital moderna: dos notas suaves ascendentes y una resolución breve.
+          { start: 0, duration: 0.19, from: 660, to: 784 },
+          { start: 0.22, duration: 0.19, from: 784, to: 988 },
+          { start: 0.48, duration: 0.28, from: 880, to: 784 },
+          { start: 0.92, duration: 0.19, from: 660, to: 784 },
+          { start: 1.14, duration: 0.19, from: 784, to: 988 },
+          { start: 1.40, duration: 0.28, from: 880, to: 784 }
         ]
       : kind === "bird"
       ? [{ start: 0, duration: 0.075, from: 1750, to: 2450 }, { start: 0.10, duration: 0.085, from: 2200, to: 2850 }, { start: 0.23, duration: 0.11, from: 1900, to: 2550 }]
@@ -5395,11 +5398,11 @@ function playAureonTone(kind = "message") {
     for (const note of notes) {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = kind === "bird" ? "triangle" : kind === "call" ? "square" : "sine";
+      oscillator.type = kind === "bird" || kind === "call" ? "sine" : "sine";
       oscillator.frequency.setValueAtTime(note.from, now + note.start);
       if (note.to !== note.from) oscillator.frequency.exponentialRampToValueAtTime(note.to, now + note.start + note.duration);
       gain.gain.setValueAtTime(0.0001, now + note.start);
-      const peakGain = kind === "call" ? 0.13 : kind === "bird" ? 0.26 : 0.18;
+      const peakGain = kind === "call" ? 0.095 : kind === "bird" ? 0.26 : 0.18;
       gain.gain.exponentialRampToValueAtTime(peakGain, now + note.start + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
       oscillator.connect(gain);
