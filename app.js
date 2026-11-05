@@ -2031,6 +2031,79 @@ document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
     if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
   });
 });
+ 
+// BUSCADOR DEL MENÚ LATERAL Y ACCESO A LOS MÓDULOS NUEVOS
+const sidebarSearch = $("#sidebar-search");
+const sidebarSearchClear = $("#sidebar-search-clear");
+const sidebarSearchHint = $("#sidebar-search-hint");
+const sidebarNoResults = $("#sidebar-no-results");
+const moduleDescriptions = {
+  communities: "Espacios públicos o privados con administradores, miembros y canales para organizar conversaciones.",
+  watch: "Salas para compartir vídeos y verlos sincronizados con amigos mientras conversan.",
+  music: "Biblioteca musical, reproductor y listas de reproducción para organizar canciones.",
+  collections: "Carpetas personales para guardar vídeos, publicaciones y música favorita.",
+  creator: "Panel para creadores con estadísticas de publicaciones, visualizaciones y rendimiento.",
+  lab: "Espacio creativo para preparar imágenes, fondos y diseños con herramientas de creación.",
+  ai: "Asistente de AUREON para ayudar con preguntas, ideas y creación de contenido.",
+  levels: "Progreso, experiencia, insignias y logros por participar de forma positiva en AUREON.",
+  galaxy: "Espacio personal con actividad, colecciones, amigos y logros.",
+  notifications: "Centro unificado para solicitudes, mensajes, llamadas, comentarios y menciones.",
+  premium: "Información de futuras opciones de personalización y ventajas adicionales."
+};
+
+function filterSidebarItems() {
+  if (!sidebarSearch) return;
+  const query = sidebarSearch.value.trim().toLocaleLowerCase("es");
+  let visibleCount = 0;
+  document.querySelectorAll(".sidebar .side-link").forEach(link => {
+    const haystack = (link.textContent + " " + (link.dataset.searchTerms || "")).toLocaleLowerCase("es");
+    const matches = !query || haystack.includes(query);
+    link.hidden = !matches;
+    if (matches) visibleCount++;
+  });
+  document.querySelectorAll(".sidebar-group").forEach(group => {
+    group.hidden = !group.querySelector(".side-link:not([hidden])");
+  });
+  if (sidebarNoResults) sidebarNoResults.hidden = visibleCount !== 0;
+  if (sidebarSearchClear) sidebarSearchClear.hidden = !query;
+  if (sidebarSearchHint) sidebarSearchHint.textContent = query
+    ? (visibleCount ? visibleCount + " resultado(s) para «" + sidebarSearch.value.trim() + "»." : "Prueba con otro nombre o palabra.")
+    : "Busca secciones y funciones de AUREON.";
+}
+sidebarSearch?.addEventListener("input", filterSidebarItems);
+sidebarSearchClear?.addEventListener("click", () => {
+  sidebarSearch.value = "";
+  filterSidebarItems();
+  sidebarSearch.focus();
+});
+
+function openAureonModule(button) {
+  const page = $("#aureon-module-page");
+  const title = button?.dataset.moduleTitle || "Nueva función";
+  const description = moduleDescriptions[button?.dataset.module] || "Esta función se incorporará en una actualización posterior.";
+  if (!page) return;
+  document.querySelectorAll("#main-content > .section").forEach(section => {
+    if (section.id !== "configuracion") section.hidden = true;
+  });
+  if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
+  page.hidden = false;
+  $("#aureon-module-title").textContent = title;
+  $("#aureon-module-heading").textContent = title + " llegará próximamente";
+  $("#aureon-module-description").textContent = description + " Estamos preparando su implementación y todavía no está activa.";
+  document.querySelectorAll(".sidebar .side-link").forEach(link => link.classList.toggle("active", link === button));
+  page.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+document.querySelectorAll(".module-nav-link").forEach(button => {
+  button.addEventListener("click", () => openAureonModule(button));
+});
+$("#module-back-home")?.addEventListener("click", () => {
+  $("#aureon-module-page").hidden = true;
+  document.querySelectorAll("#main-content > .section").forEach(section => {
+    if (["inicio", "videos", "youtube", "shorts", "mensajes", "cuenta"].includes(section.id)) section.hidden = false;
+  });
+  showSection("inicio");
+});
+
 
 
 /* AUREON FRIENDS + WHATSAPP-STYLE STATUSES */
