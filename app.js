@@ -3840,6 +3840,7 @@ let presenceCache = new Map();
 let presenceChannel = null;
 let presenceRealtimeReady = false;
 let onlinePresenceIds = new Set();
+let activePresenceRefresh = null;
 
 function presenceLevel(lastSeen, userId) {
   if (presenceRealtimeReady) return onlinePresenceIds.has(userId) ? "online" : (!lastSeen ? "offline" : (Date.now() - new Date(lastSeen).getTime() <= 2 *  60 * 60 * 1000 ? "recent" : "offline"));
@@ -4440,12 +4441,13 @@ async function openConversation(conversation, profile = null) {
     chatPresence.replaceChildren();
     renderPresenceLine(chatPresence, peerId);
   };
+  activePresenceRefresh = refreshChatPresence;
   await refreshChatPresence();
   await loadMessages(conversation.id); await loadConversations();
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
   if (presenceRefreshTimer) window.clearInterval(presenceRefreshTimer);
   messageRefreshTimer = window.setInterval(() => { if (activeConversation?.id === conversation.id) loadMessages(conversation.id, true); }, 5000);
-  presenceRefreshTimer = window.setInterval(refreshChatPresence, 30000);
+  presenceRefreshTimer = window.setInterval(refreshChatPresence, 5000);
 }
 
 const AUREON_STICKERS = [
