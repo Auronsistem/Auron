@@ -2037,6 +2037,19 @@ const sidebarSearch = $("#sidebar-search");
 const sidebarSearchClear = $("#sidebar-search-clear");
 const sidebarSearchHint = $("#sidebar-search-hint");
 const sidebarNoResults = $("#sidebar-no-results");
+
+// Secciones desplegables del menú lateral
+const sidebarGroupToggles = document.querySelectorAll(".sidebar-group-title[aria-controls]");
+sidebarGroupToggles.forEach(toggle => {
+  const panel = document.getElementById(toggle.getAttribute("aria-controls"));
+  if (!panel) return;
+  toggle.addEventListener("click", () => {
+    const willOpen = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(willOpen));
+    panel.hidden = !willOpen;
+    toggle.closest(".sidebar-group")?.classList.toggle("is-expanded", willOpen);
+  });
+});
 const moduleDescriptions = {
   communities: "Tus grupos de AUREON, accesibles desde esta sección.",
   watch: "Prepara una sala para compartir un video con tus amigos.",
