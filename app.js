@@ -2142,7 +2142,7 @@ function youtubeVideoId(value) {
   return null;
 }
 async function loadModuleCommunity(host) {
-  const card = moduleCard("Tus comunidades y grupos", "Los grupos existentes de Mensajes también aparecen aquí.");
+  const card = moduleCard("Tus comunidades y grupos", "Administra tus grupos desde aquí o desde Mensajes.");
   card.append(moduleButton("＋ Crear grupo", () => {
     const dialog = $("#create-group-dialog");
     if (dialog && !dialog.open) dialog.showModal();
@@ -2156,17 +2156,30 @@ async function loadModuleCommunity(host) {
   const ids = [...new Set((memberships || []).map(item => item.group_id))];
   if (!ids.length) { moduleEmpty(list, "Aún no participas en grupos. Puedes crear uno desde aquí o desde Mensajes."); return; }
   const { data: groups, error: groupError } = await supabase.from("chat_groups")
-    .select("id,name,created_at").in("id", ids).order("created_at", { ascending: false });
+    .select("id,name,created_at,created_by").in("id", ids).order("created_at", { ascending: false });
   if (groupError) { moduleEmpty(list, "No se pudieron cargar los grupos."); return; }
   (groups || []).forEach(group => {
     const row = moduleNode("div", "aureon-module-row");
     const copy = moduleNode("div", "aureon-module-row-copy");
-    copy.append(moduleNode("strong", "", group.name), moduleNode("span", "muted", "Grupo de AUREON"));
-    row.append(copy, moduleButton("Abrir chat", () => {
-      const link = [...document.querySelectorAll(".conversation-item.group-conversation")].find(item => item.textContent.includes(group.name));
+    copy.append(moduleNode("strong", "", group.name), moduleNode("span", "muted", group.created_by === currentUser.id ? "Eres el creador" : "Grupo de AUREON"));
+    const actions = moduleNode("div", "aureon-module-actions");
+    actions.append(moduleButton("Abrir chat", () => {
+      showSection("mensajes");
+      const link = [...document.querySelectorAll(".conversation-item.group-conversation")].find(item => item.dataset.groupId === group.id);
       if (link) link.click();
-      else { showSection("mensajes"); $("#conversation-search")?.focus(); }
+      else loadConversations().then(() => {
+        const refreshed = [...document.querySelectorAll(".conversation-item.group-conversation")].find(item => item.dataset.groupId === group.id);
+        if (refreshed) refreshed.click();
+      });
     }));
+    actions.append(moduleButton(group.created_by === currentUser.id ? "Eliminar grupo" : "Salir del grupo", async () => {
+      const action = group.created_by === currentUser.id ? "delete" : "leave";
+      await manageGroupMembership(group, action, async () => {
+        host.replaceChildren();
+        await loadModuleCommunity(host);
+      });
+    }));
+    row.append(copy, actions);
     list.append(row);
   });
 }
@@ -5335,6 +5348,7 @@ async function loadGroupConversations(append = false) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "conversation-item group-conversation" + (activeGroup?.id === group.id ? " active" : "");
+    button.dataset.groupId = group.id;
     button.append(createAvatar({ avatar_url: group.avatar_url }, "conversation-avatar group-avatar"));
     const copy = document.createElement("span"); copy.className = "conversation-copy";
     const name = document.createElement("strong"); name.textContent = group.name;
@@ -5513,6 +5527,75 @@ createGroupForm?.addEventListener("submit", async event => {
     if (button) button.disabled = false;
   }
 });
+async function manageGroupMembership(group, action, afterSuccess = null) {
+  if (!currentUser || !group?.id) return;
+  const isCreator = group.created_by === currentUser.id;
+  if (action === "delete" && !isCreator) {
+    alert("Solo quien creó el grupo puede eliminarlo.");
+    return;
+  }
+  if (action === "leave" && isCreator) {
+    const confirmed = window.confirm("Eres el creador. Si sales, la administración pasará a otro integrante. ¿Quieres continuar?");
+    if (!confirmed) return;
+  } else {
+    const prompt = action === "delete"
+      ? "¿Eliminar «" + group.name + "» para todos? Esta acción no se puede deshacer."
+      : "¿Salir de «" + group.name + "»? Ya no verás sus mensajes ni recibirás nuevos.";
+    if (!window.confirm(prompt)) return;
+  }
+  try {
+    if (action === "delete") {
+      const { data, error } = await supabase.from("chat_groups")
+        .delete().eq("id", group.id).eq("created_by", currentUser.id).select("id").maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("No se pudo eliminar el grupo. Comprueba que seas su creador.");
+    } else {
+      if (isCreator) {
+        const { data: nextMembers, error: membersError } = await supabase.from("chat_group_members")
+          .select("user_id").eq("group_id", group.id).neq("user_id", currentUser.id)
+          .order("joined_at", { ascending: true }).limit(1);
+        if (membersError) throw membersError;
+        if (!nextMembers?.length) {
+          const { data, error } = await supabase.from("chat_groups")
+            .delete().eq("id", group.id).eq("created_by", currentUser.id).select("id").maybeSingle();
+          if (error) throw error;
+          if (!data) throw new Error("No se pudo cerrar el grupo.");
+        } else {
+          const { data: transferred, error: transferError } = await supabase.from("chat_groups")
+            .update({ created_by: nextMembers[0].user_id }).eq("id", group.id)
+            .eq("created_by", currentUser.id).select("id").maybeSingle();
+          if (transferError) throw transferError;
+          if (!transferred) throw new Error("No se pudo transferir la administración del grupo.");
+          const { error: leaveError } = await supabase.from("chat_group_members")
+            .delete().eq("group_id", group.id).eq("user_id", currentUser.id);
+          if (leaveError) throw leaveError;
+        }
+      } else {
+        const { error } = await supabase.from("chat_group_members")
+          .delete().eq("group_id", group.id).eq("user_id", currentUser.id);
+        if (error) throw error;
+      }
+    }
+    if (activeGroup?.id === group.id) {
+      if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
+      messageRefreshTimer = null;
+      if (activeGroupCall?.groupId === group.id) cleanupGroupCall();
+      activeGroup = null;
+      $("#chat-active").hidden = true;
+      $("#chat-empty").hidden = false;
+      $("#group-management-actions")?.replaceChildren();
+      $("#chat-title").textContent = "Usuario";
+      showMessage($("#message-status"), "");
+    }
+    await loadConversations();
+    if (typeof afterSuccess === "function") await afterSuccess();
+    showMessage($("#message-status"), action === "delete" ? "Grupo eliminado." : "Has salido del grupo.");
+  } catch (error) {
+    console.error("No se pudo administrar el grupo:", error);
+    alert(error?.message || "No se pudo completar la acción. Inténtalo de nuevo.");
+  }
+}
+
 async function openGroup(group) {
   if (!currentUser || !group) return;
   activeConversation = null;
@@ -5531,6 +5614,32 @@ async function openGroup(group) {
   $("#group-video-call").hidden = false;
   $("#start-audio-call").hidden = true;
   $("#start-video-call").hidden = true;
+  const callActions = document.querySelector("#chat-active .call-actions");
+  let groupActions = $("#group-management-actions");
+  if (!groupActions && callActions) {
+    groupActions = document.createElement("div");
+    groupActions.id = "group-management-actions";
+    groupActions.className = "group-management-actions";
+    callActions.append(groupActions);
+  }
+  if (groupActions) {
+    groupActions.replaceChildren();
+    const isCreator = group.created_by === currentUser.id;
+    const leaveButton = document.createElement("button");
+    leaveButton.type = "button";
+    leaveButton.className = "button button-outline";
+    leaveButton.textContent = "Salir del grupo";
+    leaveButton.addEventListener("click", () => manageGroupMembership(group, "leave"));
+    groupActions.append(leaveButton);
+    if (isCreator) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "button button-danger";
+      deleteButton.textContent = "Eliminar grupo";
+      deleteButton.addEventListener("click", () => manageGroupMembership(group, "delete"));
+      groupActions.append(deleteButton);
+    }
+  }
   showMessage($("#message-status"), "");
   await loadGroupMessages(group.id);
   if (messageRefreshTimer) window.clearInterval(messageRefreshTimer);
