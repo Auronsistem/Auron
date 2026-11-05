@@ -4720,6 +4720,7 @@ async function refreshPrivateChatIdentity(peerId, profile = activePeerProfile) {
 }
 async function openConversation(conversation, profile = null) {
   if (!currentUser || !conversation) return;
+  $("#group-management-actions")?.replaceChildren();
   activeGroup = null; activeConversation = conversation; activePeerProfile = profile; $("#chat-empty").hidden = true; $("#chat-active").hidden = false;
   $("#chat-kind").textContent = "CONVERSACIÓN PRIVADA";
   $("#group-audio-call").hidden = true; $("#group-video-call").hidden = true;
