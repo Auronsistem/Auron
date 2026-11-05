@@ -3832,12 +3832,17 @@ const peopleResults = $("#people-results");
 const messageList = $("#message-list");
 const messageForm = $("#message-form");
 
-// PRESENCIA: actividad reciente de cada cuenta
+// PRESENCIA: actividad reciente + conexiones en tiempo real
 let presenceTimer = null;
 let presenceRefreshTimer = null;
 let peoplePresenceTimer = null;
 let presenceCache = new Map();
-function presenceLevel(lastSeen) {
+let presenceChannel = null;
+let presenceRealtimeReady = false;
+let onlinePresenceIds = new Set();
+
+function presenceLevel(lastSeen, userId) {
+  if (presenceRealtimeReady) return onlinePresenceIds.has(userId) ? "online" : (!lastSeen ? "offline" : (Date.now() - new Date(lastSeen).getTime() <= 2 *  60 * 60 * 1000 ? "recent" : "offline"));
   if (!lastSeen) return "offline";
   const age = Date.now() - new Date(lastSeen).getTime();
   if (age <= 2 * 60 * 1000) return "online";
@@ -3854,6 +3859,13 @@ function presenceDot(level) {
   dot.title = presenceLabel(level);
   return dot;
 }
+function refreshVisiblePeoplePresence() {
+  if (!peopleResults || peopleResults.hidden) return;
+  for (const item of peopleResults.querySelectorAll(".people-result")) {
+    item.querySelector(".presence-line")?.remove();
+    if (item.dataset.userId) renderPresenceLine(item, item.dataset.userId);
+  }
+}
 async function heartbeatPresence() {
   if (!currentUser) return;
   const { error } = await supabase.from("user_presence").upsert({
@@ -3861,11 +3873,49 @@ async function heartbeatPresence() {
   }, { onConflict: "user_id" });
   if (error) console.warn("No se pudo actualizar la presencia:", error.message);
 }
+function startRealtimePresence() {
+  if (!currentUser || presenceChannel) return;
+  const userId = currentUser.id;
+  const channel = supabase.channel("aureon-global-presence", {
+    config: { presence: { key: userId + "-" + crypto.randomUUID() } }
+  });
+  channel.on("presence", { event: "sync" }, () => {
+    const state = channel.presenceState();
+    const nextOnline = new Set();
+    for (const presences of Object.values(state || {})) {
+      for (const item of presences || []) if (item.userId) nextOnline.add(item.userId);
+    }
+    onlinePresenceIds = nextOnline;
+    presenceRealtimeReady = true;
+    refreshVisiblePeoplePresence();
+  }).subscribe(async status => {
+    if (status === "SUBSCRIBED" && currentUser?.id === userId) {
+      presenceRealtimeReady = true;
+      try {
+        await channel.track({ userId, onlineAt: new Date().toISOString() });
+      } catch (error) {
+        console.warn("No se pudo publicar la presencia en tiempo real:", error);
+      }
+    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      presenceRealtimeReady = false;
+      console.warn("AUREON: presencia en tiempo real no disponible; se usará la última actividad guardada.");
+    }
+  });
+  presenceChannel = channel;
+}
 function startPresence() {
   if (!currentUser) return;
   if (presenceTimer) clearInterval(presenceTimer);
+  if (peoplePresenceTimer) clearInterval(peoplePresenceTimer);
+  startRealtimePresence();
   heartbeatPresence();
-  presenceTimer = window.setInterval(heartbeatPresence, 30000);
+  presenceTimer = window.setInterval(heartbeatPresence, 15000);
+  peoplePresenceTimer = window.setInterval(async () => {
+    if (!peopleResults || peopleResults.hidden) return;
+    const ids = [...peopleResults.querySelectorAll(".people-result")].map(item => item.dataset.userId).filter(Boolean);
+    await loadPresence(ids);
+    refreshVisiblePeoplePresence();
+  }, 10000);
 }
 function stopPresence() {
   if (presenceTimer) clearInterval(presenceTimer);
@@ -3874,6 +3924,13 @@ function stopPresence() {
   presenceTimer = null;
   presenceRefreshTimer = null;
   peoplePresenceTimer = null;
+  if (presenceChannel) {
+    const channel = presenceChannel;
+    presenceChannel = null;
+    presenceRealtimeReady = false;
+    onlinePresenceIds.clear();
+    supabase.removeChannel(channel).catch(error => console.warn("No se pudo cerrar presencia:", error));
+  }
 }
 async function loadPresence(ids) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -3881,7 +3938,7 @@ async function loadPresence(ids) {
   const { data, error } = await supabase.from("user_presence")
     .select("user_id,last_seen").in("user_id", unique);
   if (error) {
-    console.warn("Falta configurar la tabla user_presence en Supabase:", error.message);
+    console.warn("No se pudo consultar la presencia guardada:", error.message);
     return presenceCache;
   }
   for (const id of unique) presenceCache.delete(id);
@@ -3890,7 +3947,7 @@ async function loadPresence(ids) {
 }
 function renderPresenceLine(container, userId) {
   const lastSeen = presenceCache.get(userId);
-  const level = presenceLevel(lastSeen);
+  const level = presenceLevel(lastSeen, userId);
   const line = document.createElement("span");
   line.className = "presence-line";
   line.append(presenceDot(level), document.createTextNode(presenceLabel(level)));
@@ -3901,7 +3958,7 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pageshow", heartbeatPresence);
 window.addEventListener("pagehide", () => {
-  // El siguiente heartbeat expirará la presencia aunque el navegador cierre de golpe.
+  // Realtime Presence detecta el cierre de la conexión; el heartbeat conserva la última actividad.
 });
 
 
@@ -5233,6 +5290,9 @@ async function handleIncomingMessageEvent(kind, row) {
   const userId = currentUser.id;
   const privateOpen = kind === "private" && activeConversation?.id === row.conversation_id;
   const groupOpen = kind === "group" && activeGroup?.id === row.group_id;
+
+  // El sonido se reproduce también si el usuario ya tiene abierto ese chat.
+  playAureonTone("bird");
   if (privateOpen) {
     await loadMessages(row.conversation_id, true);
     return;
@@ -5263,7 +5323,6 @@ async function handleIncomingMessageEvent(kind, row) {
     await loadConversations();
   }
 
-  playAureonTone("bird");
   const rawBody = String(row.body || "Te enviaron un mensaje");
   const preview = rawBody.startsWith("AUREON_MEDIA_FILE:") ? "Te enviaron una imagen o GIF."
     : rawBody.startsWith("AUREON_GIF:") ? "Te enviaron un GIF."
@@ -5448,12 +5507,30 @@ function stopCallAlert() {
 
 }
 
+// Un único contexto de audio se desbloquea con la primera interacción del usuario.
+let aureonAudioContext = null;
+function getAureonAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!aureonAudioContext || aureonAudioContext.state === "closed") {
+    aureonAudioContext = new AudioContextClass();
+  }
+  return aureonAudioContext;
+}
+function unlockAureonAudio() {
+  const context = getAureonAudioContext();
+  if (context?.state === "suspended") context.resume().catch(() => {});
+}
+["pointerdown", "touchstart", "keydown"].forEach(eventName => {
+  window.addEventListener(eventName, unlockAureonAudio, { passive: true });
+});
+
 // Tonos cortos sintetizados por el navegador; no necesitan archivos externos.
 function playAureonTone(kind = "message") {
   try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    const context = new AudioContextClass();
+    const context = getAureonAudioContext();
+    if (!context) return;
+    if (context.state === "suspended") context.resume().catch(() => {});
     const now = context.currentTime;
     const notes = kind === "call"
       ? [
@@ -5483,8 +5560,7 @@ function playAureonTone(kind = "message") {
       oscillator.start(now + note.start);
       oscillator.stop(now + note.start + note.duration + 0.02);
     }
-    context.resume?.().catch(() => {});
-    window.setTimeout(() => context.close().catch(() => {}), kind === "call" ? 2100 : 1200);
+    // No cerramos el contexto: así los próximos timbres entrantes pueden sonar.
   } catch (error) {
     console.info("El navegador no permitió reproducir el tono de AUREON.", error);
   }
