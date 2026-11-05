@@ -2469,3 +2469,12 @@ dialog:has(.youtube-shorts-viewer) .dialog-close button {
 #aureon-module-status{min-height:20px}
 #aureon-module-status.error{color:#ff8585}
 @media(max-width:600px){.aureon-module-row{align-items:flex-start;flex-direction:column}.aureon-module-row .button{width:100%}}
+
+
+/* Menú lateral: categorías desplegables */
+.sidebar .sidebar-group-title[aria-controls]{width:100%;display:flex;align-items:center;gap:9px;padding:9px 12px;border:0;border-radius:9px;background:transparent;color:#74839d;text-align:left;font:inherit;font-size:10px;font-weight:800;letter-spacing:1.4px;cursor:pointer;}
+.sidebar .sidebar-group-title[aria-controls]:hover{background:rgba(120,145,180,.09);color:var(--text);}
+.sidebar-group-chevron{display:inline-block;flex:0 0 12px;font-size:15px;line-height:1;transition:transform .18s ease;color:var(--cyan);}
+.sidebar-group-title[aria-expanded="true"] .sidebar-group-chevron{transform:rotate(90deg);}
+.sidebar-group-items[hidden]{display:none!important;}
+.sidebar-group-items{overflow:hidden;}
