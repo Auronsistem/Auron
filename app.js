@@ -2101,55 +2101,69 @@ function showSection(sectionName) {
   if (sectionName !== "configuracion" && document.body.classList.contains("settings-open")) {
     setSettingsVisibility(false);
   }
+
   const sectionIds = {
     home: "#inicio",
     inicio: "#inicio",
     videos: "#videos",
+    youtube: "#youtube",
     mensajes: "#mensajes",
     estados: "#estados",
     shorts: "#shorts",
     cuenta: "#cuenta",
-    youtube: "#youtube"
+    configuracion: "#configuracion",
+    "aureon-module-page": "#aureon-module-page",
+    "parental-child-panel": "#parental-child-panel"
   };
-
   const targetSelector = sectionIds[sectionName] || `#${sectionName}`;
   const target = document.querySelector(targetSelector);
+  const hero = $("#inicio");
 
-  if (target) {
-    // Las secciones secundarias no aparecen en la pantalla principal,
-    // pero siguen disponibles desde el catálogo cuando el usuario las abre.
-    target.hidden = false;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  // AUREON funciona como una aplicación de páginas: solo se muestra
+  // la pantalla elegida, manteniendo los elementos en el DOM para no
+  // interrumpir chats, formularios, reproductores ni sus listeners.
+  document.querySelectorAll("#main-content > .section").forEach(section => {
+    section.hidden = section !== target;
+  });
+
+  if (hero) hero.hidden = sectionName !== "inicio";
+  if (sectionName === "inicio") {
+    const homeVideos = $("#videos");
+    if (homeVideos) homeVideos.hidden = false;
   }
 
-  document.querySelectorAll(".side-link").forEach((link) => {
+  if (target) target.hidden = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  document.querySelectorAll(".side-link").forEach(link => {
+    const matchesAnchor = link.getAttribute("href") === targetSelector;
+    const matchesStates = sectionName === "estados" && link.id === "states-nav-link";
+    link.classList.toggle("active", matchesAnchor || matchesStates);
+  });
+
+  document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
     link.classList.toggle("active", link.getAttribute("href") === targetSelector);
   });
-
-  document.querySelectorAll("[data-section]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.section === sectionName);
-  });
+  const mobileStates = $("#mobile-states-link");
+  if (mobileStates) mobileStates.classList.toggle("active", sectionName === "estados");
 }
 
-document.querySelectorAll("[data-section]").forEach((button) => {
+document.querySelectorAll("[data-section]").forEach(button => {
   button.addEventListener("click", () => showSection(button.dataset.section));
 });
 
-document.querySelectorAll(".side-link[href^='#']").forEach((link) => {
-  link.addEventListener("click", () => {
-    if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
-    document.querySelectorAll(".side-link").forEach((item) => {
-      item.classList.toggle("active", item === link);
-    });
+document.querySelectorAll(".side-link[href^='#'], .mobile-nav a[href^='#'], .brand[href^='#']").forEach(link => {
+  link.addEventListener("click", event => {
+    const sectionName = link.getAttribute("href")?.slice(1);
+    if (!sectionName) return;
+    event.preventDefault();
+    showSection(sectionName);
   });
 });
 
-document.querySelectorAll(".mobile-nav a[href^='#']").forEach(link => {
-  link.addEventListener("click", () => {
-    if (document.body.classList.contains("settings-open")) setSettingsVisibility(false);
-  });
-});
- 
+// La aplicación abre en Inicio y no apila todas las secciones en una sola página.
+showSection("inicio");
+
 // BUSCADOR DEL MENÚ LATERAL Y ACCESO A LOS MÓDULOS NUEVOS
 const sidebarSearch = $("#sidebar-search");
 const sidebarSearchClear = $("#sidebar-search-clear");
@@ -2487,8 +2501,8 @@ async function renderAureonModule(button) {
   const key=button?.dataset.module||"";
   const title=button?.dataset.moduleTitle||"AUREON";
   if(!page)return;
-  document.querySelectorAll("#main-content > .section").forEach(section=>{if(section.id!=="configuracion")section.hidden=true;});
   if(document.body.classList.contains("settings-open"))setSettingsVisibility(false);
+  showSection("aureon-module-page");
   page.hidden=false;
   $("#aureon-module-title").textContent=title;
   $("#aureon-module-heading").textContent=title;
@@ -2525,11 +2539,7 @@ async function renderAureonModule(button) {
   page.scrollIntoView({behavior:"smooth",block:"start"});
 }
 document.querySelectorAll(".module-nav-link").forEach(button=>button.addEventListener("click",()=>renderAureonModule(button)));
-$("#module-back-home")?.addEventListener("click",()=>{
-  $("#aureon-module-page").hidden=true;
-  document.querySelectorAll("#main-content > .section").forEach(section=>{if(["inicio","videos","youtube","shorts","mensajes","cuenta"].includes(section.id))section.hidden=false;});
-  showSection("inicio");
-});
+$("#module-back-home")?.addEventListener("click",()=>showSection("inicio"));
 
 
 /* AUREON FRIENDS + WHATSAPP-STYLE STATUSES */
