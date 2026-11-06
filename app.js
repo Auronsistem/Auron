@@ -905,6 +905,9 @@ const guardianAuthOptions = {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "aureon-guardian-auth" }
 };
 
+// Cliente único para la sesión independiente del apoderado.
+const guardianAuthClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
+
 function parentalStatusMessage(message, error = false) {
   showMessage($("#parental-status"), message, error);
 }
@@ -918,7 +921,7 @@ async function sendGuardianVerificationCode() {
   }
   if (button) button.disabled = true;
   try {
-    guardianClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
+    guardianClient = guardianAuthClient;
     const { error } = await guardianClient.auth.signInWithOtp({
       email,
       options: {
@@ -1072,7 +1075,7 @@ async function loadGuardianChildren() {
 async function restoreGuardianSession() {
   if (!currentUser) return;
   try {
-    guardianClient = createClient(SUPABASE_URL, SUPABASE_KEY, guardianAuthOptions);
+    guardianClient = guardianAuthClient;
     const { data, error } = await guardianClient.auth.getSession();
     if (error) throw error;
     const guardian = data?.session?.user;
