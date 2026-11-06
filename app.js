@@ -2006,6 +2006,9 @@ function showSection(sectionName) {
   const target = document.querySelector(targetSelector);
 
   if (target) {
+    // Las secciones secundarias no aparecen en la pantalla principal,
+    // pero siguen disponibles desde el catálogo cuando el usuario las abre.
+    target.hidden = false;
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
