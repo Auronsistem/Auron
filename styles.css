@@ -2595,3 +2595,20 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto
 @media(hover:none){
   .video-card:hover{transform:none}
 }
+
+
+/* AUREON PREMIUM */
+.aureon-premium-price{display:flex;align-items:baseline;gap:6px;margin:16px 0 8px}
+.aureon-premium-price strong{font-size:clamp(30px,5vw,42px);font-weight:850;letter-spacing:-1.5px}
+.aureon-premium-price span{color:var(--muted,#aab0c0);font-size:14px}
+.aureon-premium-status{display:inline-flex;align-items:center;width:max-content;max-width:100%;padding:7px 11px;border:1px solid var(--border);border-radius:999px;font-size:13px;font-weight:700}
+.aureon-premium-status.is-active{color:#72dfa2;border-color:rgba(65,190,120,.45);background:rgba(65,190,120,.08)}
+.aureon-premium-status.is-inactive{color:var(--muted,#aab0c0)}
+.aureon-premium-benefits{margin-top:20px}
+.aureon-premium-benefits h4{margin:0 0 12px;font-size:16px}
+.aureon-premium-benefit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px}
+.aureon-premium-benefit{min-width:0;padding:14px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025)}
+.aureon-premium-benefit strong{display:block;margin-bottom:5px}
+.aureon-premium-benefit p{margin:0;font-size:13px;line-height:1.5}
+.aureon-premium-notice{margin-top:16px;line-height:1.55}
+@media(max-width:600px){.aureon-premium-benefit-grid{grid-template-columns:1fr}.aureon-premium-price strong{font-size:34px}}
