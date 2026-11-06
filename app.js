@@ -91,7 +91,9 @@ async function openSettings() {
   const section = $("#configuracion");
   if (!section) return;
   const parentalPanel = $("#parental-settings-panel");
+  const parentalInfo = $("#parental-access-info");
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
+  if (parentalInfo) parentalInfo.hidden = !parentalSettingsRestricted;
   setSettingsVisibility(true);
   showSection("configuracion");
   await Promise.all([
@@ -1212,6 +1214,7 @@ async function refreshParentalState() {
     if ($("#mobile-settings-link")) $("#mobile-settings-link").hidden = false;
     setSettingsVisibility(false);
     if ($("#parental-settings-panel")) $("#parental-settings-panel").hidden = true;
+    if ($("#parental-access-info")) $("#parental-access-info").hidden = true;
     if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
     return;
   }
@@ -1232,7 +1235,9 @@ async function refreshParentalState() {
   if (settingsLink) settingsLink.hidden = false;
   if (mobileSettingsLink) mobileSettingsLink.hidden = false;
   const parentalPanel = $("#parental-settings-panel");
+  const parentalInfo = $("#parental-access-info");
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
+  if (parentalInfo) parentalInfo.hidden = !parentalSettingsRestricted;
   if (supervisedByAdult) {
     if ($("#parental-child-panel")) $("#parental-child-panel").hidden = true;
   } else {
@@ -5326,6 +5331,11 @@ $("#profile-picture-input")?.addEventListener("change", async event => {
 });
 $("#settings-signout")?.addEventListener("click",logout);
 $("#open-settings-link")?.addEventListener("click", openSettings);
+$("#open-parental-settings-link")?.addEventListener("click", async () => {
+  await openSettings();
+  const target = parentalSettingsRestricted ? $("#parental-access-info") : $("#parental-settings-panel");
+  target?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 $("#mobile-states-link")?.addEventListener("click", () => {
   const statesButton = $("#states-nav-link");
   if (statesButton) statesButton.click();
