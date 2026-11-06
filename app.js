@@ -2522,23 +2522,107 @@ async function loadModuleGalaxy(host) {
   host.append(card);
 }
 async function loadModuleNotifications(host) {
-  const [requests,messages] = await Promise.all([
-    supabase.from("friend_requests").select("id,sender_id,created_at").eq("recipient_id",currentUser.id).eq("status","pending").order("created_at",{ascending:false}).limit(30),
-    supabase.from("messages").select("id,conversation_id,sender_id,body,created_at").neq("sender_id",currentUser.id).is("read_at",null).order("created_at",{ascending:false}).limit(30)
+  const userId = currentUser?.id;
+  if (!userId) {
+    moduleEmpty(host, "Inicia sesión para consultar tus notificaciones.");
+    return;
+  }
+
+  const [requestsResult, messagesResult] = await Promise.all([
+    supabase.from("friend_requests")
+      .select("id,sender_id,created_at")
+      .eq("recipient_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase.from("messages")
+      .select("id,conversation_id,sender_id,body,created_at")
+      .neq("sender_id", userId)
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(30)
   ]);
-  if (requests.error) moduleEmpty(host,"No se pudieron consultar las solicitudes de amistad.");
-  else {
-    const card=moduleCard("Solicitudes de amistad",String(requests.data?.length||0)+" solicitud(es) pendiente(s).");
-    card.append(moduleButton("Abrir Mensajes y solicitudes",()=>showSection("mensajes")));
-    host.append(card);
+
+  const requests = requestsResult.data || [];
+  const messages = messagesResult.data || [];
+  let profiles = new Map();
+  const senderIds = [...new Set([
+    ...requests.map(item => item.sender_id),
+    ...messages.map(item => item.sender_id)
+  ].filter(Boolean))];
+  if (senderIds.length) {
+    try { profiles = await fetchProfiles(senderIds); }
+    catch (error) { console.warn("No se pudieron cargar los nombres de notificaciones:", error); }
   }
-  if (messages.error) moduleEmpty(host,"Los mensajes pendientes no se pudieron consultar.");
-  else {
-    const card=moduleCard("Mensajes sin leer",String(messages.data?.length||0)+" mensaje(s) pendiente(s) visibles para esta cuenta.");
-    card.append(moduleButton("Abrir Mensajes",()=>showSection("mensajes")));
-    host.append(card);
+
+  const summary = moduleNode("div", "aureon-module-stats aureon-notification-summary");
+  [
+    [requestsResult.error ? "—" : String(requests.length), "Solicitudes pendientes"],
+    [messagesResult.error ? "—" : String(messages.length), "Mensajes sin leer"]
+  ].forEach(([value, label]) => {
+    const tile = moduleNode("div", "content-panel aureon-stat-tile");
+    tile.append(moduleNode("strong", "", value), moduleNode("span", "muted", label));
+    summary.append(tile);
+  });
+  host.append(summary);
+
+  const requestCard = moduleCard("Solicitudes de amistad", requestsResult.error
+    ? "No se pudieron consultar las solicitudes en este momento."
+    : requests.length + " solicitud(es) pendiente(s).");
+  if (!requestsResult.error && requests.length) {
+    const list = moduleNode("div", "aureon-notification-list");
+    requests.forEach(item => {
+      const profile = profiles.get(item.sender_id);
+      const row = moduleNode("article", "aureon-notification-item");
+      const copy = moduleNode("div", "aureon-module-row-copy");
+      copy.append(
+        moduleNode("strong", "", displayName(profile)),
+        moduleNode("span", "muted", "Te envió una solicitud de amistad."),
+        moduleNode("time", "aureon-notification-time", item.created_at
+          ? new Date(item.created_at).toLocaleString("es-PE")
+          : "Fecha no disponible")
+      );
+      row.append(copy, moduleButton("Ver solicitudes", () => showSection("mensajes")));
+      list.append(row);
+    });
+    requestCard.append(list);
+  } else if (!requestsResult.error) {
+    requestCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes solicitudes pendientes."));
   }
-  const note=moduleNode("p","muted","Las alertas push y los timbres siguen usando el sistema de notificaciones existente; esta pantalla es un resumen dentro de AUREON.");
+  host.append(requestCard);
+
+  const messageCard = moduleCard("Mensajes sin leer", messagesResult.error
+    ? "No se pudieron consultar los mensajes pendientes."
+    : messages.length + " mensaje(s) sin leer.");
+  if (!messagesResult.error && messages.length) {
+    const list = moduleNode("div", "aureon-notification-list");
+    messages.forEach(item => {
+      const profile = profiles.get(item.sender_id);
+      const row = moduleNode("article", "aureon-notification-item");
+      const copy = moduleNode("div", "aureon-module-row-copy");
+      const rawBody = String(item.body || "Te enviaron un mensaje");
+      const preview = rawBody.startsWith("AUREON_MEDIA_FILE:") ? "Te enviaron una imagen o archivo."
+        : rawBody.startsWith("AUREON_GIF:") ? "Te enviaron un GIF."
+        : rawBody.startsWith("AUREON_STICKER:") ? "Te enviaron un sticker."
+        : rawBody.slice(0, 120);
+      copy.append(
+        moduleNode("strong", "", displayName(profile)),
+        moduleNode("span", "muted aureon-notification-preview", preview),
+        moduleNode("time", "aureon-notification-time", item.created_at
+          ? new Date(item.created_at).toLocaleString("es-PE")
+          : "Fecha no disponible")
+      );
+      row.append(copy, moduleButton("Abrir Mensajes", () => showSection("mensajes")));
+      list.append(row);
+    });
+    messageCard.append(list);
+  } else if (!messagesResult.error) {
+    messageCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes mensajes sin leer."));
+  }
+  host.append(messageCard);
+
+  const note = moduleNode("p", "muted aureon-notification-footnote",
+    "Este centro reúne información de tus solicitudes y mensajes existentes. No modifica ni marca mensajes como leídos; las notificaciones push y los timbres siguen funcionando con su sistema actual.");
   host.append(note);
 }
 async function loadModulePremium(host) {
