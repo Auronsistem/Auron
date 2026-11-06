@@ -406,6 +406,7 @@ function updateAuthForm() {
         if (result.error) throw result.error;
         pendingEmail = email;
         showRecoveryCodeForm();
+        startCodeResendCooldown($("#resend-recovery-code"));
         showMessage($("#auth-message"), "Si el correo está registrado, recibirás un código de recuperación. Revisa Recibidos y Spam.");
       } catch (error) {
         showMessage($("#auth-message"), "No se pudo solicitar el cambio: " + (error.message || "Inténtalo de nuevo."), true);
@@ -498,6 +499,12 @@ function showRecoveryCodeForm() {
     code.value = code.value.replace(/\D/g, "").slice(0, 6);
   });
 
+  const resend = document.createElement("button");
+  resend.id = "resend-recovery-code";
+  resend.className = "button button-outline full";
+  resend.type = "button";
+  resend.textContent = "Reenviar código";
+
   const passLabel = document.createElement("label");
   passLabel.htmlFor = "recovery-code-password";
   passLabel.textContent = "Nueva contraseña";
@@ -532,7 +539,7 @@ function showRecoveryCodeForm() {
   message.className = "notice";
   message.setAttribute("aria-live", "polite");
 
-  authForm.append(info, codeLabel, code, passLabel, pass, confirmLabel, confirm, button, message);
+  authForm.append(info, codeLabel, code, resend, passLabel, pass, confirmLabel, confirm, button, message);
   waitingForPasswordRecovery = true;
 }
 
@@ -571,6 +578,12 @@ function showCodeForm() {
     input.value = input.value.replace(/\D/g, "").slice(0, 6);
   });
 
+  const resend = document.createElement("button");
+  resend.id = "resend-signup-code";
+  resend.className = "button button-outline full";
+  resend.type = "button";
+  resend.textContent = "Reenviar código";
+
   const button = document.createElement("button");
   button.className = "button full";
   button.type = "submit";
@@ -581,9 +594,76 @@ function showCodeForm() {
   message.className = "notice";
   message.setAttribute("aria-live", "polite");
 
-  authForm.append(info, label, input, button, message);
+  authForm.append(info, label, input, resend, button, message);
   toggleAuth.style.display = "none";
 }
+
+function startCodeResendCooldown(button, seconds = 60) {
+  if (!button) return;
+  if (button._aureonCooldown) window.clearInterval(button._aureonCooldown);
+  let remaining = seconds;
+  button.disabled = true;
+  button.textContent = "Reenviar código (" + remaining + "s)";
+  button._aureonCooldown = window.setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      window.clearInterval(button._aureonCooldown);
+      button._aureonCooldown = null;
+      button.disabled = false;
+      button.textContent = "Reenviar código";
+      return;
+    }
+    button.textContent = "Reenviar código (" + remaining + "s)";
+  }, 1000);
+}
+
+async function resendSignupCode() {
+  const button = $("#resend-signup-code");
+  if (!pendingEmail || !button) return;
+  button.disabled = true;
+  try {
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: pendingEmail,
+      options: { emailRedirectTo: new URL("./", window.location.href).toString() }
+    });
+    if (error) throw error;
+    const codeInput = $("#verification-code");
+    if (codeInput) codeInput.value = "";
+    showMessage($("#auth-message"), "AUREON solicitó un código nuevo. Usa el último correo recibido; el código anterior deja de ser válido.");
+    startCodeResendCooldown(button);
+  } catch (error) {
+    showMessage($("#auth-message"), error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
+  } finally {
+    if (!button._aureonCooldown) button.disabled = false;
+  }
+}
+
+async function resendRecoveryCode() {
+  const button = $("#resend-recovery-code");
+  if (!pendingEmail || !button) return;
+  button.disabled = true;
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(pendingEmail, {
+      redirectTo: new URL("./", window.location.href).toString()
+    });
+    if (error) throw error;
+    const codeInput = $("#recovery-code");
+    if (codeInput) codeInput.value = "";
+    showMessage($("#auth-message"), "AUREON solicitó un código de recuperación nuevo. Introduce el del último correo; el anterior deja de ser válido.");
+    startCodeResendCooldown(button);
+  } catch (error) {
+    showMessage($("#auth-message"), error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
+  } finally {
+    if (!button._aureonCooldown) button.disabled = false;
+  }
+}
+
+authForm?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (target?.id === "resend-signup-code") void resendSignupCode();
+  if (target?.id === "resend-recovery-code") void resendRecoveryCode();
+});
 
 authForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -682,6 +762,7 @@ authForm?.addEventListener("submit", async (event) => {
 
     if (data?.user && !data?.session) {
       showCodeForm();
+      startCodeResendCooldown($("#resend-signup-code"));
       showMessage(
         $("#auth-message"),
         "Te enviamos un código de 6 dígitos. Revisa Recibidos y Spam."
@@ -848,6 +929,7 @@ async function sendGuardianVerificationCode() {
     if (error) throw error;
     guardianVerifiedEmail = email;
     $("#guardian-code-step").hidden = false;
+    startCodeResendCooldown($("#guardian-resend-code"));
     parentalStatusMessage("Código de 6 dígitos enviado al correo del apoderado. Revisa Recibidos y Spam.");
   } catch (error) {
     guardianClient = null;
@@ -855,6 +937,33 @@ async function sendGuardianVerificationCode() {
     parentalStatusMessage(error.message || "No se pudo enviar el código. Comprueba que el apoderado tenga una cuenta AUREON verificada.", true);
   } finally {
     if (button) button.disabled = false;
+  }
+}
+
+async function resendGuardianVerificationCode() {
+  const button = $("#guardian-resend-code");
+  if (!guardianClient || !guardianVerifiedEmail || !button) {
+    parentalStatusMessage("Primero solicita el código para el apoderado.", true);
+    return;
+  }
+  button.disabled = true;
+  try {
+    const { error } = await guardianClient.auth.signInWithOtp({
+      email: guardianVerifiedEmail,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: new URL("./", window.location.href).toString()
+      }
+    });
+    if (error) throw error;
+    const codeInput = $("#guardian-code");
+    if (codeInput) codeInput.value = "";
+    parentalStatusMessage("AUREON envió un código nuevo al correo del apoderado. Usa el último recibido; el anterior deja de ser válido.");
+    startCodeResendCooldown(button);
+  } catch (error) {
+    parentalStatusMessage(error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
+  } finally {
+    if (!button._aureonCooldown) button.disabled = false;
   }
 }
 
@@ -1302,6 +1411,7 @@ async function refreshParentalState() {
 }
 
 $("#guardian-send-code")?.addEventListener("click", sendGuardianVerificationCode);
+$("#guardian-resend-code")?.addEventListener("click", resendGuardianVerificationCode);
 $("#guardian-verify-code")?.addEventListener("click", verifyGuardianCode);
 $("#guardian-signout")?.addEventListener("click", signOutGuardian);
 $("#send-parental-request")?.addEventListener("click", requestChildSupervision);
