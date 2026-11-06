@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=2">
   <title>AUREON PLAY</title>
   <meta name="description" content="AUREON: descubre vídeos recientes, Shorts, creadores, mensajes y llamadas.">
-  <link rel="stylesheet" href="styles.css?v=51">
+  <link rel="stylesheet" href="styles.css?v=52">
   <link rel="icon" href="./icons/aureon.svg?v=2">
 </head>
 <body>
@@ -466,15 +466,75 @@
 
   </main>
 
-  <!-- BARRA INFERIOR PARA CELULAR -->
-  <nav class="mobile-nav">
-    <a href="#inicio"><span>⌂</span><small>Inicio</small></a>
-    <a href="#mensajes"><span>☁</span><small>Mensajes</small></a>
-    <button id="mobile-upload"><span>＋</span><small>Publicar</small></button>
-    <a href="#shorts"><span>▣</span><small>Shorts</small></a>
-    <button id="mobile-states-link" type="button" aria-label="Abrir Estados"><span>◉</span><small>Estados</small></button>
-    <a href="#cuenta"><span>♙</span><small>Canal</small></a>
-    <button id="mobile-settings-link" type="button"><span>⚙</span><small>Config.</small></button>
+  <!-- MENÚ INFERIOR RESPONSIVE: accesos rápidos + panel de opciones -->
+  <section id="mobile-menu-panel" class="mobile-menu-panel" aria-label="Todas las opciones de AUREON" hidden>
+    <div class="mobile-menu-handle" aria-hidden="true"></div>
+    <div class="mobile-menu-heading">
+      <div><p class="eyebrow">NAVEGACIÓN</p><h2>Explorar AUREON</h2></div>
+      <button id="mobile-menu-close" class="mobile-menu-close" type="button" aria-label="Cerrar menú">×</button>
+    </div>
+    <div class="mobile-menu-quick">
+      <button type="button" data-mobile-section="videos"><span>▶</span> AUREON VISION</button>
+      <button type="button" data-mobile-section="youtube"><span>⌕</span> Explorar vídeos</button>
+      <button type="button" data-mobile-section="cuenta"><span>♙</span> Mi canal</button>
+    </div>
+    <div class="mobile-menu-groups">
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-main" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> CATÁLOGO</button>
+        <div id="mobile-group-main" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-section="inicio">⌂ Inicio</button>
+          <button type="button" data-mobile-section="mensajes">☁ Mensajes</button>
+          <button type="button" data-mobile-section="estados">◉ Estados</button>
+          <button type="button" id="mobile-menu-publish">＋ Publicar</button>
+          <button type="button" data-mobile-section="cuenta">♙ Mi canal</button>
+        </div>
+      </div>
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-social" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> SOCIAL Y COMUNIDAD</button>
+        <div id="mobile-group-social" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-module="communities" data-mobile-title="Comunidades">♧ Comunidades</button>
+          <button type="button" data-mobile-module="watch" data-mobile-title="Ver juntos">▷ Ver juntos</button>
+        </div>
+      </div>
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-entertainment" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> ENTRETENIMIENTO</button>
+        <div id="mobile-group-entertainment" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-module="music" data-mobile-title="AUREON Music">♫ AUREON Music</button>
+          <button type="button" data-mobile-module="collections" data-mobile-title="Colecciones">▤ Colecciones</button>
+        </div>
+      </div>
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-creators" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> CREADORES</button>
+        <div id="mobile-group-creators" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-module="creator" data-mobile-title="Creator Studio">▣ Creator Studio</button>
+          <button type="button" data-mobile-module="lab" data-mobile-title="Laboratorio creativo">✧ Laboratorio creativo</button>
+        </div>
+      </div>
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-explore" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> EXPLORAR</button>
+        <div id="mobile-group-explore" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-module="ai" data-mobile-title="AUREON AI">✦ AUREON AI</button>
+          <button type="button" data-mobile-module="levels" data-mobile-title="Niveles y recompensas">♛ Niveles y recompensas</button>
+          <button type="button" data-mobile-module="galaxy" data-mobile-title="AUREON Galaxy">✧ AUREON Galaxy</button>
+        </div>
+      </div>
+      <div class="mobile-menu-group">
+        <button class="mobile-menu-group-title" type="button" data-mobile-group-toggle="mobile-group-account" aria-expanded="false"><span class="sidebar-group-chevron">▸</span> TU CUENTA</button>
+        <div id="mobile-group-account" class="mobile-menu-group-items" hidden>
+          <button type="button" data-mobile-module="notifications" data-mobile-title="Centro de notificaciones">♧ Notificaciones</button>
+          <button type="button" data-mobile-module="premium" data-mobile-title="AUREON Premium">♕ AUREON Premium</button>
+          <button type="button" id="mobile-menu-parental">🛡 Controles parentales</button>
+          <button type="button" id="mobile-menu-settings">⚙ Configuración</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <nav class="mobile-nav" aria-label="Navegación inferior">
+    <button type="button" data-mobile-section="inicio"><span>⌂</span><small>Inicio</small></button>
+    <button type="button" data-mobile-section="mensajes"><span>☁</span><small>Mensajes</small></button>
+    <button type="button" id="mobile-upload"><span>＋</span><small>Publicar</small></button>
+    <button type="button" data-mobile-section="shorts"><span>▣</span><small>Shorts</small></button>
+    <button type="button" id="mobile-menu-toggle" aria-expanded="false" aria-controls="mobile-menu-panel"><span>☰</span><small>Menú</small></button>
   </nav>
 
   <!-- VENTANA DE PUBLICACIÓN -->
@@ -676,6 +736,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=107"></script>
+  <script type="module" src="app.js?v=108"></script>
 </body>
 </html>
