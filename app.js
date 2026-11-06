@@ -2134,6 +2134,9 @@ function showSection(sectionName) {
 
   if (target) target.hidden = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
+  const mobilePanel = $("#mobile-menu-panel");
+  if (mobilePanel) mobilePanel.hidden = true;
+  $("#mobile-menu-toggle")?.setAttribute("aria-expanded", "false");
 
   document.querySelectorAll(".side-link").forEach(link => {
     const matchesAnchor = link.getAttribute("href") === targetSelector;
@@ -2182,6 +2185,54 @@ sidebarGroupToggles.forEach(toggle => {
     toggle.closest(".sidebar-group")?.classList.toggle("is-expanded", willOpen);
   });
 });
+
+/* MENÚ INFERIOR PARA MÓVILES: carpetas desplegables y accesos como botones */
+const mobileMenuPanel = $("#mobile-menu-panel");
+const mobileMenuToggle = $("#mobile-menu-toggle");
+function setMobileMenuOpen(open) {
+  if (!mobileMenuPanel || !mobileMenuToggle) return;
+  mobileMenuPanel.hidden = !open;
+  mobileMenuToggle.setAttribute("aria-expanded", String(Boolean(open)));
+  mobileMenuToggle.classList.toggle("active", Boolean(open));
+}
+mobileMenuToggle?.addEventListener("click", () => setMobileMenuOpen(mobileMenuPanel?.hidden !== false));
+$("#mobile-menu-close")?.addEventListener("click", () => setMobileMenuOpen(false));
+document.querySelectorAll("[data-mobile-group-toggle]").forEach(button => {
+  button.addEventListener("click", () => {
+    const panel = document.getElementById(button.dataset.mobileGroupToggle);
+    if (!panel) return;
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", String(expanded));
+    panel.hidden = !expanded;
+  });
+});
+document.querySelectorAll("[data-mobile-section]").forEach(button => {
+  button.addEventListener("click", () => {
+    showSection(button.dataset.mobileSection);
+    setMobileMenuOpen(false);
+  });
+});
+document.querySelectorAll("[data-mobile-module]").forEach(button => {
+  button.addEventListener("click", () => {
+    renderAureonModule({
+      dataset: { module: button.dataset.mobileModule, moduleTitle: button.dataset.mobileTitle || button.textContent.trim() }
+    });
+    setMobileMenuOpen(false);
+  });
+});
+$("#mobile-menu-publish")?.addEventListener("click", () => {
+  setMobileMenuOpen(false);
+  $("#open-upload")?.click();
+});
+$("#mobile-menu-settings")?.addEventListener("click", () => {
+  setMobileMenuOpen(false);
+  openSettings();
+});
+$("#mobile-menu-parental")?.addEventListener("click", () => {
+  setMobileMenuOpen(false);
+  $("#open-parental-settings-link")?.click();
+});
+
 const moduleDescriptions = {
   communities: "Tus grupos de AUREON, accesibles desde esta sección.",
   watch: "Prepara una sala para compartir un video con tus amigos.",
