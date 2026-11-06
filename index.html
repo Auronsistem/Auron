@@ -95,6 +95,7 @@
       <div class="sidebar-group-items" id="sidebar-group-items-account" hidden>
       <button type="button" class="side-link module-nav-link" data-module="notifications" data-module-title="Centro de notificaciones" data-search-terms="notificaciones avisos alertas llamadas"><span>♧</span> Notificaciones <small>Nuevo</small></button>
       <button type="button" class="side-link module-nav-link" data-module="premium" data-module-title="AUREON Premium" data-search-terms="premium suscripcion membresia"><span>♕</span> AUREON Premium <small>Nuevo</small></button>
+      <button type="button" class="side-link" id="open-parental-settings-link" data-search-terms="controles parentales familia seguridad apoderado supervisión"><span>🛡</span> Controles parentales</button>
       <button type="button" class="side-link settings-nav-button" id="open-settings-link"><span>⚙</span> Configuración <span id="friend-request-count" class="nav-count" hidden></span></button>
     
       </div>
@@ -367,6 +368,11 @@
         <div id="group-avatar-settings-list" class="group-avatar-settings-list" aria-live="polite">
           <p class="muted">Carga tus grupos al abrir Configuración.</p>
         </div>
+      </div>
+      <div class="content-panel parental-access-info" id="parental-access-info" hidden>
+        <p class="eyebrow">FAMILIA Y SEGURIDAD</p>
+        <h3>🛡️ Esta cuenta tiene supervisión parental</h3>
+        <p class="muted">Los controles de esta cuenta los administra el apoderado vinculado. Para consultar o cambiar los límites, pídele que abra Controles parentales desde su propia cuenta AUREON.</p>
       </div>
       <div class="content-panel parental-panel" id="parental-settings-panel">
         <p class="eyebrow">FAMILIA Y SEGURIDAD</p>
@@ -669,6 +675,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=104"></script>
+  <script type="module" src="app.js?v=105"></script>
 </body>
 </html>
