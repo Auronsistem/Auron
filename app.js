@@ -2545,9 +2545,33 @@ async function loadModulePremium(host) {
   const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
   if(error){moduleEmpty(host,"No se pudo consultar el estado de tu suscripción.");return;}
   const active=(data||[]).find(item=>item.status==="active"&&(!item.expires_at||new Date(item.expires_at)>new Date()));
-  const card=moduleCard(active?"AUREON Premium activo":"AUREON Premium",active?"Tu cuenta tiene una suscripción activa.":"Tu cuenta no tiene una suscripción Premium activa.");
+  const card=moduleCard(active?"AUREON Premium está activo":"AUREON Premium",active?"Tu cuenta tiene acceso Premium.":"Desbloquea una experiencia mejorada de AUREON con el plan mensual.");
+  const price=moduleNode("div","aureon-premium-price");
+  price.append(moduleNode("strong","","S/ 20"),moduleNode("span",""," / mes"));
+  card.append(price,moduleNode("p","muted",active?"Tu suscripción está confirmada.":"Plan mensual con renovación manual."));
   if(active?.expires_at) card.append(moduleNode("p","muted","Vence: "+new Date(active.expires_at).toLocaleString("es-PE")));
-  card.append(moduleNode("p","muted","No se realizarán cobros desde esta pantalla. Los pagos necesitan una pasarela configurada y validación segura en el servidor."));
+  const status=moduleNode("p","aureon-premium-status",active?"✓ Suscripción activa":"Suscripción no activa");
+  status.classList.add(active?"is-active":"is-inactive");
+  card.append(status);
+  const benefits=moduleNode("section","aureon-premium-benefits");
+  benefits.append(moduleNode("h4","","Beneficios incluidos"));
+  const items=[
+    ["Sin anuncios","Disfruta AUREON sin interrupciones publicitarias."],
+    ["Insignia Premium","Identificador exclusivo junto a tu perfil."],
+    ["Personalización extra","Temas y opciones visuales adicionales."],
+    ["Más capacidad de AUREON AI","Mayor límite de uso cuando se habiliten las cuotas Premium."],
+    ["Herramientas para creadores","Funciones adicionales para publicar y gestionar contenido."]
+  ];
+  const list=moduleNode("div","aureon-premium-benefit-grid");
+  items.forEach(([name,detail])=>{
+    const item=moduleNode("article","aureon-premium-benefit");
+    item.append(moduleNode("strong","",name),moduleNode("p","muted",detail));
+    list.append(item);
+  });
+  benefits.append(list);
+  card.append(benefits);
+  if(!active) card.append(moduleNode("p","notice aureon-premium-notice","La activación y los pagos todavía no están habilitados. No envíes comprobantes ni datos bancarios desde esta pantalla. Estamos preparando la verificación segura del pago antes de abrir las suscripciones."));
+  else card.append(moduleNode("p","notice aureon-premium-notice","Los beneficios que requieren controles adicionales se irán habilitando de forma progresiva."));
   host.append(card);
 }
 async function renderAureonModule(button) {
