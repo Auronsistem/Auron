@@ -2623,7 +2623,7 @@ async function loadModuleCreator(host) {
   const rejected = videos.filter(v => v.status === "rejected").length;
   const shorts = videos.filter(v => v.video_type === "short").length;
   const stats = moduleNode("div", "aureon-module-stats");
-  [[videos.length,"En los últimos 100"],[published,"Publicadas"],[pending,"En revisión"],[rejected,"No aprobadas"],[shorts,"Shorts"]].forEach(([value,label]) => {
+  [[""+videos.length,"En los últimos 100"],[published,"Publicadas"],[pending,"En revisión"],[rejected,"No aprobadas"],[shorts,"Shorts"]].forEach(([value,label]) => {
     const tile = moduleNode("div","content-panel aureon-stat-tile");
     tile.append(moduleNode("strong","",String(value)),moduleNode("span","muted",label)); stats.append(tile);
   });
@@ -2632,23 +2632,68 @@ async function loadModuleCreator(host) {
   host.append(moduleNode("p","muted aureon-creator-note",lastPublished?.created_at
     ? "Última publicación aprobada: " + new Date(lastPublished.created_at).toLocaleString("es-PE") + "."
     : "Aún no hay publicaciones aprobadas en este registro."));
-  const list = moduleNode("div", "aureon-module-list");
-  videos.forEach(video => {
-    const row = moduleNode("article", "aureon-module-row");
-    const copy = moduleNode("div", "aureon-module-row-copy");
-    const state = video.status === "approved" && video.published ? "Publicado"
-      : video.status === "rejected" ? "No aprobado"
-      : video.status === "pending" ? "En revisión" : "Borrador";
-    copy.append(
-      moduleNode("strong", "", video.title || "Publicación sin título"),
-      moduleNode("span", "muted", (video.video_type === "short" ? "Short" : "Video") + " · " + state),
-      moduleNode("time", "aureon-notification-time", video.created_at ? new Date(video.created_at).toLocaleDateString("es-PE") : "")
-    );
-    row.append(copy); list.append(row);
+
+  const filters = moduleNode("div","aureon-creator-filters");
+  const list = moduleNode("div","aureon-module-list");
+  const filterOptions = [
+    ["all","Todas"],["published","Publicadas"],["pending","En revisión"],["rejected","No aprobadas"]
+  ];
+  const renderList = filter => {
+    list.replaceChildren();
+    const filtered = videos.filter(video => filter === "all" ||
+      (filter === "published" && video.status === "approved" && video.published) ||
+      (filter === "pending" && video.status === "pending") ||
+      (filter === "rejected" && video.status === "rejected"));
+    if (!filtered.length) {
+      moduleEmpty(list, filter === "all" ? "Todavía no has enviado videos." : "No hay publicaciones en esta categoría.");
+      return;
+    }
+    filtered.forEach(video => {
+      const row = moduleNode("article","aureon-module-row");
+      const copy = moduleNode("div","aureon-module-row-copy");
+      const state = video.status === "approved" && video.published ? "Publicado"
+        : video.status === "rejected" ? "No aprobado"
+        : video.status === "pending" ? "En revisión" : "Borrador";
+      copy.append(
+        moduleNode("strong","",video.title || "Publicación sin título"),
+        moduleNode("span","muted",(video.video_type === "short" ? "Short" : "Video") + " · " + state),
+        moduleNode("time","aureon-notification-time",video.created_at ? new Date(video.created_at).toLocaleDateString("es-PE") : "")
+      );
+      row.append(copy);
+      if (video.status === "pending") {
+        const remove = moduleButton("Eliminar",async () => {
+          if (!window.confirm("¿Eliminar esta publicación pendiente? Esta acción no se puede deshacer.")) return;
+          remove.disabled = true;
+          const { error: deleteError } = await supabase.from("videos").delete().eq("id",video.id).eq("user_id",currentUser.id).eq("status","pending");
+          if (deleteError) {
+            moduleStatus(host,"No se pudo eliminar la publicación: " + deleteError.message,true);
+            remove.disabled = false;
+            return;
+          }
+          moduleStatus(host,"Publicación pendiente eliminada.");
+          await loadModuleCreator(host);
+        });
+        remove.classList.add("button-outline");
+        row.append(remove);
+      }
+      list.append(row);
+    });
+  };
+  filterOptions.forEach(([key,label],index) => {
+    const button = moduleButton(label,() => {
+      filters.querySelectorAll("button").forEach(item => item.setAttribute("aria-pressed","false"));
+      button.setAttribute("aria-pressed","true");
+      renderList(key);
+    },index===0 ? "button" : "button button-outline");
+    button.setAttribute("aria-pressed",index===0 ? "true" : "false");
+    filters.append(button);
   });
-  if (!videos.length) moduleEmpty(list, "Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
-  host.append(list, moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. AUREON todavía no dispone aquí de datos de visualizaciones, alcance o retención; no se muestran cifras estimadas."), moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
+  host.append(filters,list,
+    moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. Las visualizaciones, el alcance y la retención solo aparecerán cuando exista medición real."),
+    moduleButton("Ir a Publicar",() => $("#open-upload")?.click()));
+  renderList("all");
 }
+
 function loadModuleLab(host) {
   const card = moduleCard("Generador de fondos", "Crea una combinación de colores para usarla como fondo o inspiración de diseño.");
   const first = moduleInput("#6d5dfc","text"); first.value="#6d5dfc";
