@@ -2324,7 +2324,12 @@ function renderSavedItems(host, items, onRemove) {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     copy.append(link);
-    row.append(copy, moduleButton("Quitar", () => onRemove(index), "button button-danger button-small"));
+    const actions = moduleNode("div", "aureon-module-actions");
+    actions.append(
+      moduleButton("Copiar enlace", () => GenUI.copy(item.url), "button button-outline button-small"),
+      moduleButton("Quitar", () => onRemove(index), "button button-danger button-small")
+    );
+    row.append(copy, actions);
     list.append(row);
   });
   host.append(list);
@@ -2434,7 +2439,12 @@ function loadModuleCollections(host) {
       moduleStatus(host, "Escribe un nombre y un enlace http o https válido.", true); return;
     }
     const items = readModuleList("collections");
-    items.unshift({ title: title.value.trim().slice(0,100), url: url.value.trim().slice(0,1000) });
+    const normalizedUrl = url.value.trim();
+    if (items.some(item => String(item.url || "").toLowerCase() === normalizedUrl.toLowerCase())) {
+      moduleStatus(host, "Ese enlace ya está guardado en tus Colecciones.", true);
+      return;
+    }
+    items.unshift({ title: title.value.trim().slice(0,100), url: normalizedUrl.slice(0,1000), saved_at: new Date().toISOString() });
     writeModuleList("collections", items.slice(0,100));
     title.value = ""; url.value = "";
     loadModuleCollections(host);
