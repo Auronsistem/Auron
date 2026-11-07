@@ -2247,6 +2247,7 @@ const moduleDescriptions = {
   levels: "Consulta tu progreso y tus logros de participación.",
   galaxy: "Un resumen de tu espacio y actividad en AUREON.",
   notifications: "Consulta solicitudes de amistad y mensajes pendientes.",
+  privacy: "Revisa las opciones de privacidad, cuenta y supervisión disponibles en AUREON.",
   premium: "Consulta el estado de tu suscripción AUREON."
 };
 
@@ -2323,7 +2324,12 @@ function renderSavedItems(host, items, onRemove) {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     copy.append(link);
-    row.append(copy, moduleButton("Quitar", () => onRemove(index), "button button-danger button-small"));
+    const actions = moduleNode("div", "aureon-module-actions");
+    actions.append(
+      moduleButton("Copiar enlace", () => GenUI.copy(item.url), "button button-outline button-small"),
+      moduleButton("Quitar", () => onRemove(index), "button button-danger button-small")
+    );
+    row.append(copy, actions);
     list.append(row);
   });
   host.append(list);
@@ -2433,7 +2439,12 @@ function loadModuleCollections(host) {
       moduleStatus(host, "Escribe un nombre y un enlace http o https válido.", true); return;
     }
     const items = readModuleList("collections");
-    items.unshift({ title: title.value.trim().slice(0,100), url: url.value.trim().slice(0,1000) });
+    const normalizedUrl = url.value.trim();
+    if (items.some(item => String(item.url || "").toLowerCase() === normalizedUrl.toLowerCase())) {
+      moduleStatus(host, "Ese enlace ya está guardado en tus Colecciones.", true);
+      return;
+    }
+    items.unshift({ title: title.value.trim().slice(0,100), url: normalizedUrl.slice(0,1000), saved_at: new Date().toISOString() });
     writeModuleList("collections", items.slice(0,100));
     title.value = ""; url.value = "";
     loadModuleCollections(host);
@@ -2447,27 +2458,42 @@ function loadModuleCollections(host) {
   host.append(list);
 }
 async function loadModuleCreator(host) {
-  const { data, error } = await supabase.from("videos").select("id,title,video_type,status,published,created_at")
-    .eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(100);
+  const { data, error } = await supabase.from("videos")
+    .select("id,title,video_type,status,published,created_at")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: false }).limit(100);
   if (error) { moduleEmpty(host, "No se pudieron consultar tus publicaciones."); return; }
   const videos = data || [];
-  const stats = moduleNode("div", "aureon-module-stats");
   const published = videos.filter(v => v.status === "approved" && v.published).length;
   const pending = videos.filter(v => v.status === "pending").length;
-  [[videos.length,"Publicaciones"],[published,"Publicadas"],[pending,"En revisión"]].forEach(([value,label]) => {
+  const rejected = videos.filter(v => v.status === "rejected").length;
+  const shorts = videos.filter(v => v.video_type === "short").length;
+  const stats = moduleNode("div", "aureon-module-stats");
+  [[videos.length,"En los últimos 100"],[published,"Publicadas"],[pending,"En revisión"],[rejected,"No aprobadas"],[shorts,"Shorts"]].forEach(([value,label]) => {
     const tile = moduleNode("div","content-panel aureon-stat-tile");
     tile.append(moduleNode("strong","",String(value)),moduleNode("span","muted",label)); stats.append(tile);
   });
   host.append(stats);
-  const list = moduleNode("div","aureon-module-list");
+  const lastPublished = videos.find(v => v.status === "approved" && v.published);
+  host.append(moduleNode("p","muted aureon-creator-note",lastPublished?.created_at
+    ? "Última publicación aprobada: " + new Date(lastPublished.created_at).toLocaleString("es-PE") + "."
+    : "Aún no hay publicaciones aprobadas en este registro."));
+  const list = moduleNode("div", "aureon-module-list");
   videos.forEach(video => {
-    const row = moduleNode("div","aureon-module-row");
-    const copy = moduleNode("div","aureon-module-row-copy");
-    copy.append(moduleNode("strong","",video.title),moduleNode("span","muted",(video.video_type === "short" ? "Short" : "Video")+" · "+(video.published && video.status==="approved" ? "Publicado" : "Pendiente de revisión")));
+    const row = moduleNode("article", "aureon-module-row");
+    const copy = moduleNode("div", "aureon-module-row-copy");
+    const state = video.status === "approved" && video.published ? "Publicado"
+      : video.status === "rejected" ? "No aprobado"
+      : video.status === "pending" ? "En revisión" : "Borrador";
+    copy.append(
+      moduleNode("strong", "", video.title || "Publicación sin título"),
+      moduleNode("span", "muted", (video.video_type === "short" ? "Short" : "Video") + " · " + state),
+      moduleNode("time", "aureon-notification-time", video.created_at ? new Date(video.created_at).toLocaleDateString("es-PE") : "")
+    );
     row.append(copy); list.append(row);
   });
-  if (!videos.length) moduleEmpty(list,"Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
-  host.append(list, moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
+  if (!videos.length) moduleEmpty(list, "Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
+  host.append(list, moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. AUREON todavía no dispone aquí de datos de visualizaciones, alcance o retención; no se muestran cifras estimadas."), moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
 }
 function loadModuleLab(host) {
   const card = moduleCard("Generador de fondos", "Crea una combinación de colores para usarla como fondo o inspiración de diseño.");
@@ -2522,24 +2548,159 @@ async function loadModuleGalaxy(host) {
   host.append(card);
 }
 async function loadModuleNotifications(host) {
-  const [requests,messages] = await Promise.all([
-    supabase.from("friend_requests").select("id,sender_id,created_at").eq("recipient_id",currentUser.id).eq("status","pending").order("created_at",{ascending:false}).limit(30),
-    supabase.from("messages").select("id,conversation_id,sender_id,body,created_at").neq("sender_id",currentUser.id).is("read_at",null).order("created_at",{ascending:false}).limit(30)
+  const userId = currentUser?.id;
+  if (!userId) {
+    moduleEmpty(host, "Inicia sesión para consultar tus notificaciones.");
+    return;
+  }
+
+  const [requestsResult, messagesResult] = await Promise.all([
+    supabase.from("friend_requests")
+      .select("id,sender_id,created_at")
+      .eq("recipient_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase.from("messages")
+      .select("id,conversation_id,sender_id,body,created_at")
+      .neq("sender_id", userId)
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(30)
   ]);
-  if (requests.error) moduleEmpty(host,"No se pudieron consultar las solicitudes de amistad.");
-  else {
-    const card=moduleCard("Solicitudes de amistad",String(requests.data?.length||0)+" solicitud(es) pendiente(s).");
-    card.append(moduleButton("Abrir Mensajes y solicitudes",()=>showSection("mensajes")));
-    host.append(card);
+
+  const requests = requestsResult.data || [];
+  const messages = messagesResult.data || [];
+  let profiles = new Map();
+  const senderIds = [...new Set([
+    ...requests.map(item => item.sender_id),
+    ...messages.map(item => item.sender_id)
+  ].filter(Boolean))];
+  if (senderIds.length) {
+    try { profiles = await fetchProfiles(senderIds); }
+    catch (error) { console.warn("No se pudieron cargar los nombres de notificaciones:", error); }
   }
-  if (messages.error) moduleEmpty(host,"Los mensajes pendientes no se pudieron consultar.");
-  else {
-    const card=moduleCard("Mensajes sin leer",String(messages.data?.length||0)+" mensaje(s) pendiente(s) visibles para esta cuenta.");
-    card.append(moduleButton("Abrir Mensajes",()=>showSection("mensajes")));
-    host.append(card);
+
+  const summary = moduleNode("div", "aureon-module-stats aureon-notification-summary");
+  [
+    [requestsResult.error ? "—" : String(requests.length), "Solicitudes pendientes"],
+    [messagesResult.error ? "—" : String(messages.length), "Mensajes sin leer"]
+  ].forEach(([value, label]) => {
+    const tile = moduleNode("div", "content-panel aureon-stat-tile");
+    tile.append(moduleNode("strong", "", value), moduleNode("span", "muted", label));
+    summary.append(tile);
+  });
+  host.append(summary);
+
+  const requestCard = moduleCard("Solicitudes de amistad", requestsResult.error
+    ? "No se pudieron consultar las solicitudes en este momento."
+    : requests.length + " solicitud(es) pendiente(s).");
+  if (!requestsResult.error && requests.length) {
+    const list = moduleNode("div", "aureon-notification-list");
+    requests.forEach(item => {
+      const profile = profiles.get(item.sender_id);
+      const row = moduleNode("article", "aureon-notification-item");
+      const copy = moduleNode("div", "aureon-module-row-copy");
+      copy.append(
+        moduleNode("strong", "", displayName(profile)),
+        moduleNode("span", "muted", "Te envió una solicitud de amistad."),
+        moduleNode("time", "aureon-notification-time", item.created_at
+          ? new Date(item.created_at).toLocaleString("es-PE")
+          : "Fecha no disponible")
+      );
+      row.append(copy, moduleButton("Ver solicitudes", () => showSection("mensajes")));
+      list.append(row);
+    });
+    requestCard.append(list);
+  } else if (!requestsResult.error) {
+    requestCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes solicitudes pendientes."));
   }
-  const note=moduleNode("p","muted","Las alertas push y los timbres siguen usando el sistema de notificaciones existente; esta pantalla es un resumen dentro de AUREON.");
+  host.append(requestCard);
+
+  const messageCard = moduleCard("Mensajes sin leer", messagesResult.error
+    ? "No se pudieron consultar los mensajes pendientes."
+    : messages.length + " mensaje(s) sin leer.");
+  if (!messagesResult.error && messages.length) {
+    const list = moduleNode("div", "aureon-notification-list");
+    messages.forEach(item => {
+      const profile = profiles.get(item.sender_id);
+      const row = moduleNode("article", "aureon-notification-item");
+      const copy = moduleNode("div", "aureon-module-row-copy");
+      const rawBody = String(item.body || "Te enviaron un mensaje");
+      const preview = rawBody.startsWith("AUREON_MEDIA_FILE:") ? "Te enviaron una imagen o archivo."
+        : rawBody.startsWith("AUREON_GIF:") ? "Te enviaron un GIF."
+        : rawBody.startsWith("AUREON_STICKER:") ? "Te enviaron un sticker."
+        : rawBody.slice(0, 120);
+      copy.append(
+        moduleNode("strong", "", displayName(profile)),
+        moduleNode("span", "muted aureon-notification-preview", preview),
+        moduleNode("time", "aureon-notification-time", item.created_at
+          ? new Date(item.created_at).toLocaleString("es-PE")
+          : "Fecha no disponible")
+      );
+      row.append(copy, moduleButton("Abrir Mensajes", () => showSection("mensajes")));
+      list.append(row);
+    });
+    messageCard.append(list);
+  } else if (!messagesResult.error) {
+    messageCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes mensajes sin leer."));
+  }
+  host.append(messageCard);
+
+  const note = moduleNode("p", "muted aureon-notification-footnote",
+    "Este centro reúne información de tus solicitudes y mensajes existentes. No modifica ni marca mensajes como leídos; las notificaciones push y los timbres siguen funcionando con su sistema actual.");
   host.append(note);
+}
+async function loadModulePrivacy(host) {
+  const overview = moduleCard("Tu privacidad en AUREON","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
+  const items = [
+    ["Perfil y apodo","Edita el nombre que aparece ante tus contactos y tu foto de perfil."],
+    ["Tema de la aplicación","Elige el modo claro u oscuro en este dispositivo."],
+    ["Controles parentales","Consulta las opciones de supervisión cuando exista un vínculo autorizado."]
+  ];
+  const list = moduleNode("div","aureon-module-list");
+  items.forEach(([title,detail])=>{
+    const row=moduleNode("div","aureon-module-row");
+    const copy=moduleNode("div","aureon-module-row-copy");
+    copy.append(moduleNode("strong","",title),moduleNode("span","muted",detail));
+    row.append(copy);list.append(row);
+  });
+  overview.append(list);
+  overview.append(
+    moduleButton("Abrir Configuración",()=>openSettings()),
+    moduleButton("Ver controles parentales",()=>$("#open-parental-settings-link")?.click(),"button button-outline")
+  );
+  host.append(overview);
+
+  const appearance=moduleCard("Color de acento","Personaliza el color principal de la interfaz en este navegador. No cambia los colores ni los perfiles de otros usuarios.");
+  const choices=[
+    ["Violeta","#7357ff"],["Azul","#3987ff"],["Turquesa","#13b8a6"],
+    ["Rosa","#e45b9a"],["Naranja","#e58a35"],["Verde","#48a86b"]
+  ];
+  const accentKey="aureon-accent:"+currentUser.id;
+  const applyAccent=color=>{
+    document.documentElement.style.setProperty("--primary",color);
+    try{localStorage.setItem(accentKey,color);}catch(error){console.warn("No se pudo guardar el color de AUREON:",error);}
+    moduleStatus(host,"Color de acento actualizado en este navegador.");
+  };
+  const saved=(()=>{try{return localStorage.getItem(accentKey);}catch(_){return null;}})();
+  const validColors=choices.map(item=>item[1]);
+  if(saved&&validColors.includes(saved))document.documentElement.style.setProperty("--primary",saved);
+  const accentList=moduleNode("div","aureon-privacy-accent-list");
+  choices.forEach(([label,color])=>{
+    const button=moduleButton(label,()=>applyAccent(color),"button button-outline aureon-privacy-accent");
+    const dot=moduleNode("span","aureon-privacy-accent-dot");
+    dot.style.background=color;
+    button.prepend(dot);
+    accentList.append(button);
+  });
+  appearance.append(accentList,moduleButton("Restablecer color",()=>{
+    try{localStorage.removeItem(accentKey);}catch(_){}
+    document.documentElement.style.removeProperty("--primary");
+    moduleStatus(host,"Se restauró el color predeterminado.");
+  },"button button-outline"));
+  host.append(appearance);
+  host.append(moduleNode("p","muted aureon-privacy-note","Este panel reúne accesos a controles existentes y una preferencia visual local. No cambia permisos, bloquea usuarios ni modifica la base de datos. Los controles avanzados de bloqueo y visibilidad requieren una implementación y pruebas específicas."));
 }
 async function loadModulePremium(host) {
   const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
@@ -2598,8 +2759,22 @@ async function renderAureonModule(button) {
       case "creator": await loadModuleCreator(host); break;
       case "lab": loadModuleLab(host); break;
       case "ai": {
-        const card=moduleCard("Asistente inteligente","Usa el asistente alojado de AUREON AI.");
-        card.append(moduleButton("Abrir AUREON AI",()=>openAureonSupport()));
+        const card=moduleCard("Asistente inteligente","Abre AUREON AI con una idea inicial para estudiar, crear o resolver dudas.");
+        const prompts=[
+          "Explícame un tema paso a paso y con ejemplos.",
+          "Ayúdame a organizar una idea para una publicación.",
+          "Resume este texto con sus puntos principales.",
+          "Ayúdame a encontrar y corregir un error de código."
+        ];
+        prompts.forEach(prompt=>{
+          card.append(moduleButton(prompt,()=>{
+            if(!currentUser){openAuth();return;}
+            openAureonSupport();
+            const input=$("#support-input");
+            if(input){input.value=prompt;input.focus();}
+          },"button button-outline aureon-ai-prompt"));
+        });
+        card.append(moduleButton("Abrir chat de AUREON AI",()=>openAureonSupport()));
         host.append(card);
         if(currentUser) openAureonSupport(); else moduleStatus(host,"Inicia sesión para conversar con AUREON AI.");
         break;
@@ -2607,6 +2782,7 @@ async function renderAureonModule(button) {
       case "levels": await loadModuleLevels(host); break;
       case "galaxy": await loadModuleGalaxy(host); break;
       case "notifications": await loadModuleNotifications(host); break;
+      case "privacy": await loadModulePrivacy(host); break;
       case "premium": await loadModulePremium(host); break;
       default: moduleEmpty(host,"Este módulo todavía no está disponible.");
     }
