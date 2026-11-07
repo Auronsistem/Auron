@@ -2644,7 +2644,7 @@ async function loadModuleNotifications(host) {
 async function loadModulePrivacy(host) {
   const overview = moduleCard("Tu privacidad en AUREON","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
   const items = [
-    ["Perfil y apodo","Controla el nombre que aparece ante tus contactos."],
+    ["Perfil y apodo","Edita el nombre que aparece ante tus contactos y tu foto de perfil."],
     ["Tema de la aplicación","Elige el modo claro u oscuro en este dispositivo."],
     ["Controles parentales","Consulta las opciones de supervisión cuando exista un vínculo autorizado."]
   ];
@@ -2661,7 +2661,36 @@ async function loadModulePrivacy(host) {
     moduleButton("Ver controles parentales",()=>$("#open-parental-settings-link")?.click(),"button button-outline")
   );
   host.append(overview);
-  host.append(moduleNode("p","muted aureon-privacy-note","Esta página es un acceso rápido a los controles existentes. No cambia permisos ni bloquea usuarios por sí sola. Las opciones avanzadas de bloqueo y visibilidad todavía requieren una implementación y pruebas específicas."));
+
+  const appearance=moduleCard("Color de acento","Personaliza el color principal de la interfaz en este navegador. No cambia los colores ni los perfiles de otros usuarios.");
+  const choices=[
+    ["Violeta","#7357ff"],["Azul","#3987ff"],["Turquesa","#13b8a6"],
+    ["Rosa","#e45b9a"],["Naranja","#e58a35"],["Verde","#48a86b"]
+  ];
+  const accentKey="aureon-accent:"+currentUser.id;
+  const applyAccent=color=>{
+    document.documentElement.style.setProperty("--primary",color);
+    try{localStorage.setItem(accentKey,color);}catch(error){console.warn("No se pudo guardar el color de AUREON:",error);}
+    moduleStatus(host,"Color de acento actualizado en este navegador.");
+  };
+  const saved=(()=>{try{return localStorage.getItem(accentKey);}catch(_){return null;}})();
+  const validColors=choices.map(item=>item[1]);
+  if(saved&&validColors.includes(saved))document.documentElement.style.setProperty("--primary",saved);
+  const accentList=moduleNode("div","aureon-privacy-accent-list");
+  choices.forEach(([label,color])=>{
+    const button=moduleButton(label,()=>applyAccent(color),"button button-outline aureon-privacy-accent");
+    const dot=moduleNode("span","aureon-privacy-accent-dot");
+    dot.style.background=color;
+    button.prepend(dot);
+    accentList.append(button);
+  });
+  appearance.append(accentList,moduleButton("Restablecer color",()=>{
+    try{localStorage.removeItem(accentKey);}catch(_){}
+    document.documentElement.style.removeProperty("--primary");
+    moduleStatus(host,"Se restauró el color predeterminado.");
+  },"button button-outline"));
+  host.append(appearance);
+  host.append(moduleNode("p","muted aureon-privacy-note","Este panel reúne accesos a controles existentes y una preferencia visual local. No cambia permisos, bloquea usuarios ni modifica la base de datos. Los controles avanzados de bloqueo y visibilidad requieren una implementación y pruebas específicas."));
 }
 async function loadModulePremium(host) {
   const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
