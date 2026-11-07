@@ -2627,3 +2627,16 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto
   .aureon-notification-item{align-items:stretch;flex-direction:column}
   .aureon-notification-item>.button{width:100%}
 }
+
+
+/* AUREON ADDITIVE MODULE ENHANCEMENTS */
+.aureon-creator-note,.aureon-privacy-note{line-height:1.55;margin:12px 0}
+.aureon-ai-prompt{display:flex;width:100%;justify-content:flex-start;text-align:left;margin-top:8px;white-space:normal}
+.aureon-notification-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+.aureon-privacy-accent-list{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.aureon-privacy-accent{display:flex;align-items:center;gap:8px}
+.aureon-privacy-accent-dot{width:15px;height:15px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.35)}
+@media(max-width:600px){
+ .aureon-ai-prompt{width:100%}
+ .aureon-privacy-accent-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+}
