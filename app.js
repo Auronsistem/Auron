@@ -2247,6 +2247,7 @@ const moduleDescriptions = {
   levels: "Consulta tu progreso y tus logros de participación.",
   galaxy: "Un resumen de tu espacio y actividad en AUREON.",
   notifications: "Consulta solicitudes de amistad y mensajes pendientes.",
+  privacy: "Revisa las opciones de privacidad, cuenta y supervisión disponibles en AUREON.",
   premium: "Consulta el estado de tu suscripción AUREON."
 };
 
@@ -2447,27 +2448,42 @@ function loadModuleCollections(host) {
   host.append(list);
 }
 async function loadModuleCreator(host) {
-  const { data, error } = await supabase.from("videos").select("id,title,video_type,status,published,created_at")
-    .eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(100);
+  const { data, error } = await supabase.from("videos")
+    .select("id,title,video_type,status,published,created_at")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: false }).limit(100);
   if (error) { moduleEmpty(host, "No se pudieron consultar tus publicaciones."); return; }
   const videos = data || [];
-  const stats = moduleNode("div", "aureon-module-stats");
   const published = videos.filter(v => v.status === "approved" && v.published).length;
   const pending = videos.filter(v => v.status === "pending").length;
-  [[videos.length,"Publicaciones"],[published,"Publicadas"],[pending,"En revisión"]].forEach(([value,label]) => {
+  const rejected = videos.filter(v => v.status === "rejected").length;
+  const shorts = videos.filter(v => v.video_type === "short").length;
+  const stats = moduleNode("div", "aureon-module-stats");
+  [[videos.length,"En los últimos 100"],[published,"Publicadas"],[pending,"En revisión"],[rejected,"No aprobadas"],[shorts,"Shorts"]].forEach(([value,label]) => {
     const tile = moduleNode("div","content-panel aureon-stat-tile");
     tile.append(moduleNode("strong","",String(value)),moduleNode("span","muted",label)); stats.append(tile);
   });
   host.append(stats);
-  const list = moduleNode("div","aureon-module-list");
+  const lastPublished = videos.find(v => v.status === "approved" && v.published);
+  host.append(moduleNode("p","muted aureon-creator-note",lastPublished?.created_at
+    ? "Última publicación aprobada: " + new Date(lastPublished.created_at).toLocaleString("es-PE") + "."
+    : "Aún no hay publicaciones aprobadas en este registro."));
+  const list = moduleNode("div", "aureon-module-list");
   videos.forEach(video => {
-    const row = moduleNode("div","aureon-module-row");
-    const copy = moduleNode("div","aureon-module-row-copy");
-    copy.append(moduleNode("strong","",video.title),moduleNode("span","muted",(video.video_type === "short" ? "Short" : "Video")+" · "+(video.published && video.status==="approved" ? "Publicado" : "Pendiente de revisión")));
+    const row = moduleNode("article", "aureon-module-row");
+    const copy = moduleNode("div", "aureon-module-row-copy");
+    const state = video.status === "approved" && video.published ? "Publicado"
+      : video.status === "rejected" ? "No aprobado"
+      : video.status === "pending" ? "En revisión" : "Borrador";
+    copy.append(
+      moduleNode("strong", "", video.title || "Publicación sin título"),
+      moduleNode("span", "muted", (video.video_type === "short" ? "Short" : "Video") + " · " + state),
+      moduleNode("time", "aureon-notification-time", video.created_at ? new Date(video.created_at).toLocaleDateString("es-PE") : "")
+    );
     row.append(copy); list.append(row);
   });
-  if (!videos.length) moduleEmpty(list,"Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
-  host.append(list, moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
+  if (!videos.length) moduleEmpty(list, "Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
+  host.append(list, moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. AUREON todavía no dispone aquí de datos de visualizaciones, alcance o retención; no se muestran cifras estimadas."), moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
 }
 function loadModuleLab(host) {
   const card = moduleCard("Generador de fondos", "Crea una combinación de colores para usarla como fondo o inspiración de diseño.");
@@ -2625,6 +2641,28 @@ async function loadModuleNotifications(host) {
     "Este centro reúne información de tus solicitudes y mensajes existentes. No modifica ni marca mensajes como leídos; las notificaciones push y los timbres siguen funcionando con su sistema actual.");
   host.append(note);
 }
+async function loadModulePrivacy(host) {
+  const overview = moduleCard("Tu privacidad en AUREON","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
+  const items = [
+    ["Perfil y apodo","Controla el nombre que aparece ante tus contactos."],
+    ["Tema de la aplicación","Elige el modo claro u oscuro en este dispositivo."],
+    ["Controles parentales","Consulta las opciones de supervisión cuando exista un vínculo autorizado."]
+  ];
+  const list = moduleNode("div","aureon-module-list");
+  items.forEach(([title,detail])=>{
+    const row=moduleNode("div","aureon-module-row");
+    const copy=moduleNode("div","aureon-module-row-copy");
+    copy.append(moduleNode("strong","",title),moduleNode("span","muted",detail));
+    row.append(copy);list.append(row);
+  });
+  overview.append(list);
+  overview.append(
+    moduleButton("Abrir Configuración",()=>openSettings()),
+    moduleButton("Ver controles parentales",()=>$("#open-parental-settings-link")?.click(),"button button-outline")
+  );
+  host.append(overview);
+  host.append(moduleNode("p","muted aureon-privacy-note","Esta página es un acceso rápido a los controles existentes. No cambia permisos ni bloquea usuarios por sí sola. Las opciones avanzadas de bloqueo y visibilidad todavía requieren una implementación y pruebas específicas."));
+}
 async function loadModulePremium(host) {
   const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
   if(error){moduleEmpty(host,"No se pudo consultar el estado de tu suscripción.");return;}
@@ -2682,8 +2720,22 @@ async function renderAureonModule(button) {
       case "creator": await loadModuleCreator(host); break;
       case "lab": loadModuleLab(host); break;
       case "ai": {
-        const card=moduleCard("Asistente inteligente","Usa el asistente alojado de AUREON AI.");
-        card.append(moduleButton("Abrir AUREON AI",()=>openAureonSupport()));
+        const card=moduleCard("Asistente inteligente","Abre AUREON AI con una idea inicial para estudiar, crear o resolver dudas.");
+        const prompts=[
+          "Explícame un tema paso a paso y con ejemplos.",
+          "Ayúdame a organizar una idea para una publicación.",
+          "Resume este texto con sus puntos principales.",
+          "Ayúdame a encontrar y corregir un error de código."
+        ];
+        prompts.forEach(prompt=>{
+          card.append(moduleButton(prompt,()=>{
+            if(!currentUser){openAuth();return;}
+            openAureonSupport();
+            const input=$("#support-input");
+            if(input){input.value=prompt;input.focus();}
+          },"button button-outline aureon-ai-prompt"));
+        });
+        card.append(moduleButton("Abrir chat de AUREON AI",()=>openAureonSupport()));
         host.append(card);
         if(currentUser) openAureonSupport(); else moduleStatus(host,"Inicia sesión para conversar con AUREON AI.");
         break;
@@ -2691,6 +2743,7 @@ async function renderAureonModule(button) {
       case "levels": await loadModuleLevels(host); break;
       case "galaxy": await loadModuleGalaxy(host); break;
       case "notifications": await loadModuleNotifications(host); break;
+      case "privacy": await loadModulePrivacy(host); break;
       case "premium": await loadModulePremium(host); break;
       default: moduleEmpty(host,"Este módulo todavía no está disponible.");
     }
