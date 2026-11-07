@@ -1544,6 +1544,160 @@ function openUpload() {
 $("#open-upload")?.addEventListener("click", openUpload);
 $("#mobile-upload")?.addEventListener("click", openUpload);
 
+/* Grabación directa de videos para publicaciones permanentes */
+let uploadCameraDialog = null;
+let uploadCameraStream = null;
+let uploadCameraRecorder = null;
+let uploadCameraChunks = [];
+let uploadCameraTimer = null;
+
+function stopUploadCamera() {
+  if (uploadCameraTimer) { clearTimeout(uploadCameraTimer); uploadCameraTimer = null; }
+  if (uploadCameraRecorder?.state === "recording") {
+    try { uploadCameraRecorder.stop(); } catch (_) {}
+  }
+  uploadCameraStream?.getTracks().forEach(track => track.stop());
+  uploadCameraStream = null;
+  const preview = $("#upload-camera-live");
+  if (preview) preview.srcObject = null;
+}
+
+function setUploadCameraMessage(message, error = false) {
+  const node = $("#upload-camera-message");
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("is-error", error);
+}
+
+function buildUploadCameraDialog() {
+  if (uploadCameraDialog) return uploadCameraDialog;
+  const dialog = document.createElement("dialog");
+  dialog.className = "status-camera-dialog";
+  dialog.id = "upload-camera-dialog";
+  dialog.innerHTML = `
+    <div class="status-camera-shell">
+      <header class="status-camera-header">
+        <strong>Grabar publicación</strong>
+        <button type="button" id="upload-camera-close" class="status-camera-close" aria-label="Cerrar cámara">×</button>
+      </header>
+      <div class="status-camera-stage">
+        <video id="upload-camera-live" autoplay muted playsinline></video>
+        <p id="upload-camera-message" class="status-camera-notice" aria-live="polite">Preparando cámara…</p>
+      </div>
+      <div class="status-camera-controls">
+        <div class="status-camera-actions">
+          <button type="button" id="upload-camera-record" class="status-camera-capture" aria-label="Iniciar grabación"></button>
+        </div>
+        <p class="muted">Grabación máxima: 60 segundos. El video se adjuntará al formulario para que puedas revisarlo antes de enviarlo a moderación.</p>
+      </div>
+    </div>`;
+  document.body.append(dialog);
+  uploadCameraDialog = dialog;
+
+  $("#upload-camera-close")?.addEventListener("click", () => dialog.close());
+  $("#upload-camera-record")?.addEventListener("click", () => {
+    const button = $("#upload-camera-record");
+    if (uploadCameraRecorder?.state === "recording") {
+      uploadCameraRecorder.stop();
+      return;
+    }
+    if (!uploadCameraStream) return;
+    uploadCameraChunks = [];
+    try {
+      const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+      const mimeType = candidates.find(type => window.MediaRecorder?.isTypeSupported?.(type));
+      uploadCameraRecorder = new MediaRecorder(uploadCameraStream, mimeType ? { mimeType } : undefined);
+      uploadCameraRecorder.ondataavailable = event => {
+        if (event.data?.size) uploadCameraChunks.push(event.data);
+      };
+      uploadCameraRecorder.onerror = event => {
+        console.error("Error en la grabación de publicación:", event.error);
+        setUploadCameraMessage("La grabación tuvo un problema. Inténtalo de nuevo.", true);
+      };
+      uploadCameraRecorder.onstop = () => {
+        const type = uploadCameraRecorder?.mimeType || uploadCameraChunks[0]?.type || "video/webm";
+        const blob = new Blob(uploadCameraChunks, { type });
+        uploadCameraChunks = [];
+        if (!blob.size) {
+          setUploadCameraMessage("No se obtuvo un video. Inténtalo otra vez.", true);
+          return;
+        }
+        const extension = type.includes("mp4") ? "mp4" : "webm";
+        const file = new File([blob], "aureon-grabacion-" + Date.now() + "." + extension, { type: type.split(";")[0], lastModified: Date.now() });
+        const input = $("#upload-file");
+        try {
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          input.files = transfer.files;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          const preview = $("#upload-camera-preview");
+          if (preview) {
+            preview.replaceChildren();
+            const player = document.createElement("video");
+            player.controls = true;
+            player.playsInline = true;
+            player.src = URL.createObjectURL(file);
+            player.className = "status-capture-preview-media";
+            preview.append(player);
+            preview.hidden = false;
+          }
+          setUploadCameraMessage("Video listo. Cierra esta ventana, completa el título y envíalo a revisión.");
+        } catch (error) {
+          console.warn("No se pudo adjuntar el video grabado:", error);
+          setUploadCameraMessage("El navegador no permitió adjuntar la grabación. Prueba con el selector de archivos.", true);
+        }
+        if (button) { button.classList.remove("is-recording"); button.setAttribute("aria-label", "Iniciar grabación"); }
+      };
+      uploadCameraRecorder.start(500);
+      if (button) { button.classList.add("is-recording"); button.setAttribute("aria-label", "Detener grabación"); }
+      setUploadCameraMessage("Grabando… pulsa el botón rojo para terminar.");
+      uploadCameraTimer = setTimeout(() => {
+        if (uploadCameraRecorder?.state === "recording") uploadCameraRecorder.stop();
+      }, 60000);
+    } catch (error) {
+      console.error("No se pudo iniciar MediaRecorder:", error);
+      setUploadCameraMessage("Este navegador no admite grabación directa en este formato. Puedes subir un video desde tu dispositivo.", true);
+    }
+  });
+  dialog.addEventListener("close", stopUploadCamera);
+  return dialog;
+}
+
+$("#upload-file")?.insertAdjacentHTML("afterend", `
+  <button type="button" id="upload-open-camera" class="button button-outline full">🎥 Grabar video ahora</button>
+  <div id="upload-camera-preview" class="status-capture-preview" hidden></div>
+`);
+
+$("#upload-open-camera")?.addEventListener("click", async () => {
+  if (!currentUser) { showMessage($("#upload-message"), "Inicia sesión primero.", true); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    showMessage($("#upload-message"), "Tu navegador no admite grabación directa. Puedes seleccionar un video de tu dispositivo.", true);
+    return;
+  }
+  const dialog = buildUploadCameraDialog();
+  try {
+    dialog.showModal();
+    setUploadCameraMessage("Solicitando permiso para usar la cámara y el micrófono…");
+    uploadCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true
+    });
+    const live = $("#upload-camera-live");
+    live.srcObject = uploadCameraStream;
+    await live.play();
+    setUploadCameraMessage("Cámara lista. Pulsa el botón para empezar a grabar.");
+  } catch (error) {
+    console.warn("No se pudo abrir la cámara de publicación:", error);
+    stopUploadCamera();
+    const message = error?.name === "NotAllowedError"
+      ? "Permite el acceso a la cámara y al micrófono en tu navegador."
+      : error?.name === "NotFoundError"
+        ? "No se encontró una cámara o micrófono disponible."
+        : "No se pudo abrir la cámara. Comprueba los permisos o sube un archivo.";
+    setUploadCameraMessage(message, true);
+  }
+});
+
 uploadForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
