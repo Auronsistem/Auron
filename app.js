@@ -1,5 +1,12 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Cargar Supabase con un CDN alternativo si el principal no responde.
+let createClient;
+try {
+  ({ createClient } = await import("https://esm.sh/@supabase/supabase-js@2"));
+} catch (primaryImportError) {
+  console.warn("SPLASH: el CDN principal no respondió; probando la alternativa.", primaryImportError);
+  ({ createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"));
+}
 
 // SPLASH platform
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
