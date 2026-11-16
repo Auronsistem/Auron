@@ -4781,7 +4781,7 @@ function updateAccountSecuritySummary() {
   if (username) username.textContent = currentProfile?.username || currentUser?.email?.split("@")[0] || "—";
   if (nickname) nickname.textContent = currentProfile?.display_name || currentProfile?.username || "Sin apodo personalizado";
   const password = $("#settings-account-password");
-  if (password && password.textContent !== "Actualizada ahora") password.textContent = "Protegida";
+  if (password && password.textContent !== "Actualizada ahora") password.textContent = "Tu contraseña";
 }
 async function loadCurrentProfile() {
   if (!currentUser) { currentProfile = null; updateHeader(); return; }
