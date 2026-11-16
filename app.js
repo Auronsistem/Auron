@@ -35,6 +35,10 @@ const uploadForm = $("#upload-form");
 const playerDialog = $("#player-dialog");
 const supportDialog = $("#support-dialog");
 
+authDialog?.addEventListener("cancel", (event) => {
+  if (!currentUser) event.preventDefault();
+});
+
 function showMessage(element, message, error = false) {
   if (!element) return;
   element.textContent = message || "";
@@ -345,63 +349,15 @@ function openAuth() {
 $("#open-auth")?.addEventListener("click", openAuth);
 
 function createLockScreen() {
-  if ($("#socora-lock") || currentUser) return;
-
-  const overlay = document.createElement("div");
-  overlay.id = "socora-lock";
-
-  Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "1000",
-    background: "#090d18",
-    color: "white",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textAlign: "center",
-    padding: "24px"
-  });
-
-  const content = document.createElement("div");
-  content.style.maxWidth = "450px";
-
-  const logo = document.createElement("h1");
-  logo.textContent = "▶ SPLASH PLAY";
-  logo.style.color = "#20d9ed";
-
-  const title = document.createElement("h2");
-  title.textContent = "Tu comunidad gaming te espera";
-
-  const description = document.createElement("p");
-  description.textContent = "Inicia sesión o crea una cuenta para entrar.";
-
-  const login = document.createElement("button");
-  login.className = "button";
-  login.textContent = "Iniciar sesión";
-  login.addEventListener("click", () => {
-    authMode = "login";
-    updateAuthForm();
-    openAuth();
-  });
-
-  const register = document.createElement("button");
-  register.className = "button button-outline";
-  register.textContent = "Crear cuenta";
-  register.style.marginLeft = "8px";
-  register.addEventListener("click", () => {
-    authMode = "register";
-    updateAuthForm();
-    openAuth();
-  });
-
-  content.append(logo, title, description, login, register);
-  overlay.append(content);
-  document.body.append(overlay);
+  if (currentUser || !authDialog) return;
+  authMode = "login";
+  updateAuthForm();
+  if (!authDialog.open) authDialog.showModal();
 }
 
 function removeLockScreen() {
-  $("#socora-lock")?.remove();
+  // La pantalla inicial ya no usa una segunda capa con botones separados.
+  // El diálogo de acceso se cierra al autenticar correctamente.
 }
 
 function updateAuthForm() {
