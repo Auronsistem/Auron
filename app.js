@@ -1465,6 +1465,8 @@ async function updateSession(session) {
     }
   }
   currentUser = nextUser;
+  // Recalcular el aviso al terminar el inicio de sesión: el diálogo de acceso puede haberlo cubierto.
+  refreshSplashNotificationPrompt();
   if (currentUser) {
     // Supabase ya confirmó la sesión: desbloquear la interfaz antes de cargar tareas secundarias.
     // La restauración del apoderado y el perfil no deben dejar al usuario atrapado en la pantalla de acceso.
