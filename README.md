@@ -1,4 +1,4 @@
-# Socora Play — starter
+# SPLASH — starter
 
 Plantilla inicial responsive con estilo gaming neón.
 

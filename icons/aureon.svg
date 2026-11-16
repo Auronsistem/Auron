@@ -1,17 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SPLASH">
   <defs>
-    <linearGradient id="aureonBlue" x1="80" y1="420" x2="410" y2="70" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1263e8"/>
-      <stop offset=".52" stop-color="#168cff"/>
-      <stop offset="1" stop-color="#20e0ed"/>
+    <linearGradient id="splashFill" x1="72" y1="54" x2="422" y2="458" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#48E4FF"/>
+      <stop offset=".52" stop-color="#6577FF"/>
+      <stop offset="1" stop-color="#A64BFF"/>
     </linearGradient>
-    <linearGradient id="playGlow" x1="180" y1="220" x2="340" y2="360" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#bafaff"/>
-      <stop offset="1" stop-color="#20d9ed"/>
+    <linearGradient id="splashWave" x1="98" y1="240" x2="420" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#A9F4FF"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#080e1c"/>
-  <path d="M108 372 211 126c9-22 27-35 45-35s36 13 45 35l103 246c11 27-9 54-37 54h-48L256 222l-63 157h-48c-28 0-48-27-37-54Z" fill="url(#aureonBlue)"/>
-  <path d="M257 288 330 426h-74l-42-80 43-58Z" fill="url(#playGlow)" opacity=".95"/>
-  <path d="M256 222 294 310l-38 39-38-39 38-88Z" fill="#080e1c" opacity=".96"/>
+  <path d="M256 38c-30 70-132 151-132 258a132 132 0 0 0 264 0C388 189 286 108 256 38Z" fill="url(#splashFill)"/>
+  <path d="M154 292c31 24 65 36 102 36 42 0 77-14 105-42-8 69-49 111-105 111-54 0-94-39-102-105Z" fill="url(#splashWave)" opacity=".96"/>
+  <circle cx="151" cy="177" r="19" fill="#48E4FF"/>
+  <circle cx="366" cy="151" r="13" fill="#A64BFF"/>
+  <path d="M96 116c11-23 18-47 21-72 4 25 12 49 24 72-12 11-20 25-24 43-4-18-11-32-21-43Z" fill="#FFFFFF" opacity=".92"/>
 </svg>
