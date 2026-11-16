@@ -203,6 +203,57 @@ async function enableAureonPushNotifications() {
   }
 }
 
+function refreshSplashNotificationPrompt() {
+  const panel = $("#splash-notification-prompt");
+  const text = $("#splash-notification-prompt-text");
+  const button = $("#splash-notification-prompt-button");
+  if (!panel || !text || !button) return;
+  if (!("Notification" in window)) {
+    panel.hidden = false;
+    text.textContent = "Este navegador no admite notificaciones. Prueba con Chrome actualizado.";
+    button.hidden = true;
+    return;
+  }
+  if (Notification.permission === "granted") {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  button.hidden = false;
+  if (Notification.permission === "denied") {
+    text.textContent = "El permiso está bloqueado por el navegador. Abre los ajustes del sitio y permite las notificaciones para SPLASH.";
+    button.textContent = "Cómo activarlas";
+  } else {
+    text.textContent = "Actívalas para recibir avisos de mensajes y llamadas en este dispositivo.";
+    button.textContent = "Permitir que SPLASH envíe notificaciones";
+  }
+}
+
+$("#splash-notification-prompt-button")?.addEventListener("click", () => {
+  if ("Notification" in window && Notification.permission === "denied") {
+    showMessage($("#settings-notifications-status"), "En Chrome: pulsa el icono junto a la dirección del sitio > Permisos > Notificaciones > Permitir. Después recarga SPLASH.");
+    $("#settings-notifications-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (!currentUser) {
+    if (authDialog && !authDialog.open) authDialog.showModal();
+    showMessage($("#auth-message"), "Inicia sesión para vincular las notificaciones a tu cuenta SPLASH.");
+    return;
+  }
+  enableAureonPushNotifications().then(refreshSplashNotificationPrompt);
+});
+$("#splash-notification-prompt-close")?.addEventListener("click", () => {
+  const panel = $("#splash-notification-prompt");
+  if (panel) panel.hidden = true;
+});
+window.addEventListener("focus", refreshSplashNotificationPrompt);
+if ("Notification" in window) {
+  navigator.permissions?.query?.({ name: "notifications" }).then(status => {
+    status.addEventListener("change", refreshSplashNotificationPrompt);
+  }).catch(() => {});
+}
+refreshSplashNotificationPrompt();
+
 async function syncExistingAureonPushSubscription() {
   const userId = currentUser?.id;
   if (!userId || !("serviceWorker" in navigator) || !("PushManager" in window) ||
