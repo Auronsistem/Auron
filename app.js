@@ -1492,30 +1492,9 @@ $("#parental-unlink-child")?.addEventListener("click", permanentlyUnlinkSelected
 
 async function updateSession(session) {
   const nextUser = session?.user || null;
-  if (currentUser?.id && currentUser.id !== nextUser?.id && guardianClient) {
-    await guardianClient.auth.signOut({ scope: "local" }).catch(() => {});
-    guardianClient = null;
-    guardianUserId = null;
-    guardianVerifiedEmail = "";
-    if ($("#guardian-send-code")) $("#guardian-send-code").hidden = false;
-    if ($("#guardian-signout")) $("#guardian-signout").hidden = true;
-    if ($("#guardian-email")) {
-      $("#guardian-email").value = "";
-      $("#guardian-email").readOnly = false;
-    }
-    if ($("#guardian-code")) $("#guardian-code").value = "";
-    if ($("#guardian-code-step")) $("#guardian-code-step").hidden = true;
-    if ($("#guardian-link-step")) $("#guardian-link-step").hidden = true;
-    if ($("#parental-controls-form")) $("#parental-controls-form").hidden = true;
-    const childSelect = $("#parental-child-select");
-    if (childSelect) {
-      childSelect.replaceChildren();
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "Verifica primero el correo del apoderado";
-      childSelect.append(option);
-    }
-  }
+  const accountChanged = currentUser?.id !== nextUser?.id;
+  // La sesión del apoderado es independiente de la cuenta SPLASH abierta.
+  // Cambiar de cuenta principal no debe cerrar ni borrar la sesión verificada del apoderado.
   currentUser = nextUser;
   // Recalcular el aviso al terminar el inicio de sesión: el diálogo de acceso puede haberlo cubierto.
   refreshSplashNotificationPrompt();
@@ -1525,7 +1504,12 @@ async function updateSession(session) {
     removeLockScreen();
     updateHeader();
   }
-  if (currentUser && !guardianClient) await restoreGuardianSession();
+  if (currentUser && !guardianClient) {
+    await restoreGuardianSession();
+  } else if (currentUser && accountChanged && guardianClient) {
+    // Al entrar con otra cuenta, volver a cargar las cuentas supervisadas del apoderado.
+    await loadGuardianChildren();
+  }
   await loadCurrentProfile();
   applyTheme(readThemePreference());
   if (currentUser) startPresence(); else stopPresence();
