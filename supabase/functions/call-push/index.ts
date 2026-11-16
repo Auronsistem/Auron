@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://auronsistem.github.io",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -180,6 +180,32 @@ Deno.serve(async (req: Request) => {
     }));
     if (staleIds.length) await admin.from("push_subscriptions").delete().in("id", staleIds);
     return response({ sent, total: subscriptions.length });
+  }
+
+  if (body.action === "parental-request") {
+    stage = "prepare-parental-request-push";
+    if (!vapidPublicRaw || !vapidPrivateRaw) return response({ error: "Push notifications are not configured yet" }, 503);
+    const recipientId = typeof body.recipientId === "string" ? body.recipientId : "";
+    const linkId = typeof body.linkId === "string" ? body.linkId : "";
+    if (!recipientId || !linkId || recipientId === user.id) return response({ error: "Invalid parental request notification" }, 400);
+    const { data: link, error: linkError } = await admin.from("parental_links").select("id,parent_id,child_id,status").eq("id",linkId).eq("parent_id",user.id).eq("child_id",recipientId).eq("status","pending").maybeSingle();
+    if (linkError || !link) return response({ error: "Parental request not found or not permitted" }, 403);
+    const [{data:profile},{data:subscriptions,error:subscriptionError}]=await Promise.all([
+      admin.from("profiles").select("display_name,username").eq("id",user.id).maybeSingle(),
+      admin.from("push_subscriptions").select("id,subscription").eq("user_id",recipientId)
+    ]);
+    if(subscriptionError)return response({error:"Could not load parental request recipient"},500);
+    if(!subscriptions?.length)return response({sent:0,total:0,message:"Recipient has no push subscriptions"});
+    try{webpush.setVapidDetails(vapidSubject,normalizeVapidKey(vapidPublicRaw,65,"VAPID_PUBLIC_KEY"),normalizeVapidKey(vapidPrivateRaw,32,"VAPID_PRIVATE_KEY"));}
+    catch(error){console.error("call-push: invalid VAPID configuration for parental request",error);return response({error:"Invalid VAPID key configuration."},500);}
+    const parentName=profile?.display_name?.trim()||profile?.username?.trim()||"Un apoderado";
+    let sent=0;const staleIds:string[]=[];
+    await Promise.all(subscriptions.map(async(row:{id:string;subscription:unknown})=>{
+      try{await webpush.sendNotification(row.subscription as any,JSON.stringify({title:"Solicitud de controles parentales · SPLASH",body:parentName+" solicita administrar los controles parentales de tu cuenta. Puedes aceptar o rechazar.",tag:"splash-parental-request-"+linkId,renotify:true,type:"parental-request",requestId:linkId,url:"./?openSettings=parental-requests"}),{TTL:86400,urgency:"normal"});sent++;}
+      catch(error){const statusCode=(error as {statusCode?:number})?.statusCode;if(statusCode===404||statusCode===410)staleIds.push(row.id);console.error("Parental request push delivery failed",statusCode||"unknown",error instanceof Error?error.message:String(error));}
+    }));
+    if(staleIds.length)await admin.from("push_subscriptions").delete().in("id",staleIds);
+    return response({sent,total:subscriptions.length});
   }
 
   if (body.action === "message" || body.action === "group-message") {
