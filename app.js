@@ -669,6 +669,18 @@ authForm?.addEventListener("click", (event) => {
   if (target?.id === "resend-recovery-code") void resendRecoveryCode();
 });
 
+function withAuthTimeout(promise, milliseconds = 20000) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = window.setTimeout(() => {
+        reject(new Error("La conexión con el servidor está tardando demasiado. Comprueba tu internet e inténtalo otra vez."));
+      }, milliseconds);
+    })
+  ]).finally(() => window.clearTimeout(timer));
+}
+
 authForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -741,10 +753,9 @@ authForm?.addEventListener("submit", async (event) => {
     }
 
     if (authMode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const { error } = await withAuthTimeout(
+        supabase.auth.signInWithPassword({ email, password })
+      );
 
       if (error) throw error;
 
