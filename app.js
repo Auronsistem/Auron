@@ -1498,6 +1498,12 @@ async function updateSession(session) {
     }
   }
   currentUser = nextUser;
+  if (currentUser) {
+    // Supabase ya confirmó la sesión: desbloquear la interfaz antes de cargar tareas secundarias.
+    // La restauración del apoderado y el perfil no deben dejar al usuario atrapado en la pantalla de acceso.
+    removeLockScreen();
+    updateHeader();
+  }
   if (currentUser && !guardianClient) await restoreGuardianSession();
   await loadCurrentProfile();
   applyTheme(readThemePreference());
@@ -1518,7 +1524,6 @@ async function updateSession(session) {
 
   if (currentUser) {
     maybeShowNotificationWelcome();
-    removeLockScreen();
     void syncExistingAureonPushSubscription();
     await refreshParentalState();
     await loadVideos();
@@ -1567,7 +1572,15 @@ async function updateSession(session) {
 
 supabase.auth.onAuthStateChange((event, session) => {
   queueMicrotask(() => {
-    updateSession(session);
+    updateSession(session).catch(error => {
+      console.error("SPLASH: no se pudo completar la carga posterior al inicio de sesión:", error);
+      if (session?.user) {
+        currentUser = session.user;
+        removeLockScreen();
+        updateHeader();
+        showMessage($("#auth-message"), "Sesión iniciada. Algunas funciones siguen cargando.");
+      }
+    });
     if (event === "PASSWORD_RECOVERY") {
       if (authDialog && !authDialog.open) authDialog.showModal();
       showPasswordRecoveryForm();
