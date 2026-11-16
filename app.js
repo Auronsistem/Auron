@@ -1,7 +1,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// AUREON PLAY
+// SPLASH platform
 const SUPABASE_URL = "https://caakejgnbjjdlkywvwac.supabase.co";
 const SUPABASE_KEY = "sb_publishable_CAGScnybbLkrDCz2Sj5HSw_LQ8_r4p5";
 const YOUTUBE_FUNCTION = "smooth-action";
@@ -803,7 +803,7 @@ function updateHeader() {
 
 
 
-// AUREON AI alojada: el historial solo vive en memoria durante esta sesión.
+// SPLASH AI alojada: el historial solo vive en memoria durante esta sesión.
 const aureonSupportHistory = [];
 
 function appendAureonSupportMessage(role, content) {
@@ -2122,7 +2122,7 @@ function showSection(sectionName) {
   const target = document.querySelector(targetSelector);
   const hero = $("#inicio");
 
-  // AUREON funciona como una aplicación de páginas: solo se muestra
+  // SPLASH funciona como una aplicación de páginas: solo se muestra
   // la pantalla elegida, manteniendo los elementos en el DOM para no
   // interrumpir chats, formularios, reproductores ni sus listeners.
   document.querySelectorAll("#main-content > .section").forEach(section => {
@@ -2796,7 +2796,7 @@ document.querySelectorAll(".module-nav-link").forEach(button=>button.addEventLis
 $("#module-back-home")?.addEventListener("click",()=>showSection("inicio"));
 
 
-/* AUREON FRIENDS + WHATSAPP-STYLE STATUSES */
+/* SPLASH FRIENDS + WHATSAPP-STYLE STATUSES */
 const statusForm = $("#status-publish-form");
 const statusFeedback = $("#status-publish-feedback");
 const statusFeed = $("#status-friends-feed");
@@ -3871,7 +3871,7 @@ const youtubeForm = $("#youtube-search-form");
 const youtubeInput = $("#youtube-search");
 const youtubeResults = $("#youtube-results");
 
-// AUREON VISION: catálogo híbrido de YouTube, PeerTube y creadores de AUREON.
+// SPLASH VISION: catálogo híbrido de videos y creadores de SPLASH.
 const PEERTUBE_SEARCH_URL = "https://sepiasearch.org/api/v1/search/videos";
 const PEERTUBE_DEFAULT_QUERY = "gaming videos español";
 const peerTubeCache = new Map();
