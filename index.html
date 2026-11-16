@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=3">
   <title>SPLASH</title>
   <meta name="description" content="SPLASH: descubre vídeos recientes, Shorts, creadores, mensajes y llamadas.">
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
   <link rel="icon" href="./icons/aureon.svg?v=3">
 </head>
 <body>
@@ -335,7 +335,11 @@
         </div>
         <button id="close-settings" class="button button-outline" type="button">← Volver</button>
       </div>
-      <div class="friends-panel" id="settings-friend-requests"><h3>👥 Solicitudes de amistad</h3><p class="muted">Acepta solicitudes para hacerte amigo y compartir estados.</p><div id="friend-requests-list"><p class="muted">Inicia sesión para ver tus solicitudes.</p></div></div>
+      <div class="settings-request-inbox" id="settings-request-inbox">
+        <div class="settings-request-inbox-head"><div><p class="eyebrow">BANDEJA UNIFICADA</p><h3>📥 Bandeja de solicitudes</h3><p class="muted">Aquí aparecen tus solicitudes de amistad y de controles parentales.</p></div><button id="refresh-settings-requests" class="button button-outline" type="button">↻ Actualizar</button></div>
+        <div class="settings-request-group" id="settings-friend-requests"><h4>👥 Solicitudes de amistad</h4><div id="friend-requests-list"><p class="muted">Cargando solicitudes…</p></div></div>
+        <div class="settings-request-group" id="parental-child-panel"><h4>🛡️ Solicitudes de controles parentales</h4><p class="muted">Revisa quién solicita vincularse como apoderado.</p><div id="parental-pending-requests"><p class="muted">Cargando solicitudes…</p></div></div>
+      </div>
       <div class="content-panel appearance-panel" id="appearance-settings-panel">
         <p class="eyebrow">PERSONALIZA SPLASH</p>
         <h3>🎨 Apariencia</h3>
@@ -484,14 +488,6 @@
       </div>
     </section>
 
-    <section id="parental-child-panel" class="section" hidden>
-      <div class="content-panel">
-        <p class="eyebrow">SOLICITUD DE SUPERVISIÓN</p>
-        <h3>Un apoderado quiere vincular esta cuenta</h3>
-        <p class="muted">Revisa la solicitud. Solo al aceptarla se activarán los controles parentales para esta cuenta.</p>
-        <div id="parental-pending-requests"></div>
-      </div>
-    </section>
 
     <!-- DIRECTORIO DE FUNCIONES NUEVAS -->
     <section class="section aureon-module-section" id="aureon-module-page" hidden aria-live="polite">
@@ -778,6 +774,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=119"></script>
+  <script type="module" src="app.js?v=120"></script>
 </body>
 </html>
