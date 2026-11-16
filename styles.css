@@ -2882,3 +2882,29 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto
   #auth-dialog .auth-form-panel{padding:46px 19px 24px}
   #auth-dialog #demo-auth input{min-height:50px}
 }
+
+/* Ajustes de contenido: el acceso se muestra directamente, sin selector de modos. */
+#auth-dialog .auth-form-heading .eyebrow{display:none}
+#auth-dialog .auth-form-heading h2{font-size:30px;text-align:center}
+#auth-dialog .auth-form-heading .muted{text-align:center}
+#auth-dialog #toggle-auth{
+  display:block;
+  width:100%;
+  border:0;
+  background:transparent;
+  color:#55dce9;
+  font:inherit;
+  font-size:13px;
+  text-align:center;
+  cursor:pointer;
+}
+#auth-dialog #demo-auth .text-button{
+  display:block;
+  width:100%;
+  border:0;
+  background:transparent;
+  color:#9aaecb;
+  font:inherit;
+  font-size:12px;
+  cursor:pointer;
+}
