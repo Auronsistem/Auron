@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=3">
   <title>SPLASH</title>
   <meta name="description" content="SPLASH: descubre vídeos recientes, Shorts, creadores, mensajes y llamadas.">
-  <link rel="stylesheet" href="styles.css?v=53">
+  <link rel="stylesheet" href="styles.css?v=54">
   <link rel="icon" href="./icons/aureon.svg?v=3">
 </head>
 <body>
@@ -344,7 +344,16 @@
         </div>
         <p id="theme-settings-status" class="notice" aria-live="polite"></p>
       </div>
-      <div class="content-panel profile-settings-panel" id="profile-settings-panel">
+      <details class="content-panel privacy-security-accordion" id="privacy-security-accordion">
+        <summary><span>🛡️ Privacidad y Seguridad</span><span class="privacy-security-chevron" aria-hidden="true">⌄</span></summary>
+        <div class="privacy-security-content">
+          <div class="account-security-summary">
+            <p class="eyebrow">DATOS DE TU CUENTA</p>
+            <div class="account-security-row"><span>Correo electrónico</span><strong id="settings-account-email">Cargando…</strong></div>
+            <div class="account-security-row"><span>Nombre de usuario</span><strong id="settings-account-username">—</strong></div>
+            <div class="account-security-row"><span>Apodo</span><strong id="settings-account-nickname">—</strong></div>
+          </div>
+          <div class="content-panel profile-settings-panel" id="profile-settings-panel">
         <p class="eyebrow">TU CUENTA</p><h3>👤 Perfil y apodo</h3>
         <label for="profile-nickname">Apodo que verán tus contactos</label>
         <input id="profile-nickname" type="text" maxlength="32" autocomplete="nickname" placeholder="Escribe el nombre que quieras">
@@ -364,17 +373,25 @@
       </div>
       <div class="content-panel" id="password-settings-panel">
         <p class="eyebrow">SEGURIDAD DE LA CUENTA</p>
-        <h3>🔐 Contraseña</h3>
-        <p class="muted">Por seguridad, SPLASH no puede mostrar tu contraseña actual. Puedes cambiarla aquí y mostrar u ocultar la nueva mientras la escribes.</p>
-        <form id="settings-password-form" autocomplete="off">
-          <label for="settings-new-password">Nueva contraseña</label>
-          <div class="password-field-row"><input id="settings-new-password" type="password" autocomplete="new-password" minlength="8" required><button class="button button-outline" type="button" data-password-toggle="settings-new-password">Mostrar</button></div>
-          <label for="settings-confirm-password">Repite la nueva contraseña</label>
-          <div class="password-field-row"><input id="settings-confirm-password" type="password" autocomplete="new-password" minlength="8" required><button class="button button-outline" type="button" data-password-toggle="settings-confirm-password">Mostrar</button></div>
-          <button id="save-settings-password" class="button full" type="submit">Cambiar contraseña</button>
-          <p id="settings-password-status" class="notice" aria-live="polite"></p>
-        </form>
+        <h3>🔐 Cambiar contraseña</h3>
+        <p class="muted">SPLASH enviará un código de 6 dígitos a tu correo. Verifícalo para establecer una contraseña nueva.</p>
+        <button id="settings-password-send-code" class="button" type="button">Enviar código a mi correo</button>
+        <div id="settings-password-code-step" hidden>
+          <form id="settings-password-form" autocomplete="off">
+            <label for="settings-password-code">Código de verificación (6 dígitos)</label>
+            <input id="settings-password-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" required>
+            <label for="settings-new-password">Nueva contraseña</label>
+            <div class="password-field-row"><input id="settings-new-password" type="password" autocomplete="new-password" minlength="8" placeholder="Mínimo 8 caracteres" required><button class="button button-outline" type="button" data-password-toggle="settings-new-password">Mostrar</button></div>
+            <label for="settings-confirm-password">Repite la nueva contraseña</label>
+            <div class="password-field-row"><input id="settings-confirm-password" type="password" autocomplete="new-password" minlength="8" placeholder="Confirma tu contraseña" required><button class="button button-outline" type="button" data-password-toggle="settings-confirm-password">Mostrar</button></div>
+            <button id="save-settings-password" class="button full" type="submit">Verificar código y cambiar contraseña</button>
+          </form>
+          <button id="settings-password-resend" class="button button-outline full" type="button">Reenviar código</button>
+        </div>
+        <p id="settings-password-status" class="notice" aria-live="polite"></p>
       </div>
+        </div>
+      </details>
       <div class="content-panel" id="settings-notifications-panel">
         <p class="eyebrow">AVISOS EN TU DISPOSITIVO</p>
         <h3>🔔 Notificaciones de SPLASH</h3>
@@ -757,6 +774,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=109"></script>
+  <script type="module" src="app.js?v=110"></script>
 </body>
 </html>
