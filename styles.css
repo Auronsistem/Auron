@@ -2912,3 +2912,14 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto
 
 /* Acceso inicial: una sola tarjeta, sin botones de entrada separados ni cierre antes de autenticar. */
 #auth-dialog .dialog-close{display:none!important}
+
+
+/* Bandeja unificada de solicitudes en Configuración */
+.settings-request-inbox{display:flex;flex-direction:column;gap:18px;margin:0 0 22px;padding:20px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(145deg,rgba(115,87,255,.10),rgba(17,24,39,.92))}
+.settings-request-inbox-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.settings-request-inbox-head h3{margin:0 0 6px;font-size:20px}
+.settings-request-group{min-width:0;padding:16px;border:1px solid var(--border);border-radius:12px;background:rgba(9,13,24,.42)}
+.settings-request-group h4{margin:0 0 8px;font-size:16px}
+.settings-request-group .muted{line-height:1.5}
+@media(max-width:600px){.settings-request-inbox{padding:13px}.settings-request-inbox-head{align-items:flex-start;flex-direction:column}.settings-request-inbox-head .button{width:100%}.settings-request-group{padding:12px}}
+:root[data-theme="light"] .settings-request-inbox,:root[data-theme="light"] .settings-request-group{background:#fff}
