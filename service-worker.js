@@ -48,6 +48,12 @@ self.addEventListener("notificationclick", (event) => {
     if (data.type === "friend-request") {
       targetUrl.searchParams.set("openSettings", "friend-requests");
     }
+    if (data.type === "parental-request") {
+      targetUrl.searchParams.set("openSettings", "parental-requests");
+    }
+    if (false) {
+      targetUrl.searchParams.set("openSettings", "friend-requests");
+    }
     if (["call", "group-call"].includes(data.type) && data.callId) {
       targetUrl.searchParams.set("callId", data.callId);
       if (["accept", "reject"].includes(action)) targetUrl.searchParams.set("notificationAction", action);
