@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=3">
   <title>SPLASH</title>
   <meta name="description" content="SPLASH: descubre vídeos recientes, Shorts, creadores, mensajes y llamadas.">
-  <link rel="stylesheet" href="styles.css?v=52">
+  <link rel="stylesheet" href="styles.css?v=53">
   <link rel="icon" href="./icons/aureon.svg?v=3">
 </head>
 <body>
@@ -361,6 +361,26 @@
         </div>
         <p id="profile-picture-status" class="notice" aria-live="polite"></p>
         <button id="settings-signout" class="button button-outline" type="button" hidden>Cerrar sesión</button>
+      </div>
+      <div class="content-panel" id="password-settings-panel">
+        <p class="eyebrow">SEGURIDAD DE LA CUENTA</p>
+        <h3>🔐 Contraseña</h3>
+        <p class="muted">Por seguridad, SPLASH no puede mostrar tu contraseña actual. Puedes cambiarla aquí y mostrar u ocultar la nueva mientras la escribes.</p>
+        <form id="settings-password-form" autocomplete="off">
+          <label for="settings-new-password">Nueva contraseña</label>
+          <div class="password-field-row"><input id="settings-new-password" type="password" autocomplete="new-password" minlength="8" required><button class="button button-outline" type="button" data-password-toggle="settings-new-password">Mostrar</button></div>
+          <label for="settings-confirm-password">Repite la nueva contraseña</label>
+          <div class="password-field-row"><input id="settings-confirm-password" type="password" autocomplete="new-password" minlength="8" required><button class="button button-outline" type="button" data-password-toggle="settings-confirm-password">Mostrar</button></div>
+          <button id="save-settings-password" class="button full" type="submit">Cambiar contraseña</button>
+          <p id="settings-password-status" class="notice" aria-live="polite"></p>
+        </form>
+      </div>
+      <div class="content-panel" id="settings-notifications-panel">
+        <p class="eyebrow">AVISOS EN TU DISPOSITIVO</p>
+        <h3>🔔 Notificaciones de SPLASH</h3>
+        <p class="muted">Activa los avisos de mensajes y llamadas en este dispositivo. Puedes cambiar esta opción desde los ajustes del navegador.</p>
+        <button id="enable-settings-notifications" class="button" type="button">Activar notificaciones</button>
+        <p id="settings-notifications-status" class="notice" aria-live="polite"></p>
       </div>
       <div class="content-panel group-avatar-settings-panel" id="group-avatar-settings-panel">
         <p class="eyebrow">TUS CONVERSACIONES</p>
@@ -737,6 +757,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=108"></script>
+  <script type="module" src="app.js?v=109"></script>
 </body>
 </html>
