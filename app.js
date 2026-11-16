@@ -382,8 +382,9 @@ function createLockScreen() {
 }
 
 function removeLockScreen() {
-  // La pantalla inicial ya no usa una segunda capa con botones separados.
-  // El diálogo de acceso se cierra al autenticar correctamente.
+  // Cerrar el diálogo modal de acceso al confirmar la sesión.
+  // Si queda abierto, su fondo oscurecido tapa la aplicación y parece que SPLASH sigue cargando.
+  if (authDialog?.open) authDialog.close();
 }
 
 function updateAuthForm() {
