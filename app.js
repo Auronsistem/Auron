@@ -106,10 +106,19 @@ async function openSettings() {
   await Promise.all([
     loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error)),
     loadFriendRequestsOnly().catch(error => console.warn("No se pudieron cargar las solicitudes:", error)),
+    showIncomingParentalRequests().catch(error => console.warn("No se pudieron cargar las solicitudes parentales:", error)),
     loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error))
   ]);
   section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+$("#refresh-settings-requests")?.addEventListener("click", async () => {
+  const button = $("#refresh-settings-requests");
+  if (button) { button.disabled = true; button.textContent = "Actualizando…"; }
+  try { await Promise.all([loadFriendRequestsOnly(), showIncomingParentalRequests()]); }
+  catch (error) { console.warn("No se pudo actualizar la bandeja:", error); }
+  finally { if (button) { button.disabled = false; button.textContent = "↻ Actualizar"; } }
+});
 
 function closeSettings() {
   setSettingsVisibility(false);
