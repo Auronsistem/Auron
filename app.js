@@ -90,26 +90,40 @@ function setSettingsVisibility(isOpen) {
   document.body.classList.toggle("settings-open", Boolean(isOpen));
 }
 
-async function openSettings() {
+function openSettings() {
   if (!currentUser) { openAuth(); return; }
   const section = $("#configuracion");
   if (!section) return;
-  // Consultar la supervisión real de esta cuenta antes de ocultar sus controles.
-  try { await refreshParentalState(); }
-  catch (error) { console.warn("No se pudo actualizar la supervisión parental al abrir Configuración:", error); }
-  const parentalPanel = $("#parental-settings-panel");
-  const parentalInfo = $("#parental-access-info");
-  if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
-  if (parentalInfo) parentalInfo.hidden = !parentalSettingsRestricted;
+
+  // Mostrar Configuración inmediatamente: ninguna consulta de red debe bloquear la pantalla.
   setSettingsVisibility(true);
   showSection("configuracion");
-  await Promise.all([
-    loadGroupAvatarSettings().catch(error => console.warn("No se pudieron cargar los grupos en Configuración:", error)),
-    loadFriendRequestsOnly().catch(error => console.warn("No se pudieron cargar las solicitudes:", error)),
-    showIncomingParentalRequests().catch(error => console.warn("No se pudieron cargar las solicitudes parentales:", error)),
-    loadFriendsStatuses().catch(error => console.warn("No se pudieron cargar los estados:", error))
-  ]);
   section.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // Actualizar permisos y contenido en segundo plano, sin bloquear la navegación.
+  Promise.resolve().then(async () => {
+    try {
+      await refreshParentalState();
+      const parentalPanel = $("#parental-settings-panel");
+      const parentalInfo = $("#parental-access-info");
+      if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
+      if (parentalInfo) parentalInfo.hidden = !parentalSettingsRestricted;
+    } catch (error) {
+      console.warn("No se pudo actualizar la supervisión parental al abrir Configuración:", error);
+    }
+  });
+
+  const jobs = [
+    ["grupos", loadGroupAvatarSettings],
+    ["solicitudes de amistad", loadFriendRequestsOnly],
+    ["solicitudes parentales", showIncomingParentalRequests],
+    ["estados", loadFriendsStatuses]
+  ];
+  for (const [name, load] of jobs) {
+    Promise.resolve().then(() => load()).catch(error =>
+      console.warn("No se pudieron cargar " + name + " en Configuración:", error)
+    );
+  }
 }
 
 $("#refresh-settings-requests")?.addEventListener("click", async () => {
@@ -1282,12 +1296,18 @@ async function showIncomingParentalRequests() {
     .eq("child_id", currentUser.id)
     .eq("status", "pending")
     .order("created_at", { ascending: false });
-  if (error || !data?.length) {
-    host.hidden = true;
-    return;
-  }
+  // La categoría permanece visible aunque no existan solicitudes o falle la consulta.
   host.hidden = false;
   list.replaceChildren();
+  if (error) {
+    console.warn("SPLASH: no se pudieron cargar las solicitudes parentales:", error);
+    showEmpty(list, "No se pudieron cargar las solicitudes parentales. Pulsa Actualizar para intentarlo de nuevo.");
+    return;
+  }
+  if (!data?.length) {
+    showEmpty(list, "No tienes solicitudes parentales pendientes.");
+    return;
+  }
   for (const request of data) {
     const profiles = await fetchProfiles([request.parent_id]);
     const card = document.createElement("article");
