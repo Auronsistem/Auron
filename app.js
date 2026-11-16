@@ -4743,6 +4743,14 @@ function renderAvatar(element, profile, extraClass = "") {
 }
 function createAvatar(profile, extraClass = "") { const el = document.createElement("span"); el.className = "avatar-frame " + extraClass; renderAvatar(el, profile, extraClass); return el; }
 let currentProfile = null;
+function updateAccountSecuritySummary() {
+  const email = $("#settings-account-email");
+  const username = $("#settings-account-username");
+  const nickname = $("#settings-account-nickname");
+  if (email) email.textContent = currentUser?.email || "No disponible";
+  if (username) username.textContent = currentProfile?.username || currentUser?.email?.split("@")[0] || "—";
+  if (nickname) nickname.textContent = currentProfile?.display_name || currentProfile?.username || "Sin apodo personalizado";
+}
 async function loadCurrentProfile() {
   if (!currentUser) { currentProfile = null; updateHeader(); return; }
   const {data,error} = await supabase.from("profiles").select("id, username, display_name, avatar_url").eq("id",currentUser.id).maybeSingle();
@@ -4751,6 +4759,7 @@ async function loadCurrentProfile() {
   const preview=$("#profile-settings-preview"); if(preview) renderAvatar(preview,currentProfile,"profile-settings-avatar");
   const nicknameInput=$("#profile-nickname");
   if(nicknameInput) nicknameInput.value=(currentProfile?.display_name && currentProfile.display_name.toLowerCase()!=="jugador" && currentProfile.display_name!==currentProfile.username) ? currentProfile.display_name : "";
+  updateAccountSecuritySummary();
   updateHeader();
 }
 async function fetchProfiles(ids) {
@@ -5679,6 +5688,7 @@ $("#save-profile-nickname")?.addEventListener("click", async () => {
     },{onConflict:"id"}).select("id,username,display_name,avatar_url").single();
     if(error) throw error;
     currentProfile=data;
+    updateAccountSecuritySummary();
     if(input) input.value=data.display_name===data.username ? "" : data.display_name;
     const preview=$("#profile-settings-preview"); if(preview) renderAvatar(preview,currentProfile,"profile-settings-avatar");
     if(activeGroup?.id) await loadGroupMessages(activeGroup.id);
@@ -5733,25 +5743,65 @@ document.querySelectorAll("[data-password-toggle]").forEach(button => {
   button.addEventListener("click", () => togglePasswordVisibility(button.dataset.passwordToggle, button));
 });
 
+let settingsPasswordCodeEmail = "";
+
+async function requestSettingsPasswordCode(isResend = false) {
+  const status = $("#settings-password-status");
+  const button = isResend ? $("#settings-password-resend") : $("#settings-password-send-code");
+  const email = String(currentUser?.email || "").trim().toLowerCase();
+  if (!email) { showMessage(status, "Inicia sesión para cambiar tu contraseña.", true); return; }
+  if (button) button.disabled = true;
+  showMessage(status, "Enviando un código de seguridad a " + email + "…");
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: new URL("./", window.location.href).toString()
+    });
+    if (error) throw error;
+    settingsPasswordCodeEmail = email;
+    const step = $("#settings-password-code-step");
+    if (step) step.hidden = false;
+    const code = $("#settings-password-code");
+    if (isResend && code) code.value = "";
+    if (!isResend && button) button.hidden = true;
+    showMessage(status, "Código enviado a " + email + ". Revisa Recibidos y Spam; introduce el código más reciente.");
+    if (isResend) startCodeResendCooldown(button);
+  } catch (error) {
+    showMessage(status, error?.message || "No se pudo enviar el código. Inténtalo de nuevo.", true);
+    if (button) button.disabled = false;
+  }
+}
+
+$("#settings-password-send-code")?.addEventListener("click", () => requestSettingsPasswordCode(false));
+$("#settings-password-resend")?.addEventListener("click", () => requestSettingsPasswordCode(true));
+$("#settings-password-code")?.addEventListener("input", event => {
+  event.target.value = event.target.value.replace(/\\D/g, "").slice(0, 6);
+});
+
 $("#settings-password-form")?.addEventListener("submit", async event => {
   event.preventDefault();
   const status = $("#settings-password-status");
   const submit = $("#save-settings-password");
-  const currentPassword = $("#settings-current-password")?.value || "";
+  const token = $("#settings-password-code")?.value.trim() || "";
   const newPassword = $("#settings-new-password")?.value || "";
   const confirmation = $("#settings-confirm-password")?.value || "";
-  if (!currentUser?.email) { showMessage(status, "Inicia sesión para cambiar tu contraseña.", true); return; }
+  if (!currentUser?.email || !settingsPasswordCodeEmail || settingsPasswordCodeEmail !== currentUser.email.toLowerCase()) {
+    showMessage(status, "Solicita primero un código para tu cuenta.", true); return;
+  }
+  if (!/^\\d{6}$/.test(token)) { showMessage(status, "Introduce los 6 dígitos del correo.", true); return; }
   if (newPassword.length < 8) { showMessage(status, "La nueva contraseña debe tener al menos 8 caracteres.", true); return; }
   if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
     showMessage(status, "Usa al menos una minúscula, una mayúscula, un número y un símbolo.", true); return;
   }
   if (newPassword !== confirmation) { showMessage(status, "Las nuevas contraseñas no coinciden.", true); return; }
-  if (currentPassword === newPassword) { showMessage(status, "La nueva contraseña debe ser diferente a la actual.", true); return; }
   if (submit) submit.disabled = true;
-  showMessage(status, "Verificando tu contraseña actual…");
+  showMessage(status, "Verificando el código…");
   try {
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentUser.email, password: currentPassword });
-    if (signInError) throw new Error("La contraseña actual no es correcta.");
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: settingsPasswordCodeEmail,
+      token,
+      type: "recovery"
+    });
+    if (verifyError) throw verifyError;
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     if (updateError) throw updateError;
     $("#settings-password-form")?.reset();
@@ -5761,9 +5811,16 @@ $("#settings-password-form")?.addEventListener("submit", async event => {
       button.textContent = "Mostrar";
       button.setAttribute("aria-pressed", "false");
     });
-    showMessage(status, "¡Contraseña actualizada correctamente!");
+    const step = $("#settings-password-code-step");
+    if (step) step.hidden = true;
+    const sendButton = $("#settings-password-send-code");
+    if (sendButton) { sendButton.hidden = false; sendButton.disabled = false; }
+    const resendButton = $("#settings-password-resend");
+    if (resendButton) { resendButton.disabled = false; resendButton.textContent = "Reenviar código"; }
+    settingsPasswordCodeEmail = "";
+    showMessage(status, "¡Código verificado! Tu contraseña de SPLASH se cambió correctamente.");
   } catch (error) {
-    showMessage(status, error?.message || "No se pudo cambiar la contraseña. Inténtalo de nuevo.", true);
+    showMessage(status, error?.message || "No se pudo cambiar la contraseña. Comprueba el código e inténtalo de nuevo.", true);
   } finally {
     if (submit) submit.disabled = false;
   }
