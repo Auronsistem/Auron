@@ -1,4 +1,4 @@
-/* SPLASH service worker v2: push notifications and call actions. */
+/* SPLASH service worker v3: friend, parental and call notifications. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -50,9 +50,6 @@ self.addEventListener("notificationclick", (event) => {
     }
     if (data.type === "parental-request") {
       targetUrl.searchParams.set("openSettings", "parental-requests");
-    }
-    if (false) {
-      targetUrl.searchParams.set("openSettings", "friend-requests");
     }
     if (["call", "group-call"].includes(data.type) && data.callId) {
       targetUrl.searchParams.set("callId", data.callId);
