@@ -410,11 +410,10 @@ function updateAuthForm() {
   waitingForCode = false;
   waitingForPasswordRecovery = false;
   authForm.setAttribute("autocomplete", "on");
-  authTitle.textContent =
-    authMode === "login" ? "Iniciar sesión" : "Crear cuenta";
+  authTitle.textContent = "Bienvenido";
 
   authForm.innerHTML = `
-    <label for="email">Correo electrónico</label>
+    <label for="email">Usuario</label>
     <input id="email" name="email" type="email" autocomplete="${authMode === "login" ? "username" : "email"}"
       placeholder="tu@correo.com" required>
 
@@ -423,17 +422,15 @@ function updateAuthForm() {
       autocomplete="${authMode === "login" ? "current-password" : "new-password"}"
       placeholder="Mínimo 8 caracteres" required>
 
-    <button class="button full" type="submit">
-      ${authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}
-    </button>
+    <button class="button full auth-submit" type="submit">Entrar</button>
 
     <p id="auth-message" class="notice" aria-live="polite"></p>
   `;
 
   toggleAuth.textContent =
     authMode === "login"
-      ? "¿No tienes cuenta? Crear cuenta"
-      : "¿Ya tienes cuenta? Iniciar sesión";
+      ? "¿No tienes cuenta? Regístrate"
+      : "¿Ya tienes cuenta? Inicia sesión";
 
   toggleAuth.style.display = "block";
   if (authMode === "login") {
