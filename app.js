@@ -3461,6 +3461,12 @@ async function handleIncomingFriendRequestEvent(row, { notify = true } = {}) {
   // before the row is visible in the current UI.
   await loadFriendRequestsOnly();
   if (currentUser?.id !== recipientId) return;
+  const modulePage = $("#aureon-module-page");
+  const moduleTitle = $("#aureon-module-title");
+  const moduleHost = $("#aureon-module-content");
+  if (modulePage && !modulePage.hidden && moduleTitle?.textContent === "Centro de notificaciones" && moduleHost) {
+    await loadModuleNotifications(moduleHost);
+  }
   if (notify && document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
     try {
       const notification = new Notification("Nueva solicitud de amistad en SPLASH", {
