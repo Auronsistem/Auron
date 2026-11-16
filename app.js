@@ -5858,7 +5858,14 @@ async function requestSettingsPasswordCode(isResend = false) {
   }
 }
 
-$("#settings-password-open")?.addEventListener("click", () => {\n  const accordion = $("#privacy-security-accordion");\n  if (accordion) accordion.open = true;\n  const panel = $("#password-settings-panel");\n  panel?.scrollIntoView({ behavior: "smooth", block: "center" });\n  $("#settings-password-send-code")?.focus({ preventScroll: true });\n});\n$("#settings-password-send-code")?.addEventListener("click", () => requestSettingsPasswordCode(false));
+$("#settings-password-open")?.addEventListener("click", () => {
+  const accordion = $("#privacy-security-accordion");
+  if (accordion) accordion.open = true;
+  const panel = $("#password-settings-panel");
+  panel?.scrollIntoView({ behavior: "smooth", block: "center" });
+  $("#settings-password-send-code")?.focus({ preventScroll: true });
+});
+$("#settings-password-send-code")?.addEventListener("click", () => requestSettingsPasswordCode(false));
 $("#settings-password-resend")?.addEventListener("click", () => requestSettingsPasswordCode(true));
 $("#settings-password-code")?.addEventListener("input", event => {
   event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
