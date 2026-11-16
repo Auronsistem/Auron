@@ -1,4 +1,4 @@
-/* AUREON service worker v2: push notifications and call actions. */
+/* SPLASH service worker v2: push notifications and call actions. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -20,8 +20,8 @@ self.addEventListener("push", (event) => {
     }
     const options = {
       body: payload.body || "Tienes una notificación nueva.",
-      icon: "./icons/aureon.svg?v=2",
-      badge: "./icons/aureon.svg?v=2",
+      icon: "./icons/aureon.svg?v=3",
+      badge: "./icons/aureon.svg?v=3",
       tag: payload.tag || "aureon-notification",
       renotify: Boolean(payload.renotify),
       silent: false,
@@ -35,7 +35,7 @@ self.addEventListener("push", (event) => {
       ];
       options.requireInteraction = true;
     }
-    await self.registration.showNotification(payload.title || "AUREON", options);
+    await self.registration.showNotification(payload.title || "SPLASH", options);
   })());
 });
 
