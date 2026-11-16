@@ -1499,6 +1499,7 @@ async function updateSession(session) {
   subscribeToMessageEvents();
   subscribeToFriendRequestEvents();
   startFriendRequestPolling();
+  startParentalRequestPolling();
   if (currentUser) {
     loadPendingNotificationCall();
     startIncomingCallFallback();
@@ -1542,6 +1543,9 @@ async function updateSession(session) {
       messageRealtimeChannel = null;
       messageRealtimeUserId = null;
     }
+    if (parentalRequestPollTimer) window.clearInterval(parentalRequestPollTimer);
+    parentalRequestPollTimer = null;
+    parentalRequestPollUserId = null;
     if (friendRequestRealtimeChannel) {
       supabase.removeChannel(friendRequestRealtimeChannel).catch(error => console.warn("No se pudo cerrar el canal de solicitudes:", error));
       friendRequestRealtimeChannel = null;
@@ -3495,6 +3499,38 @@ async function pollIncomingFriendRequests() {
     await handleIncomingFriendRequestEvent(row, { notify: false });
   }
 }
+let parentalRequestPollTimer = null;
+let parentalRequestPollUserId = null;
+async function pollIncomingParentalRequests() {
+  const childId = currentUser?.id;
+  if (!childId) return;
+  const { data, error } = await supabase.from("parental_links")
+    .select("id,parent_id,child_id,status,created_at")
+    .eq("child_id", childId).eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) { console.warn("SPLASH: no se pudieron consultar solicitudes parentales:", error); return; }
+  if (currentUser?.id !== childId) return;
+  await showIncomingParentalRequests();
+  const modulePage = $("#aureon-module-page");
+  const moduleTitle = $("#aureon-module-title");
+  const moduleHost = $("#aureon-module-content");
+  if (modulePage && !modulePage.hidden && moduleTitle?.textContent === "Centro de notificaciones" && moduleHost) {
+    await loadModuleNotifications(moduleHost);
+  }
+}
+function startParentalRequestPolling() {
+  const userId = currentUser?.id || null;
+  if (parentalRequestPollTimer && parentalRequestPollUserId === userId) return;
+  if (parentalRequestPollTimer) window.clearInterval(parentalRequestPollTimer);
+  parentalRequestPollTimer = null;
+  parentalRequestPollUserId = userId;
+  if (!userId) return;
+  pollIncomingParentalRequests().catch(error => console.warn("Error al comprobar solicitudes parentales:", error));
+  parentalRequestPollTimer = window.setInterval(() => {
+    if (currentUser?.id === userId) pollIncomingParentalRequests().catch(error => console.warn("Error al actualizar solicitudes parentales:", error));
+  }, 12000);
+}
+
 function startFriendRequestPolling() {
   const userId = currentUser?.id || null;
   if (friendRequestPollTimer && friendRequestPollUserId === userId) return;
