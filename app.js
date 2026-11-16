@@ -1043,6 +1043,18 @@ async function requestChildSupervision() {
     parentalStatusMessage(data?.status === "active"
       ? "Esta cuenta ya está vinculada a tu perfil de apoderado."
       : "Solicitud enviada. La cuenta seleccionada debe aceptarla al iniciar sesión en SPLASH.");
+    if(data?.status==="pending"&&data?.link_id){
+      try{
+        const {data:childLink,error:childError}=await guardianClient.from("parental_links").select("child_id").eq("id",data.link_id).maybeSingle();
+        if(childError)throw childError;
+        const {data:sessionData,error:sessionError}=await guardianClient.auth.getSession();
+        if(sessionError)throw sessionError;
+        const token=sessionData?.session?.access_token;
+        if(!token||!childLink?.child_id)throw new Error("No se pudo identificar la cuenta destinataria.");
+        const {data:pushResult,error:pushError}=await guardianClient.functions.invoke("call-push",{body:{action:"parental-request",recipientId:childLink.child_id,linkId:data.link_id},headers:{Authorization:"Bearer "+token}});
+        if(pushError||pushResult?.error)console.warn("No se pudo enviar el aviso parental:",pushError||pushResult);
+      }catch(pushError){console.warn("No se pudo enviar la notificación parental:",pushError);}
+    }
     $("#child-account-email").value = "";
     await loadGuardianChildren();
   } catch (error) {
@@ -1504,6 +1516,14 @@ async function updateSession(session) {
     await loadFriendsStatuses();
     const notificationRoute = new URLSearchParams(window.location.search).get("openSettings") ||
       sessionStorage.getItem("aureon-open-settings");
+    if (notificationRoute === "parental-requests") {
+      sessionStorage.removeItem("aureon-open-settings");
+      await openSettings();
+      $("#parental-child-panel")?.scrollIntoView({behavior:"smooth",block:"center"});
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("openSettings");
+      window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.hash);
+    }
     if (notificationRoute === "friend-requests") {
       sessionStorage.removeItem("aureon-open-settings");
       await openSettings();
@@ -2582,108 +2602,61 @@ async function loadModuleGalaxy(host) {
   host.append(card);
 }
 async function loadModuleNotifications(host) {
-  const userId = currentUser?.id;
-  if (!userId) {
-    moduleEmpty(host, "Inicia sesión para consultar tus notificaciones.");
-    return;
-  }
-
-  const [requestsResult, messagesResult] = await Promise.all([
-    supabase.from("friend_requests")
-      .select("id,sender_id,created_at")
-      .eq("recipient_id", userId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(30),
-    supabase.from("messages")
-      .select("id,conversation_id,sender_id,body,created_at")
-      .neq("sender_id", userId)
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(30)
+  const userId=currentUser?.id;
+  if(!userId){moduleEmpty(host,"Inicia sesión para consultar tus notificaciones.");return;}
+  const [friendsResult,parentsResult,messagesResult]=await Promise.all([
+    supabase.from("friend_requests").select("id,sender_id,created_at").eq("recipient_id",userId).eq("status","pending").order("created_at",{ascending:false}).limit(30),
+    supabase.from("parental_links").select("id,parent_id,created_at").eq("child_id",userId).eq("status","pending").order("created_at",{ascending:false}).limit(30),
+    supabase.from("messages").select("id,conversation_id,sender_id,body,created_at").neq("sender_id",userId).is("read_at",null).order("created_at",{ascending:false}).limit(30)
   ]);
-
-  const requests = requestsResult.data || [];
-  const messages = messagesResult.data || [];
-  let profiles = new Map();
-  const senderIds = [...new Set([
-    ...requests.map(item => item.sender_id),
-    ...messages.map(item => item.sender_id)
-  ].filter(Boolean))];
-  if (senderIds.length) {
-    try { profiles = await fetchProfiles(senderIds); }
-    catch (error) { console.warn("No se pudieron cargar los nombres de notificaciones:", error); }
-  }
-
-  const summary = moduleNode("div", "aureon-module-stats aureon-notification-summary");
-  [
-    [requestsResult.error ? "—" : String(requests.length), "Solicitudes pendientes"],
-    [messagesResult.error ? "—" : String(messages.length), "Mensajes sin leer"]
-  ].forEach(([value, label]) => {
-    const tile = moduleNode("div", "content-panel aureon-stat-tile");
-    tile.append(moduleNode("strong", "", value), moduleNode("span", "muted", label));
-    summary.append(tile);
-  });
+  const friends=friendsResult.data||[],parents=parentsResult.data||[],messages=messagesResult.data||[];
+  const ids=[...new Set([...friends.map(x=>x.sender_id),...parents.map(x=>x.parent_id),...messages.map(x=>x.sender_id)].filter(Boolean))];
+  let profiles=new Map();if(ids.length){try{profiles=await fetchProfiles(ids);}catch(error){console.warn("No se pudieron cargar perfiles:",error);}}
+  const summary=moduleNode("div","aureon-module-stats aureon-notification-summary");
+  [[friendsResult.error?"—":String(friends.length),"Solicitudes de amistad"],[parentsResult.error?"—":String(parents.length),"Solicitudes parentales"],[messagesResult.error?"—":String(messages.length),"Mensajes sin leer"]].forEach(([v,l])=>{const tile=moduleNode("div","content-panel aureon-stat-tile");tile.append(moduleNode("strong","",v),moduleNode("span","muted",l));summary.append(tile);});
   host.append(summary);
-
-  const requestCard = moduleCard("Solicitudes de amistad", requestsResult.error
-    ? "No se pudieron consultar las solicitudes en este momento."
-    : requests.length + " solicitud(es) pendiente(s).");
-  if (!requestsResult.error && requests.length) {
-    const list = moduleNode("div", "aureon-notification-list");
-    requests.forEach(item => {
-      const profile = profiles.get(item.sender_id);
-      const row = moduleNode("article", "aureon-notification-item");
-      const copy = moduleNode("div", "aureon-module-row-copy");
-      copy.append(
-        moduleNode("strong", "", displayName(profile)),
-        moduleNode("span", "muted", "Te envió una solicitud de amistad."),
-        moduleNode("time", "aureon-notification-time", item.created_at
-          ? new Date(item.created_at).toLocaleString("es-PE")
-          : "Fecha no disponible")
-      );
-      row.append(copy, moduleButton("Ver solicitudes", () => showSection("mensajes")));
-      list.append(row);
-    });
-    requestCard.append(list);
-  } else if (!requestsResult.error) {
-    requestCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes solicitudes pendientes."));
+  const friendCard=moduleCard("Solicitudes de amistad",friendsResult.error?"No se pudieron consultar: "+friendsResult.error.message:friends.length+" solicitud(es) pendiente(s).");
+  if(friendsResult.error)friendCard.append(moduleNode("p","notice",friendsResult.error.message));
+  else if(!friends.length)friendCard.append(moduleNode("p","muted aureon-module-empty","No tienes solicitudes pendientes."));
+  else{
+    const list=moduleNode("div","aureon-notification-list");
+    for(const item of friends){
+      const row=moduleNode("article","aureon-notification-item"),copy=moduleNode("div","aureon-module-row-copy");
+      copy.append(moduleNode("strong","",displayName(profiles.get(item.sender_id))),moduleNode("span","muted","Quiere agregarte como amigo."),moduleNode("time","aureon-notification-time",item.created_at?new Date(item.created_at).toLocaleString("es-PE"):"Fecha no disponible"));
+      const actions=moduleNode("div","friend-request-actions");
+      const accept=moduleButton("Aceptar",async()=>{accept.disabled=true;reject.disabled=true;const {error}=await supabase.rpc("respond_friend_request",{p_request_id:item.id,p_accept:true});if(error){moduleStatus(host,"No se pudo aceptar: "+error.message,true);accept.disabled=false;reject.disabled=false;return;}await loadFriendRequestsOnly();await loadFriendsStatuses();await loadModuleNotifications(host);},"button");
+      const reject=moduleButton("Rechazar",async()=>{accept.disabled=true;reject.disabled=true;const {error}=await supabase.rpc("respond_friend_request",{p_request_id:item.id,p_accept:false});if(error){moduleStatus(host,"No se pudo rechazar: "+error.message,true);accept.disabled=false;reject.disabled=false;return;}await loadFriendRequestsOnly();await loadModuleNotifications(host);},"button button-outline");
+      actions.append(accept,reject);row.append(copy,actions);list.append(row);
+    }
+    friendCard.append(list);
   }
-  host.append(requestCard);
-
-  const messageCard = moduleCard("Mensajes sin leer", messagesResult.error
-    ? "No se pudieron consultar los mensajes pendientes."
-    : messages.length + " mensaje(s) sin leer.");
-  if (!messagesResult.error && messages.length) {
-    const list = moduleNode("div", "aureon-notification-list");
-    messages.forEach(item => {
-      const profile = profiles.get(item.sender_id);
-      const row = moduleNode("article", "aureon-notification-item");
-      const copy = moduleNode("div", "aureon-module-row-copy");
-      const rawBody = String(item.body || "Te enviaron un mensaje");
-      const preview = rawBody.startsWith("AUREON_MEDIA_FILE:") ? "Te enviaron una imagen o archivo."
-        : rawBody.startsWith("AUREON_GIF:") ? "Te enviaron un GIF."
-        : rawBody.startsWith("AUREON_STICKER:") ? "Te enviaron un sticker."
-        : rawBody.slice(0, 120);
-      copy.append(
-        moduleNode("strong", "", displayName(profile)),
-        moduleNode("span", "muted aureon-notification-preview", preview),
-        moduleNode("time", "aureon-notification-time", item.created_at
-          ? new Date(item.created_at).toLocaleString("es-PE")
-          : "Fecha no disponible")
-      );
-      row.append(copy, moduleButton("Abrir Mensajes", () => showSection("mensajes")));
-      list.append(row);
-    });
+  host.append(friendCard);
+  const parentalCard=moduleCard("Solicitudes de controles parentales",parentsResult.error?"No se pudieron consultar: "+parentsResult.error.message:parents.length+" solicitud(es) pendiente(s).");
+  if(parentsResult.error)parentalCard.append(moduleNode("p","notice",parentsResult.error.message));
+  else if(!parents.length)parentalCard.append(moduleNode("p","muted aureon-module-empty","No tienes solicitudes parentales pendientes."));
+  else{
+    const list=moduleNode("div","aureon-notification-list");
+    for(const item of parents){
+      const row=moduleNode("article","aureon-notification-item"),copy=moduleNode("div","aureon-module-row-copy");
+      copy.append(moduleNode("strong","",displayName(profiles.get(item.parent_id))),moduleNode("span","muted","Solicita administrar los controles parentales de esta cuenta."),moduleNode("time","aureon-notification-time",item.created_at?new Date(item.created_at).toLocaleString("es-PE"):"Fecha no disponible"));
+      const actions=moduleNode("div","friend-request-actions");
+      const accept=moduleButton("Aceptar",async()=>{accept.disabled=true;reject.disabled=true;const {error}=await supabase.rpc("respond_parental_link",{p_link_id:item.id,p_accept:true});if(error){moduleStatus(host,"No se pudo aceptar la solicitud parental: "+error.message,true);accept.disabled=false;reject.disabled=false;return;}await refreshParentalState();await showIncomingParentalRequests();await loadModuleNotifications(host);},"button");
+      const reject=moduleButton("Rechazar",async()=>{accept.disabled=true;reject.disabled=true;const {error}=await supabase.rpc("respond_parental_link",{p_link_id:item.id,p_accept:false});if(error){moduleStatus(host,"No se pudo rechazar la solicitud parental: "+error.message,true);accept.disabled=false;reject.disabled=false;return;}await showIncomingParentalRequests();await loadModuleNotifications(host);},"button button-outline");
+      actions.append(accept,reject);row.append(copy,actions);list.append(row);
+    }
+    parentalCard.append(list);
+  }
+  host.append(parentalCard);
+  const messageCard=moduleCard("Mensajes sin leer",messagesResult.error?"No se pudieron consultar: "+messagesResult.error.message:messages.length+" mensaje(s) sin leer.");
+  if(messagesResult.error)messageCard.append(moduleNode("p","notice",messagesResult.error.message));
+  else if(!messages.length)messageCard.append(moduleNode("p","muted aureon-module-empty","No tienes mensajes pendientes."));
+  else{
+    const list=moduleNode("div","aureon-notification-list");
+    for(const item of messages){const raw=String(item.body||"Te enviaron un mensaje");const preview=raw.startsWith("AUREON_MEDIA_FILE:")?"Te enviaron una imagen o archivo.":raw.startsWith("AUREON_GIF:")?"Te enviaron un GIF.":raw.startsWith("AUREON_STICKER:")?"Te enviaron un sticker.":raw.slice(0,120);const row=moduleNode("article","aureon-notification-item"),copy=moduleNode("div","aureon-module-row-copy");copy.append(moduleNode("strong","",displayName(profiles.get(item.sender_id))),moduleNode("span","muted aureon-notification-preview",preview),moduleNode("time","aureon-notification-time",item.created_at?new Date(item.created_at).toLocaleString("es-PE"):"Fecha no disponible"));row.append(copy,moduleButton("Abrir mensajes",()=>showSection("mensajes")));list.append(row);}
     messageCard.append(list);
-  } else if (!messagesResult.error) {
-    messageCard.append(moduleNode("p", "muted aureon-module-empty", "No tienes mensajes sin leer."));
   }
   host.append(messageCard);
-
-  const note = moduleNode("p", "muted aureon-notification-footnote",
-    "Este centro reúne información de tus solicitudes y mensajes existentes. No modifica ni marca mensajes como leídos; las notificaciones push y los timbres siguen funcionando con su sistema actual.");
-  host.append(note);
+  host.append(moduleNode("p","muted aureon-notification-footnote","Las solicitudes se actualizan automáticamente. Puedes aceptarlas o rechazarlas desde este centro; los cambios quedan guardados en tu cuenta."));
 }
 async function loadModulePrivacy(host) {
   const overview = moduleCard("Tu privacidad en SPLASH","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
