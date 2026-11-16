@@ -4750,6 +4750,8 @@ function updateAccountSecuritySummary() {
   if (email) email.textContent = currentUser?.email || "No disponible";
   if (username) username.textContent = currentProfile?.username || currentUser?.email?.split("@")[0] || "—";
   if (nickname) nickname.textContent = currentProfile?.display_name || currentProfile?.username || "Sin apodo personalizado";
+  const password = $("#settings-account-password");
+  if (password && password.textContent !== "Actualizada ahora") password.textContent = "Protegida";
 }
 async function loadCurrentProfile() {
   if (!currentUser) { currentProfile = null; updateHeader(); return; }
@@ -5804,6 +5806,11 @@ $("#settings-password-form")?.addEventListener("submit", async event => {
     if (verifyError) throw verifyError;
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     if (updateError) throw updateError;
+    const { data: refreshedAuth } = await supabase.auth.getUser();
+    if (refreshedAuth?.user) currentUser = refreshedAuth.user;
+    updateAccountSecuritySummary();
+    const passwordSummary = $("#settings-account-password");
+    if (passwordSummary) passwordSummary.textContent = "Actualizada ahora";
     $("#settings-password-form")?.reset();
     document.querySelectorAll("#settings-password-form [data-password-toggle]").forEach(button => {
       const input = document.getElementById(button.dataset.passwordToggle);
