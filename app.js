@@ -11,7 +11,7 @@ const $ = (selector) => document.querySelector(selector);
 
 let currentUser = null;
 let parentalStatus = { supervised: false, maturity_level: 3 };
-let parentalSettingsRestricted = true;
+let parentalSettingsRestricted = false;
 let parentalMinuteTimer = null;
 let guardianClient = null;
 let guardianUserId = null;
@@ -94,6 +94,9 @@ async function openSettings() {
   if (!currentUser) { openAuth(); return; }
   const section = $("#configuracion");
   if (!section) return;
+  // Consultar la supervisión real de esta cuenta antes de ocultar sus controles.
+  try { await refreshParentalState(); }
+  catch (error) { console.warn("No se pudo actualizar la supervisión parental al abrir Configuración:", error); }
   const parentalPanel = $("#parental-settings-panel");
   const parentalInfo = $("#parental-access-info");
   if (parentalPanel) parentalPanel.hidden = parentalSettingsRestricted;
@@ -1333,7 +1336,7 @@ function setParentalScreenBlock(blocked) {
 async function refreshParentalState() {
   if (!currentUser) {
     parentalStatus = { supervised: false, maturity_level: 3 };
-    parentalSettingsRestricted = true;
+    parentalSettingsRestricted = false;
     if (parentalMinuteTimer) window.clearInterval(parentalMinuteTimer);
     parentalMinuteTimer = null;
     setParentalScreenBlock(false);
