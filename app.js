@@ -61,7 +61,7 @@ function applyTheme(theme, persist = true) {
   $("#theme-dark")?.setAttribute("aria-pressed", String(selected === "dark"));
   if (persist) {
     try { localStorage.setItem(themeStorageKey(), selected); }
-    catch (error) { console.warn("No se pudo guardar el tema de AUREON:", error); }
+    catch (error) { console.warn("No se pudo guardar el tema de SPLASH:", error); }
   }
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) metaTheme.content = selected === "light" ? "#f3f6fb" : "#090d18";
@@ -123,7 +123,7 @@ async function invokeAureonPush(body) {
     session = refreshed?.session || null;
   }
   if (!session?.access_token) {
-    throw new Error("Tu sesión de AUREON venció. Vuelve a iniciar sesión para recibir notificaciones.");
+    throw new Error("Tu sesión de SPLASH venció. Vuelve a iniciar sesión para recibir notificaciones.");
   }
 
   return supabase.functions.invoke("call-push", {
@@ -154,12 +154,12 @@ async function enableAureonPushNotifications() {
   const isStandalone = window.matchMedia?.("(display-mode: standalone)").matches ||
     navigator.standalone === true;
   if (isAppleMobile && !isStandalone) {
-    say("En iPhone, primero abre esta página en Safari, pulsa Compartir > Añadir a pantalla de inicio y luego abre AUREON desde su ícono. Después vuelve aquí para activar las notificaciones.", true);
+    say("En iPhone, primero abre esta página en Safari, pulsa Compartir > Añadir a pantalla de inicio y luego abre SPLASH desde su ícono. Después vuelve aquí para activar las notificaciones.", true);
     return;
   }
 
   if (!window.isSecureContext) {
-    say("Las notificaciones necesitan una conexión segura HTTPS. Abre AUREON desde su dirección oficial.", true);
+    say("Las notificaciones necesitan una conexión segura HTTPS. Abre SPLASH desde su dirección oficial.", true);
     return;
   }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
@@ -196,7 +196,7 @@ async function enableAureonPushNotifications() {
     say("¡Notificaciones activadas en este dispositivo! Haz una prueba con otra cuenta.");
     if (button) button.textContent = "Actualizar notificaciones";
   } catch (error) {
-    console.error("No se pudieron activar las notificaciones de AUREON:", error);
+    console.error("No se pudieron activar las notificaciones de SPLASH:", error);
     say(error?.message || "No se pudieron activar las notificaciones. Inténtalo de nuevo.", true);
   } finally {
     if (button) button.disabled = false;
@@ -233,7 +233,7 @@ async function syncExistingAureonPushSubscription() {
     if (button) button.textContent = "Actualizar notificaciones";
     showMessage($("#call-notification-status"), "Notificaciones activas en este dispositivo.");
   } catch (error) {
-    console.warn("AUREON: no se pudo sincronizar la suscripción existente:", error);
+    console.warn("SPLASH: no se pudo sincronizar la suscripción existente:", error);
   }
 }
 
@@ -262,9 +262,9 @@ async function testAureonPushNotifications() {
     if (!data?.sent) {
       throw new Error(data?.message || "No hay dispositivos registrados en esta cuenta.");
     }
-    say("Prueba enviada a " + data.sent + " de " + data.total + " dispositivo(s). Bloquea el teléfono o cierra AUREON para comprobar la recepción.");
+    say("Prueba enviada a " + data.sent + " de " + data.total + " dispositivo(s). Bloquea el teléfono o cierra SPLASH para comprobar la recepción.");
   } catch (error) {
-    console.error("AUREON: falló la prueba push:", error);
+    console.error("SPLASH: falló la prueba push:", error);
     say(error?.message || "No se pudo enviar la notificación de prueba.", true);
   } finally {
     if (button) button.disabled = false;
@@ -316,7 +316,7 @@ function createLockScreen() {
   content.style.maxWidth = "450px";
 
   const logo = document.createElement("h1");
-  logo.textContent = "▶ AUREON PLAY";
+  logo.textContent = "▶ SPLASH PLAY";
   logo.style.color = "#20d9ed";
 
   const title = document.createElement("h2");
@@ -630,7 +630,7 @@ async function resendSignupCode() {
     if (error) throw error;
     const codeInput = $("#verification-code");
     if (codeInput) codeInput.value = "";
-    showMessage($("#auth-message"), "AUREON solicitó un código nuevo. Usa el último correo recibido; el código anterior deja de ser válido.");
+    showMessage($("#auth-message"), "SPLASH solicitó un código nuevo. Usa el último correo recibido; el código anterior deja de ser válido.");
     startCodeResendCooldown(button);
   } catch (error) {
     showMessage($("#auth-message"), error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
@@ -650,7 +650,7 @@ async function resendRecoveryCode() {
     if (error) throw error;
     const codeInput = $("#recovery-code");
     if (codeInput) codeInput.value = "";
-    showMessage($("#auth-message"), "AUREON solicitó un código de recuperación nuevo. Introduce el del último correo; el anterior deja de ser válido.");
+    showMessage($("#auth-message"), "SPLASH solicitó un código de recuperación nuevo. Introduce el del último correo; el anterior deja de ser válido.");
     startCodeResendCooldown(button);
   } catch (error) {
     showMessage($("#auth-message"), error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
@@ -705,7 +705,7 @@ authForm?.addEventListener("submit", async (event) => {
       if (updateError) throw updateError;
 
       waitingForPasswordRecovery = false;
-      showMessage(message, "¡Código verificado y contraseña actualizada! Ya puedes iniciar sesión en AUREON.");
+      showMessage(message, "¡Código verificado y contraseña actualizada! Ya puedes iniciar sesión en SPLASH.");
       if (authDialog?.open) authDialog.close();
       return;
     }
@@ -792,7 +792,7 @@ function updateHeader() {
   const actions=$(".header-actions"); if(!actions) return; actions.replaceChildren();
   const supportButton=document.createElement("button");
   supportButton.type="button"; supportButton.className="button button-outline header-support-button";
-  const supportIcon=document.createElement("img"); supportIcon.className="header-support-icon"; supportIcon.src="./icons/aureon-ai.svg?v=2"; supportIcon.alt=""; supportIcon.setAttribute("aria-hidden","true"); supportButton.append(supportIcon,document.createTextNode(" Soporte")); supportButton.setAttribute("aria-label","Abrir soporte de AUREON AI");
+  const supportIcon=document.createElement("img"); supportIcon.className="header-support-icon"; supportIcon.src="./icons/aureon-ai.svg?v=2"; supportIcon.alt=""; supportIcon.setAttribute("aria-hidden","true"); supportButton.append(supportIcon,document.createTextNode(" Soporte")); supportButton.setAttribute("aria-label","Abrir soporte de SPLASH AI");
   supportButton.addEventListener("click",openAureonSupport); actions.append(supportButton);
   const button=document.createElement("button"); button.type="button"; button.className="header-profile-button";
   button.setAttribute("aria-label",currentUser?"Abrir configuración de perfil":"Iniciar sesión");
@@ -812,7 +812,7 @@ function appendAureonSupportMessage(role, content) {
   const item = document.createElement("article");
   item.className = "support-message " + (role === "user" ? "user" : "assistant");
   const label = document.createElement("strong");
-  label.textContent = role === "user" ? "Tú" : "AUREON AI";
+  label.textContent = role === "user" ? "Tú" : "SPLASH AI";
   const paragraph = document.createElement("p");
   paragraph.textContent = content;
   item.append(label, paragraph);
@@ -840,7 +840,7 @@ $("#support-form")?.addEventListener("submit", async event => {
   if (!question || question.length > 2000) return;
 
   if (!currentUser) {
-    showMessage(status, "Inicia sesión para conversar con AUREON AI.", true);
+    showMessage(status, "Inicia sesión para conversar con SPLASH AI.", true);
     openAuth();
     return;
   }
@@ -853,7 +853,7 @@ $("#support-form")?.addEventListener("submit", async event => {
   let assistantParagraph = null;
 
   try {
-    showMessage(status, "Conectando con AUREON AI…");
+    showMessage(status, "Conectando con SPLASH AI…");
     appendAureonSupportMessage("assistant", "");
     assistantParagraph = $("#support-messages")?.lastElementChild?.querySelector("p") || null;
     if (!assistantParagraph) throw new Error("No se pudo preparar el espacio de respuesta.");
@@ -868,7 +868,7 @@ $("#support-form")?.addEventListener("submit", async event => {
     });
 
     if (error) {
-      let message = data?.error || error.message || "No se pudo conectar con el servidor de AUREON AI.";
+      let message = data?.error || error.message || "No se pudo conectar con el servidor de SPLASH AI.";
       try {
         const context = error.context;
         if (context && typeof context.json === "function") {
@@ -879,17 +879,17 @@ $("#support-form")?.addEventListener("submit", async event => {
       const providerMissing = data?.code === "AI_PROVIDER_NOT_CONFIGURED" ||
         String(message).toLowerCase().includes("falta configurar un proveedor");
       throw new Error(providerMissing
-        ? "El servidor de AUREON AI ya está preparado y conoce AUREON, pero todavía falta conectar el proveedor de IA."
+        ? "El servidor de SPLASH AI ya está preparado y conoce SPLASH, pero todavía falta conectar el proveedor de IA."
         : message);
     }
 
     const answer = typeof data?.reply === "string" ? data.reply.trim() : "";
-    if (!answer) throw new Error(data?.error || "AUREON AI no devolvió una respuesta.");
+    if (!answer) throw new Error(data?.error || "SPLASH AI no devolvió una respuesta.");
     assistantParagraph.textContent = answer;
     aureonSupportHistory.push({ role: "assistant", content: answer });
-    showMessage(status, "AUREON AI · Respuesta recibida del servidor.");
+    showMessage(status, "SPLASH AI · Respuesta recibida del servidor.");
   } catch (error) {
-    console.warn("AUREON AI:", error);
+    console.warn("SPLASH AI:", error);
     const detail = String(error?.message || "").slice(0, 300);
     if (assistantParagraph) assistantParagraph.textContent = detail;
     else appendAureonSupportMessage("assistant", detail);
@@ -937,7 +937,7 @@ async function sendGuardianVerificationCode() {
   } catch (error) {
     guardianClient = null;
     guardianUserId = null;
-    parentalStatusMessage(error.message || "No se pudo enviar el código. Comprueba que el apoderado tenga una cuenta AUREON verificada.", true);
+    parentalStatusMessage(error.message || "No se pudo enviar el código. Comprueba que el apoderado tenga una cuenta SPLASH verificada.", true);
   } finally {
     if (button) button.disabled = false;
   }
@@ -961,7 +961,7 @@ async function resendGuardianVerificationCode() {
     if (error) throw error;
     const codeInput = $("#guardian-code");
     if (codeInput) codeInput.value = "";
-    parentalStatusMessage("AUREON envió un código nuevo al correo del apoderado. Usa el último recibido; el anterior deja de ser válido.");
+    parentalStatusMessage("SPLASH envió un código nuevo al correo del apoderado. Usa el último recibido; el anterior deja de ser válido.");
     startCodeResendCooldown(button);
   } catch (error) {
     parentalStatusMessage(error.message || "No se pudo reenviar el código. Espera un momento e inténtalo otra vez.", true);
@@ -996,7 +996,7 @@ async function verifyGuardianCode() {
     $("#guardian-email").readOnly = true;
     $("#guardian-send-code").hidden = true;
     $("#guardian-signout").hidden = false;
-    parentalStatusMessage("Correo verificado. Ahora escribe el correo de la cuenta AUREON que recibirá los controles.");
+    parentalStatusMessage("Correo verificado. Ahora escribe el correo de la cuenta SPLASH que recibirá los controles.");
     await loadGuardianChildren();
   } catch (error) {
     parentalStatusMessage(error.message || "El código no es válido o ya venció.", true);
@@ -1013,7 +1013,7 @@ async function requestChildSupervision() {
   const childEmail = $("#child-account-email")?.value.trim().toLowerCase() || "";
   const button = $("#send-parental-request");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(childEmail)) {
-    parentalStatusMessage("Escribe el correo de la cuenta AUREON que recibirá los controles.", true);
+    parentalStatusMessage("Escribe el correo de la cuenta SPLASH que recibirá los controles.", true);
     return;
   }
   if (button) button.disabled = true;
@@ -1024,7 +1024,7 @@ async function requestChildSupervision() {
     if (error) throw error;
     parentalStatusMessage(data?.status === "active"
       ? "Esta cuenta ya está vinculada a tu perfil de apoderado."
-      : "Solicitud enviada. La cuenta seleccionada debe aceptarla al iniciar sesión en AUREON.");
+      : "Solicitud enviada. La cuenta seleccionada debe aceptarla al iniciar sesión en SPLASH.");
     $("#child-account-email").value = "";
     await loadGuardianChildren();
   } catch (error) {
@@ -1309,7 +1309,7 @@ function setParentalScreenBlock(blocked) {
   const title = document.createElement("h2");
   title.textContent = "Tiempo diario completado";
   const message = document.createElement("p");
-  message.textContent = "Has alcanzado el límite diario de AUREON establecido por tu apoderado. Podrás volver a usar la app cuando se reinicie el tiempo.";
+  message.textContent = "Has alcanzado el límite diario de SPLASH establecido por tu apoderado. Podrás volver a usar la app cuando se reinicie el tiempo.";
   panel.append(icon, title, message);
   overlay.append(panel);
   document.body.append(overlay);
@@ -2237,18 +2237,18 @@ $("#mobile-menu-parental")?.addEventListener("click", () => {
 });
 
 const moduleDescriptions = {
-  communities: "Tus grupos de AUREON, accesibles desde esta sección.",
+  communities: "Tus grupos de SPLASH, accesibles desde esta sección.",
   watch: "Prepara una sala para compartir un video con tus amigos.",
   music: "Reproduce archivos de audio desde este dispositivo.",
   collections: "Guarda enlaces y recursos en una colección privada de esta cuenta.",
   creator: "Consulta el estado de tus publicaciones y tu actividad como creador.",
   lab: "Crea fondos con degradados y copia el estilo para tus diseños.",
-  ai: "Abre el asistente inteligente de AUREON.",
+  ai: "Abre el asistente inteligente de SPLASH.",
   levels: "Consulta tu progreso y tus logros de participación.",
-  galaxy: "Un resumen de tu espacio y actividad en AUREON.",
+  galaxy: "Un resumen de tu espacio y actividad en SPLASH.",
   notifications: "Consulta solicitudes de amistad y mensajes pendientes.",
-  privacy: "Revisa las opciones de privacidad, cuenta y supervisión disponibles en AUREON.",
-  premium: "Consulta el estado de tu suscripción AUREON."
+  privacy: "Revisa las opciones de privacidad, cuenta y supervisión disponibles en SPLASH.",
+  premium: "Consulta el estado de tu suscripción SPLASH."
 };
 
 function moduleStorageKey(name) {
@@ -2366,7 +2366,7 @@ async function loadModuleCommunity(host) {
   (groups || []).forEach(group => {
     const row = moduleNode("div", "aureon-module-row");
     const copy = moduleNode("div", "aureon-module-row-copy");
-    copy.append(moduleNode("strong", "", group.name), moduleNode("span", "muted", group.created_by === currentUser.id ? "Eres el creador" : "Grupo de AUREON"));
+    copy.append(moduleNode("strong", "", group.name), moduleNode("span", "muted", group.created_by === currentUser.id ? "Eres el creador" : "Grupo de SPLASH"));
     const actions = moduleNode("div", "aureon-module-actions");
     actions.append(moduleButton("Abrir chat", () => {
       showSection("mensajes");
@@ -2411,7 +2411,7 @@ function loadModuleWatch(host) {
   host.append(card);
 }
 function loadModuleMusic(host) {
-  const card = moduleCard("Reproductor local", "Elige un archivo de audio de tu dispositivo. No se sube a AUREON ni se comparte con otras cuentas.");
+  const card = moduleCard("Reproductor local", "Elige un archivo de audio de tu dispositivo. No se sube a SPLASH ni se comparte con otras cuentas.");
   const input = moduleInput("Seleccionar archivo de audio", "file");
   input.accept = "audio/*";
   const player = document.createElement("audio");
@@ -2493,7 +2493,7 @@ async function loadModuleCreator(host) {
     row.append(copy); list.append(row);
   });
   if (!videos.length) moduleEmpty(list, "Todavía no has enviado videos. Usa Publicar para crear tu primera publicación.");
-  host.append(list, moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. AUREON todavía no dispone aquí de datos de visualizaciones, alcance o retención; no se muestran cifras estimadas."), moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
+  host.append(list, moduleNode("p","muted aureon-creator-note","Estas métricas reflejan publicaciones registradas. SPLASH todavía no dispone aquí de datos de visualizaciones, alcance o retención; no se muestran cifras estimadas."), moduleButton("Ir a Publicar", () => $("#open-upload")?.click()));
 }
 function loadModuleLab(host) {
   const card = moduleCard("Generador de fondos", "Crea una combinación de colores para usarla como fondo o inspiración de diseño.");
@@ -2539,7 +2539,7 @@ async function loadModuleGalaxy(host) {
     supabase.from("chat_group_members").select("group_id",{count:"exact",head:true}).eq("user_id",currentUser.id)
   ]);
   const name=profile.data?.display_name||profile.data?.username||currentUser.email||"Tu perfil";
-  const card=moduleCard("Bienvenido a tu Galaxy, "+name,"Este es tu resumen personal de AUREON.");
+  const card=moduleCard("Bienvenido a tu Galaxy, "+name,"Este es tu resumen personal de SPLASH.");
   const stats=moduleNode("div","aureon-module-stats");
   [[videos.count||0,"Videos"],[friendships.count||0,"Amigos"],[groups.count||0,"Grupos"],[readModuleList("collections").length,"Guardados"]].forEach(([v,l])=>{
     const tile=moduleNode("div","content-panel aureon-stat-tile");tile.append(moduleNode("strong","",String(v)),moduleNode("span","muted",l));stats.append(tile);
@@ -2652,7 +2652,7 @@ async function loadModuleNotifications(host) {
   host.append(note);
 }
 async function loadModulePrivacy(host) {
-  const overview = moduleCard("Tu privacidad en AUREON","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
+  const overview = moduleCard("Tu privacidad en SPLASH","Revisa las opciones de cuenta disponibles y mantén protegidos tus datos de acceso.");
   const items = [
     ["Perfil y apodo","Edita el nombre que aparece ante tus contactos y tu foto de perfil."],
     ["Tema de la aplicación","Elige el modo claro u oscuro en este dispositivo."],
@@ -2680,7 +2680,7 @@ async function loadModulePrivacy(host) {
   const accentKey="aureon-accent:"+currentUser.id;
   const applyAccent=color=>{
     document.documentElement.style.setProperty("--primary",color);
-    try{localStorage.setItem(accentKey,color);}catch(error){console.warn("No se pudo guardar el color de AUREON:",error);}
+    try{localStorage.setItem(accentKey,color);}catch(error){console.warn("No se pudo guardar el color de SPLASH:",error);}
     moduleStatus(host,"Color de acento actualizado en este navegador.");
   };
   const saved=(()=>{try{return localStorage.getItem(accentKey);}catch(_){return null;}})();
@@ -2706,7 +2706,7 @@ async function loadModulePremium(host) {
   const {data,error}=await supabase.from("subscriptions").select("status,started_at,expires_at,provider").eq("user_id",currentUser.id).order("created_at",{ascending:false}).limit(1);
   if(error){moduleEmpty(host,"No se pudo consultar el estado de tu suscripción.");return;}
   const active=(data||[]).find(item=>item.status==="active"&&(!item.expires_at||new Date(item.expires_at)>new Date()));
-  const card=moduleCard(active?"AUREON Premium está activo":"AUREON Premium",active?"Tu cuenta tiene acceso Premium.":"Desbloquea una experiencia mejorada de AUREON con el plan mensual.");
+  const card=moduleCard(active?"SPLASH Premium está activo":"SPLASH Premium",active?"Tu cuenta tiene acceso Premium.":"Desbloquea una experiencia mejorada de SPLASH con el plan mensual.");
   const price=moduleNode("div","aureon-premium-price");
   price.append(moduleNode("strong","","S/ 20"),moduleNode("span",""," / mes"));
   card.append(price,moduleNode("p","muted",active?"Tu suscripción está confirmada.":"Plan mensual con renovación manual."));
@@ -2717,10 +2717,10 @@ async function loadModulePremium(host) {
   const benefits=moduleNode("section","aureon-premium-benefits");
   benefits.append(moduleNode("h4","","Beneficios incluidos"));
   const items=[
-    ["Sin anuncios","Disfruta AUREON sin interrupciones publicitarias."],
+    ["Sin anuncios","Disfruta SPLASH sin interrupciones publicitarias."],
     ["Insignia Premium","Identificador exclusivo junto a tu perfil."],
     ["Personalización extra","Temas y opciones visuales adicionales."],
-    ["Más capacidad de AUREON AI","Mayor límite de uso cuando se habiliten las cuotas Premium."],
+    ["Más capacidad de SPLASH AI","Mayor límite de uso cuando se habiliten las cuotas Premium."],
     ["Herramientas para creadores","Funciones adicionales para publicar y gestionar contenido."]
   ];
   const list=moduleNode("div","aureon-premium-benefit-grid");
@@ -2738,16 +2738,16 @@ async function loadModulePremium(host) {
 async function renderAureonModule(button) {
   const page=$("#aureon-module-page");
   const key=button?.dataset.module||"";
-  const title=button?.dataset.moduleTitle||"AUREON";
+  const title=button?.dataset.moduleTitle||"SPLASH";
   if(!page)return;
   if(document.body.classList.contains("settings-open"))setSettingsVisibility(false);
   showSection("aureon-module-page");
   page.hidden=false;
   $("#aureon-module-title").textContent=title;
   $("#aureon-module-heading").textContent=title;
-  $("#aureon-module-description").textContent=moduleDescriptions[key]||"Herramientas de AUREON";
+  $("#aureon-module-description").textContent=moduleDescriptions[key]||"Herramientas de SPLASH";
   document.querySelectorAll(".sidebar .side-link").forEach(link=>link.classList.toggle("active",link===button));
-  const host=moduleSetContent(title,moduleDescriptions[key]||"Herramientas de AUREON");
+  const host=moduleSetContent(title,moduleDescriptions[key]||"Herramientas de SPLASH");
   if(!host)return;
   if(key!=="lab"&&key!=="watch"&&key!=="music"&&key!=="ai"&&!moduleRequireLogin())return;
   try {
@@ -2759,7 +2759,7 @@ async function renderAureonModule(button) {
       case "creator": await loadModuleCreator(host); break;
       case "lab": loadModuleLab(host); break;
       case "ai": {
-        const card=moduleCard("Asistente inteligente","Abre AUREON AI con una idea inicial para estudiar, crear o resolver dudas.");
+        const card=moduleCard("Asistente inteligente","Abre SPLASH AI con una idea inicial para estudiar, crear o resolver dudas.");
         const prompts=[
           "Explícame un tema paso a paso y con ejemplos.",
           "Ayúdame a organizar una idea para una publicación.",
@@ -2774,9 +2774,9 @@ async function renderAureonModule(button) {
             if(input){input.value=prompt;input.focus();}
           },"button button-outline aureon-ai-prompt"));
         });
-        card.append(moduleButton("Abrir chat de AUREON AI",()=>openAureonSupport()));
+        card.append(moduleButton("Abrir chat de SPLASH AI",()=>openAureonSupport()));
         host.append(card);
-        if(currentUser) openAureonSupport(); else moduleStatus(host,"Inicia sesión para conversar con AUREON AI.");
+        if(currentUser) openAureonSupport(); else moduleStatus(host,"Inicia sesión para conversar con SPLASH AI.");
         break;
       }
       case "levels": await loadModuleLevels(host); break;
@@ -2787,7 +2787,7 @@ async function renderAureonModule(button) {
       default: moduleEmpty(host,"Este módulo todavía no está disponible.");
     }
   } catch(error) {
-    console.error("Error en módulo AUREON "+key,error);
+    console.error("Error en módulo SPLASH "+key,error);
     moduleStatus(host,error?.message||"No se pudo cargar esta sección.",true);
   }
   page.scrollIntoView({behavior:"smooth",block:"start"});
@@ -2850,7 +2850,7 @@ function stopStatusCameraStream() {
 
 async function startStatusCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    setStatusCameraNotice("Este navegador no permite usar la cámara. Abre AUREON desde Chrome o Edge actualizado mediante HTTPS.", true);
+    setStatusCameraNotice("Este navegador no permite usar la cámara. Abre SPLASH desde Chrome o Edge actualizado mediante HTTPS.", true);
     return;
   }
 
@@ -3294,7 +3294,7 @@ function appendFriendRequestRow(request, profile) {
 async function loadFriendRequestsOnly() {
   const container = $("#friend-requests-list");
   if (!container) {
-    console.error("AUREON: no existe #friend-requests-list en index.html.");
+    console.error("SPLASH: no existe #friend-requests-list en index.html.");
     return;
   }
   const userId = currentUser?.id;
@@ -3314,7 +3314,7 @@ async function loadFriendRequestsOnly() {
 
   if (currentUser?.id !== userId) return;
   if (error) {
-    console.error("AUREON: error al cargar solicitudes pendientes:", error);
+    console.error("SPLASH: error al cargar solicitudes pendientes:", error);
     showEmpty(container, "No se pudieron cargar las solicitudes. Comprueba tu conexión e inténtalo de nuevo.");
     updateFriendRequestBadge(0);
     return;
@@ -3330,12 +3330,12 @@ async function loadFriendRequestsOnly() {
   try {
     profiles = await fetchProfiles(requests.map(request => request.sender_id));
   } catch (profileError) {
-    console.warn("AUREON: no se pudieron cargar los perfiles de quienes enviaron solicitud:", profileError);
+    console.warn("SPLASH: no se pudieron cargar los perfiles de quienes enviaron solicitud:", profileError);
   }
   if (currentUser?.id !== userId) return;
   container.replaceChildren();
   for (const request of requests) {
-    const profile = profiles.get(request.sender_id) || { id: request.sender_id, username: "Usuario de AUREON" };
+    const profile = profiles.get(request.sender_id) || { id: request.sender_id, username: "Usuario de SPLASH" };
     const row = appendFriendRequestRow(request, profile);
     // La función construye y devuelve la tarjeta; hay que insertarla explícitamente
     // en el rectángulo para que el usuario pueda aceptar o rechazar la solicitud.
@@ -3452,8 +3452,8 @@ async function handleIncomingFriendRequestEvent(row, { notify = true } = {}) {
   if (currentUser?.id !== recipientId) return;
   if (notify && document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
     try {
-      const notification = new Notification("Nueva solicitud de amistad en AUREON", {
-        body: "Abre AUREON para aceptar o rechazar la solicitud.",
+      const notification = new Notification("Nueva solicitud de amistad en SPLASH", {
+        body: "Abre SPLASH para aceptar o rechazar la solicitud.",
         tag: "aureon-friend-request-" + row.id,
         icon: "./icon-192.png"
       });
@@ -3481,7 +3481,7 @@ async function pollIncomingFriendRequests() {
     .eq("status", "pending")
     .order("created_at", { ascending: false });
   if (error) {
-    console.warn("AUREON: no se pudieron comprobar solicitudes pendientes:", error);
+    console.warn("SPLASH: no se pudieron comprobar solicitudes pendientes:", error);
     return;
   }
   for (const row of data || []) {
@@ -3534,9 +3534,9 @@ function subscribeToFriendRequestEvents() {
     })
     .subscribe((status, error) => {
       if (status === "SUBSCRIBED") {
-        console.info("AUREON: solicitudes de amistad en tiempo real conectadas.");
+        console.info("SPLASH: solicitudes de amistad en tiempo real conectadas.");
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        console.error("AUREON: no se pudo conectar el canal de solicitudes:", error);
+        console.error("SPLASH: no se pudo conectar el canal de solicitudes:", error);
         friendRequestRealtimeUserId = null;
         if (friendRequestReconnectTimer) window.clearTimeout(friendRequestReconnectTimer);
         friendRequestReconnectTimer = window.setTimeout(() => {
@@ -3799,7 +3799,7 @@ statusForm?.addEventListener("submit", async event => {
         : file.type === "image/webp" ? "webp"
         : file.type === "video/mp4" ? "mp4" : "webm";
       storagePath = currentUser.id + "/" + crypto.randomUUID() + "." + extension;
-      statusNotice(file.type.startsWith("video/") ? "Subiendo video… no cierres AUREON." : "Subiendo foto…");
+      statusNotice(file.type.startsWith("video/") ? "Subiendo video… no cierres SPLASH." : "Subiendo foto…");
       const { error: uploadError } = await withStatusTimeout(supabase.storage.from("aureon-statuses").upload(storagePath, file, {
         contentType: file.type,
         cacheControl: "3600",
@@ -4039,11 +4039,11 @@ function visionFreshAndUnique(videos) {
 async function loadRecommendedYouTube(category = visionCategory) {
   if (!youtubeResults) return;
   if (parentalStatus.supervised) {
-    showEmpty(youtubeResults, "El contenido externo no tiene clasificación de edad verificada. Aquí puedes ver vídeos de AUREON aprobados.");
+    showEmpty(youtubeResults, "El contenido externo no tiene clasificación de edad verificada. Aquí puedes ver vídeos de SPLASH aprobados.");
     return;
   }
   visionCategory = VISION_CATEGORIES[category] ? category : "all";
-  showEmpty(youtubeResults, "AUREON VISION está buscando vídeos recientes…");
+  showEmpty(youtubeResults, "SPLASH VISION está buscando vídeos recientes…");
   const queries = VISION_CATEGORIES[visionCategory] || VISION_CATEGORIES.all;
   const tasks = [
     searchYouTubeVision(queries[0]).catch(error => { console.warn("YouTube no disponible temporalmente:", error); return []; }),
@@ -4067,7 +4067,7 @@ async function loadRecommendedYouTube(category = visionCategory) {
     videoGrid.replaceChildren();
     const recHeading = document.createElement("h3");
     recHeading.className = "vision-feed-heading";
-    recHeading.textContent = "Descubrir en AUREON VISION";
+    recHeading.textContent = "Descubrir en SPLASH VISION";
     videoGrid.append(recHeading);
     if (videos.length) videos.slice(0, 12).forEach(video => videoGrid.append(createYouTubeVideoCard(video)));
     else showEmpty(videoGrid, "No hay recomendaciones externas disponibles ahora mismo.");
@@ -4207,7 +4207,7 @@ async function loadRecommendedShorts() {
     shortsGrid.replaceChildren();
     const heading = document.createElement("h3");
     heading.className = "shorts-section-heading";
-    heading.textContent = "Shorts con clasificación de AUREON";
+    heading.textContent = "Shorts con clasificación de SPLASH";
     const note = document.createElement("p");
     note.className = "muted shorts-feed-status";
     note.textContent = "Las recomendaciones externas sin clasificación de edad verificada están ocultas en esta cuenta.";
@@ -4215,7 +4215,7 @@ async function loadRecommendedShorts() {
     if (!communityCards.some(node => !node.matches("p.muted"))) {
       const empty = document.createElement("p");
       empty.className = "muted";
-      empty.textContent = "Todavía no hay Shorts de AUREON dentro de la clasificación permitida.";
+      empty.textContent = "Todavía no hay Shorts de SPLASH dentro de la clasificación permitida.";
       shortsGrid.append(empty);
     }
     return;
@@ -4257,7 +4257,7 @@ youtubeForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const query = youtubeInput?.value.trim() || "";
   if (parentalStatus.supervised) {
-    showEmpty(youtubeResults, "La búsqueda externa no está disponible para esta cuenta. Puedes explorar vídeos de AUREON con clasificación.");
+    showEmpty(youtubeResults, "La búsqueda externa no está disponible para esta cuenta. Puedes explorar vídeos de SPLASH con clasificación.");
     return;
   }
   if (query.length < 2 || query.length > 100) {
@@ -4275,12 +4275,12 @@ youtubeForm?.addEventListener("submit", async (event) => {
     const videos = visionFreshAndUnique(results.flat());
     youtubeResults.replaceChildren();
     const heading = document.createElement("h2");
-    heading.textContent = "Resultados de AUREON VISION";
+    heading.textContent = "Resultados de SPLASH VISION";
     youtubeResults.append(heading);
     if (!videos.length) showEmpty(youtubeResults, "No encontramos resultados. Prueba con otras palabras.");
     else videos.forEach(video => youtubeResults.append(createYouTubeVideoCard(video)));
   } catch (error) {
-    console.error("Error en AUREON VISION:", error);
+    console.error("Error en SPLASH VISION:", error);
     showEmpty(youtubeResults, "No se pudo completar la búsqueda. Inténtalo otra vez.");
   } finally {
     if (button) button.disabled = false;
@@ -4305,7 +4305,7 @@ function createYouTubeVideoCard(video) {
   heading.textContent = video.title || "Vídeo sin título";
   const channel = document.createElement("p");
   channel.className = "muted";
-  channel.textContent = (video.channelTitle || "Creador") + " · " + (video.platform || "AUREON VISION");
+  channel.textContent = (video.channelTitle || "Creador") + " · " + (video.platform || "SPLASH VISION");
   const play = document.createElement("button");
   play.className = "button full";
   play.textContent = "▶ Ver video";
@@ -4456,10 +4456,10 @@ function openPeerTubeVideo(video) {
   }
   stopPlayerContent();
   const heading = document.createElement("h2");
-  heading.textContent = video.title || "Vídeo de AUREON VISION";
+  heading.textContent = video.title || "Vídeo de SPLASH VISION";
   const frame = document.createElement("iframe");
   frame.src = applySubtitlePreference(video.embedPath || video.url, "video");
-  frame.title = video.title || "Vídeo de AUREON VISION";
+  frame.title = video.title || "Vídeo de SPLASH VISION";
   frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   frame.allowFullscreen = true;
   frame.loading = "lazy";
@@ -4591,7 +4591,7 @@ function startRealtimePresence() {
       }
     } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
       presenceRealtimeReady = false;
-      console.warn("AUREON: presencia en tiempo real no disponible; se usará la última actividad guardada.");
+      console.warn("SPLASH: presencia en tiempo real no disponible; se usará la última actividad guardada.");
     }
   });
   presenceChannel = channel;
@@ -4660,10 +4660,10 @@ async function notifyAureonPush(action, details) {
   try {
     const { data, error } = await invokeAureonPush({ action, ...details });
     if (error) console.warn("El mensaje se envió, pero no se pudo mandar el aviso push:", error);
-    else if (data?.error) console.warn("Aviso push de AUREON:", data.error);
-    else if (data?.sent === 0) console.info("AUREON: el destinatario aún no tiene notificaciones activas en un dispositivo.");
+    else if (data?.error) console.warn("Aviso push de SPLASH:", data.error);
+    else if (data?.sent === 0) console.info("SPLASH: el destinatario aún no tiene notificaciones activas en un dispositivo.");
   } catch (error) {
-    console.warn("No se pudo enviar el aviso push de AUREON:", error);
+    console.warn("No se pudo enviar el aviso push de SPLASH:", error);
   }
 }
 
@@ -4681,7 +4681,7 @@ function showAureonToast(title, body, onOpen = null) {
   }
   toast.replaceChildren();
   const heading = document.createElement("strong");
-  heading.textContent = title || "AUREON";
+  heading.textContent = title || "SPLASH";
   const detail = document.createElement("span");
   detail.textContent = body || "Tienes una notificación nueva.";
   toast.append(heading, detail);
@@ -4723,7 +4723,7 @@ function otherParticipant(conversation) {
 function displayName(profile) {
   const nickname = profile?.display_name?.trim();
   if (nickname && nickname.toLowerCase() !== "jugador") return nickname;
-  return profile?.username?.trim() || "Usuario de AUREON";
+  return profile?.username?.trim() || "Usuario de SPLASH";
 }
 function accountName(profile) {
   return profile?.username?.trim() || displayName(profile);
@@ -4876,7 +4876,7 @@ async function openUserInfo() {
   if (friendshipError) {
     // No bloquees el botón de enviar por un fallo al consultar amistades:
     // el RPC de envío debe ejecutarse y mostrar su error real si también falla.
-    console.warn("AUREON: no se pudo consultar la amistad antes de enviar:", friendshipError);
+    console.warn("SPLASH: no se pudo consultar la amistad antes de enviar:", friendshipError);
     if (userInfoFriendStatus) userInfoFriendStatus.textContent = "No se pudo comprobar si ya son amigos. Puedes intentar enviar la solicitud.";
     if (sendFriendRequestButton) {
       sendFriendRequestButton.hidden = false;
@@ -5029,7 +5029,7 @@ $("#cancel-friend-request")?.addEventListener("click", async () => {
     }
     await loadFriendRequestsOnly();
   } catch (error) {
-    console.error("AUREON: no se pudo cancelar la solicitud:", error);
+    console.error("SPLASH: no se pudo cancelar la solicitud:", error);
     button.disabled = false;
     if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo cancelar: " + (error?.message || "error desconocido");
   }
@@ -5070,7 +5070,7 @@ sendFriendRequestButton?.addEventListener("click", async (event) => {
       }
     }
   } catch (error) {
-    console.error("AUREON: error enviando solicitud de amistad:", error);
+    console.error("SPLASH: error enviando solicitud de amistad:", error);
     if (userInfoFeedback) userInfoFeedback.textContent = "No se pudo enviar la solicitud: " + (error?.message || "error desconocido");
     sendFriendRequestButton.disabled = false;
   }
@@ -5251,7 +5251,7 @@ async function sendChatBody(body, target = currentChatTarget()) {
     }
     return true;
   } catch (error) {
-    console.error("No se pudo enviar el mensaje de AUREON:", error);
+    console.error("No se pudo enviar el mensaje de SPLASH:", error);
     showMessage($("#message-status"), error?.message || "No se pudo enviar. Intenta otra vez.", true);
     return false;
   } finally {
@@ -6226,9 +6226,9 @@ function subscribeToMessageEvents() {
       handleIncomingMessageEvent("group", row).catch(error => console.error("Error al recibir mensaje grupal:", error));
     })
     .subscribe((status, error) => {
-      if (status === "SUBSCRIBED") console.info("AUREON: recepción de mensajes en tiempo real conectada.");
+      if (status === "SUBSCRIBED") console.info("SPLASH: recepción de mensajes en tiempo real conectada.");
       else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        console.error("AUREON: no se pudo conectar el canal de mensajes en tiempo real:", error);
+        console.error("SPLASH: no se pudo conectar el canal de mensajes en tiempo real:", error);
         messageRealtimeUserId = null;
         if (messageReconnectTimer) window.clearTimeout(messageReconnectTimer);
         messageReconnectTimer = window.setTimeout(() => {
@@ -6434,7 +6434,7 @@ function playAureonTone(kind = "message") {
     }
     // No cerramos el contexto: así los próximos timbres entrantes pueden sonar.
   } catch (error) {
-    console.info("El navegador no permitió reproducir el tono de AUREON.", error);
+    console.info("El navegador no permitió reproducir el tono de SPLASH.", error);
   }
 }
 
@@ -6461,7 +6461,7 @@ navigator.serviceWorker?.addEventListener("message", (event) => {
     const callId = event.data.payload?.callId;
     if (callId) pendingNotificationCallId = callId;
     pollIncomingCallInvitations();
-    loadPendingNotificationCall().catch(error => console.warn("AUREON: no se pudo abrir la llamada desde el aviso:", error));
+    loadPendingNotificationCall().catch(error => console.warn("SPLASH: no se pudo abrir la llamada desde el aviso:", error));
   }
   if (event.data?.type === "AUREON_CALL_ACTION" && ["accept", "reject"].includes(event.data.action)) {
     pendingNotificationCallAction = { action: event.data.action, callId: event.data.callId };
@@ -6730,9 +6730,9 @@ function subscribeToCallSignals() {
       filter: "recipient_id=eq." + requestedUserId
     }, ({ new: signal }) => processCallSignal(signal).catch(error => console.error("Error procesando llamada:", error)))
     .subscribe((status, error) => {
-      if (status === "SUBSCRIBED") console.info("AUREON: recepción de llamadas conectada.");
+      if (status === "SUBSCRIBED") console.info("SPLASH: recepción de llamadas conectada.");
       else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        console.error("AUREON: no se pudo conectar el canal de llamadas:", error);
+        console.error("SPLASH: no se pudo conectar el canal de llamadas:", error);
         if (activeCall && !activeCall.incoming) callSubtitle.textContent = "Reconectando para recibir respuesta…";
         callChannelUserId = null;
         if (callReconnectTimer) window.clearTimeout(callReconnectTimer);
@@ -6767,7 +6767,7 @@ async function beginCall(video) {
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-    showMessage($("#message-status"), "Este navegador no permite llamadas. Abre AUREON PLAY en Safari o Chrome actualizado y usa HTTPS.", true);
+    showMessage($("#message-status"), "Este navegador no permite llamadas. Abre SPLASH PLAY en Safari o Chrome actualizado y usa HTTPS.", true);
     return;
   }
   const peerId = otherParticipant(activeConversation);
@@ -7050,7 +7050,7 @@ async function processGroupCallSignal(signal) {
     }
     activeGroupCall = { id: signal.call_id, groupId: signal.group_id, hostId: signal.sender_id, video: !!signal.payload?.video, incoming: true, memberIds: [] };
     const profile = await fetchProfiles([signal.sender_id]);
-    callTitle.textContent = "Grupo: " + (groupCache.find(g => g.id === signal.group_id)?.name || "AUREON");
+    callTitle.textContent = "Grupo: " + (groupCache.find(g => g.id === signal.group_id)?.name || "SPLASH");
     callState.textContent = activeGroupCall.video ? "VIDEOLLAMADA GRUPAL ENTRANTE" : "LLAMADA GRUPAL ENTRANTE";
     callSubtitle.textContent = displayName(profile.get(signal.sender_id)) + " te invita a una llamada grupal";
     remoteCallVideo.hidden = true; localCallVideo.hidden = true; $("#group-call-grid").hidden = true;
@@ -7099,7 +7099,7 @@ function subscribeToGroupCallSignals() {
 
   // Serializa los cambios de sesión para evitar crear/suscribir el mismo canal dos veces.
   groupCallSubscriptionQueue = groupCallSubscriptionQueue
-    .catch(error => console.error("AUREON: error previo al cambiar el canal de llamadas grupales:", error))
+    .catch(error => console.error("SPLASH: error previo al cambiar el canal de llamadas grupales:", error))
     .then(async () => {
       if (requestedUserId && currentUser?.id !== requestedUserId) return;
       if (groupCallChannel && groupCallChannelUserId === requestedUserId) return;
@@ -7124,13 +7124,13 @@ function subscribeToGroupCallSignals() {
         }))
         .subscribe((status, error) => {
           if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.error("AUREON: no se pudo conectar el canal de llamadas grupales:", error);
+            console.error("SPLASH: no se pudo conectar el canal de llamadas grupales:", error);
             groupCallChannelUserId = null;
             if (groupCallReconnectTimer) window.clearTimeout(groupCallReconnectTimer);
             groupCallReconnectTimer = window.setTimeout(() => {
               groupCallReconnectTimer = null;
               if (currentUser?.id === requestedUserId) {
-                subscribeToGroupCallSignals().catch(reconnectError => console.error("AUREON: no se pudo reintentar el canal grupal:", reconnectError));
+                subscribeToGroupCallSignals().catch(reconnectError => console.error("SPLASH: no se pudo reintentar el canal grupal:", reconnectError));
               }
             }, 2500);
           }
@@ -7157,8 +7157,8 @@ async function pollIncomingCallInvitations() {
         .gte("created_at", cutoff).order("created_at", { ascending: true }).limit(5)
     ]);
     if (currentUser?.id !== requestedUserId) return;
-    if (privateResult.error) console.warn("AUREON: respaldo de llamadas privadas:", privateResult.error);
-    if (groupResult.error) console.warn("AUREON: respaldo de llamadas grupales:", groupResult.error);
+    if (privateResult.error) console.warn("SPLASH: respaldo de llamadas privadas:", privateResult.error);
+    if (groupResult.error) console.warn("SPLASH: respaldo de llamadas grupales:", groupResult.error);
     const invites = [
       ...(privateResult.data || []).map(signal => ({ kind: "private", signal })),
       ...(groupResult.data || []).map(signal => ({ kind: "group", signal }))
@@ -7170,7 +7170,7 @@ async function pollIncomingCallInvitations() {
       else await processGroupCallSignal(item.signal);
     }
   } catch (error) {
-    console.error("AUREON: no se pudieron comprobar llamadas entrantes:", error);
+    console.error("SPLASH: no se pudieron comprobar llamadas entrantes:", error);
   }
 }
 
