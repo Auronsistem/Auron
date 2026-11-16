@@ -5764,7 +5764,7 @@ async function requestSettingsPasswordCode(isResend = false) {
     if (isResend && code) code.value = "";
     if (!isResend && button) button.hidden = true;
     showMessage(status, "Código enviado a " + email + ". Revisa Recibidos y Spam; introduce el código más reciente.");
-    if (isResend) startCodeResendCooldown(button);
+    startCodeResendCooldown(isResend ? button : $("#settings-password-resend"));
   } catch (error) {
     showMessage(status, error?.message || "No se pudo enviar el código. Inténtalo de nuevo.", true);
     if (button) button.disabled = false;
@@ -5774,7 +5774,7 @@ async function requestSettingsPasswordCode(isResend = false) {
 $("#settings-password-send-code")?.addEventListener("click", () => requestSettingsPasswordCode(false));
 $("#settings-password-resend")?.addEventListener("click", () => requestSettingsPasswordCode(true));
 $("#settings-password-code")?.addEventListener("input", event => {
-  event.target.value = event.target.value.replace(/\\D/g, "").slice(0, 6);
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
 });
 
 $("#settings-password-form")?.addEventListener("submit", async event => {
@@ -5787,7 +5787,7 @@ $("#settings-password-form")?.addEventListener("submit", async event => {
   if (!currentUser?.email || !settingsPasswordCodeEmail || settingsPasswordCodeEmail !== currentUser.email.toLowerCase()) {
     showMessage(status, "Solicita primero un código para tu cuenta.", true); return;
   }
-  if (!/^\\d{6}$/.test(token)) { showMessage(status, "Introduce los 6 dígitos del correo.", true); return; }
+  if (!/^\d{6}$/.test(token)) { showMessage(status, "Introduce los 6 dígitos del correo.", true); return; }
   if (newPassword.length < 8) { showMessage(status, "La nueva contraseña debe tener al menos 8 caracteres.", true); return; }
   if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
     showMessage(status, "Usa al menos una minúscula, una mayúscula, un número y un símbolo.", true); return;
