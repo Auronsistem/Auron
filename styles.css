@@ -2640,3 +2640,19 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto
  .aureon-ai-prompt{width:100%}
  .aureon-privacy-accent-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Seguridad de cuenta y bienvenida de notificaciones */
+.password-field-row { display:flex; align-items:stretch; gap:8px; }
+.password-field-row input { min-width:0; flex:1; }
+.password-visibility-toggle { flex:0 0 auto; min-width:82px; }
+#settings-password-form .button.full { margin-top:16px; }
+.notification-welcome-dialog { width:min(92vw,440px); text-align:center; }
+.notification-welcome-content { display:flex; flex-direction:column; align-items:center; gap:10px; }
+.notification-welcome-icon { display:grid; place-items:center; width:66px; height:66px; border-radius:50%; background:rgba(32,217,237,.12); font-size:30px; }
+.notification-welcome-content h2 { margin:0; }
+.notification-welcome-content .muted { line-height:1.6; }
+.notification-welcome-content .button { margin-top:6px; }
+@media(max-width:520px) {
+  .password-field-row { gap:6px; }
+  .password-visibility-toggle { min-width:74px; padding:10px 8px; }
+}
