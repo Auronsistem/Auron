@@ -1469,6 +1469,7 @@ async function updateSession(session) {
   }
 
   if (currentUser) {
+    maybeShowNotificationWelcome();
     removeLockScreen();
     void syncExistingAureonPushSubscription();
     await refreshParentalState();
@@ -5719,6 +5720,57 @@ $("#mobile-states-link")?.addEventListener("click", () => {
 });
 $("#mobile-settings-link")?.addEventListener("click", openSettings);
 $("#close-settings")?.addEventListener("click", closeSettings);
+
+function togglePasswordVisibility(inputId, button) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const showing = input.type === "password";
+  input.type = showing ? "text" : "password";
+  button.textContent = showing ? "Ocultar" : "Mostrar";
+  button.setAttribute("aria-pressed", String(showing));
+}
+document.querySelectorAll("[data-password-toggle]").forEach(button => {
+  button.addEventListener("click", () => togglePasswordVisibility(button.dataset.passwordToggle, button));
+});
+
+$("#settings-password-form")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = $("#settings-password-status");
+  const submit = $("#save-settings-password");
+  const currentPassword = $("#settings-current-password")?.value || "";
+  const newPassword = $("#settings-new-password")?.value || "";
+  const confirmation = $("#settings-confirm-password")?.value || "";
+  if (!currentUser?.email) { showMessage(status, "Inicia sesión para cambiar tu contraseña.", true); return; }
+  if (newPassword.length < 8) { showMessage(status, "La nueva contraseña debe tener al menos 8 caracteres.", true); return; }
+  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+    showMessage(status, "Usa al menos una minúscula, una mayúscula, un número y un símbolo.", true); return;
+  }
+  if (newPassword !== confirmation) { showMessage(status, "Las nuevas contraseñas no coinciden.", true); return; }
+  if (currentPassword === newPassword) { showMessage(status, "La nueva contraseña debe ser diferente a la actual.", true); return; }
+  if (submit) submit.disabled = true;
+  showMessage(status, "Verificando tu contraseña actual…");
+  try {
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentUser.email, password: currentPassword });
+    if (signInError) throw new Error("La contraseña actual no es correcta.");
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    if (updateError) throw updateError;
+    $("#settings-password-form")?.reset();
+    document.querySelectorAll("#settings-password-form [data-password-toggle]").forEach(button => {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      if (input) input.type = "password";
+      button.textContent = "Mostrar";
+      button.setAttribute("aria-pressed", "false");
+    });
+    showMessage(status, "¡Contraseña actualizada correctamente!");
+  } catch (error) {
+    showMessage(status, error?.message || "No se pudo cambiar la contraseña. Inténtalo de nuevo.", true);
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+});
+$("#enable-settings-notifications")?.addEventListener("click", enableAureonPushNotifications);
+
+
 
 $("#new-conversation")?.addEventListener("click", () => peopleSearch?.focus());
 peopleSearch?.addEventListener("input", () => {
