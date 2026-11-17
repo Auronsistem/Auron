@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="./icons/aureon.svg?v=3">
   <title>SPLASH</title>
   <meta name="description" content="SPLASH: descubre vídeos recientes, Shorts, creadores, mensajes y llamadas.">
-  <link rel="stylesheet" href="styles.css?v=57">
+  <link rel="stylesheet" href="styles.css?v=58">
   <link rel="icon" href="./icons/aureon.svg?v=3">
 </head>
 <body>
@@ -48,6 +48,8 @@
       <button type="button" class="sidebar-group-title" aria-expanded="false" aria-controls="sidebar-group-items-principal"><span class="sidebar-group-chevron" aria-hidden="true">▸</span><span>CATÁLOGO</span></button>
       <div class="sidebar-group-items" id="sidebar-group-items-principal" hidden>
       <a href="#inicio" class="side-link active" data-search-terms="inicio principal home"><span>⌂</span> Inicio</a>
+      <a href="#marketplace" class="side-link" data-search-terms="mercado tienda productos vendedores compras"><span>🛍</span> Mercado</a>
+      <button type="button" class="side-link" id="marketplace-inbox-nav-link" data-section="marketplace-inbox" data-search-terms="bandeja solicitudes publicar productos aprobar" hidden><span>📥</span> Bandeja de publicaciones</button>
       <a href="#mensajes" class="side-link" data-search-terms="mensajes chat conversaciones"><span>☁</span> Mensajes</a>
       <button type="button" class="side-link" id="states-nav-link" aria-expanded="false" aria-controls="estados" data-search-terms="estados historias stories"><span>◉</span> Estados</button>
       <button id="open-upload" class="side-link" data-search-terms="publicar subir crear contenido"><span>＋</span> Publicar</button>
@@ -177,6 +179,30 @@
       <div id="shorts-grid" class="shorts-grid">
         <p class="muted">Los Shorts de la comunidad aparecerán aquí.</p>
       </div>
+    </section>
+
+    <!-- MERCADO -->
+    <section class="section marketplace-section" id="marketplace" hidden>
+      <div class="section-head marketplace-heading">
+        <div><p class="eyebrow">COMPRA Y DESCUBRE</p><h2>Mercado</h2><p class="muted">Productos publicados por vendedores de la comunidad.</p></div>
+        <button id="marketplace-publish-open" class="button" type="button">＋ Publicar producto</button>
+      </div>
+      <div class="marketplace-toolbar">
+        <input id="marketplace-search" type="search" placeholder="Buscar productos, marcas o modelos…" aria-label="Buscar productos">
+        <select id="marketplace-category-filter" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select>
+        <button id="marketplace-refresh" class="button button-outline" type="button">↻ Actualizar</button>
+      </div>
+      <div id="marketplace-products" class="marketplace-grid"><p class="muted">Cargando productos…</p></div>
+      <p class="marketplace-safety-note">Las publicaciones se revisan antes de aparecer. No se permiten artículos peligrosos, ilegales ni productos restringidos.</p>
+    </section>
+
+    <!-- BANDEJA EXCLUSIVA DE ELFACUPRO -->
+    <section class="section marketplace-section" id="marketplace-inbox" hidden>
+      <div class="section-head"><div><p class="eyebrow">ADMINISTRACIÓN DEL MERCADO</p><h2>📥 Bandeja de publicaciones</h2><p class="muted">Revisa y decide qué productos pueden aparecer en el Mercado.</p></div>
+        <button id="marketplace-inbox-refresh" class="button button-outline" type="button">↻ Actualizar</button>
+      </div>
+      <p class="marketplace-inbox-summary">Solicitudes pendientes: <strong id="marketplace-pending-count">0</strong></p>
+      <div id="marketplace-pending-list" class="marketplace-pending-list"><p class="muted">Cargando solicitudes…</p></div>
     </section>
 
     <!-- ESTADOS ESTILO HISTORIAS -->
@@ -730,6 +756,36 @@
   </dialog>
 
 
+  <dialog id="marketplace-publish-dialog" class="marketplace-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form>
+    <p class="eyebrow">NUEVA PUBLICACIÓN</p><h2>Publicar un producto</h2>
+    <p class="muted">Completa los datos. Tu producto aparecerá después de la revisión de ElFacupro.</p>
+    <form id="marketplace-publish-form" class="marketplace-form">
+      <label for="marketplace-title">Nombre del producto</label><input id="marketplace-title" name="title" maxlength="120" required placeholder="Ej. Audífonos inalámbricos">
+      <div class="marketplace-form-row">
+        <div><label for="marketplace-category">Categoría</label><select id="marketplace-category" name="category" required><option value="">Selecciona</option><option>Electrónica</option><option>Accesorios</option><option>Ropa</option><option>Hogar</option><option>Deportes</option><option>Juguetes</option><option>Libros</option><option>Otros</option></select></div>
+        <div><label for="marketplace-condition">Estado</label><select id="marketplace-condition" name="condition" required><option>Nuevo</option><option>Como nuevo</option><option>Usado</option></select></div>
+      </div>
+      <div class="marketplace-form-row">
+        <div><label for="marketplace-brand">Marca</label><input id="marketplace-brand" name="brand" maxlength="80" placeholder="Marca"></div>
+        <div><label for="marketplace-model">Modelo</label><input id="marketplace-model" name="model" maxlength="100" placeholder="Modelo o versión"></div>
+      </div>
+      <div class="marketplace-form-row">
+        <div><label for="marketplace-price">Precio (S/)</label><input id="marketplace-price" name="price" type="number" min="0.01" max="99999999" step="0.01" required placeholder="0.00"></div>
+        <div><label for="marketplace-stock">Stock disponible</label><input id="marketplace-stock" name="stock" type="number" min="0" max="1000000" step="1" value="1" required></div>
+      </div>
+      <label for="marketplace-location">Ubicación (opcional)</label><input id="marketplace-location" name="location" maxlength="100" placeholder="Ej. Lima">
+      <label for="marketplace-description">Descripción</label><textarea id="marketplace-description" name="description" minlength="10" maxlength="1500" rows="4" required placeholder="Describe características, medidas, compatibilidad y detalles importantes…"></textarea>
+      <label for="marketplace-image">Foto del producto (JPG, PNG o WEBP · máximo 6 MB)</label><input id="marketplace-image" name="product-image" type="file" accept="image/jpeg,image/png,image/webp">
+      <p id="marketplace-publish-status" class="notice" aria-live="polite"></p>
+      <button id="marketplace-publish-submit" class="button full" type="submit">Enviar a revisión</button>
+    </form>
+  </dialog>
+  <dialog id="marketplace-product-dialog" class="marketplace-dialog marketplace-product-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form>
+    <div id="marketplace-product-content"></div>
+  </dialog>
+
   <!-- SOPORTE OFICIAL SPLASH AI -->
   <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title">
     <div class="support-shell">
@@ -774,6 +830,6 @@
       });
     }
   </script>
-  <script type="module" src="app.js?v=125"></script>
+  <script type="module" src="app.js?v=126"></script>
 </body>
 </html>
