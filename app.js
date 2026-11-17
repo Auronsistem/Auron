@@ -7619,6 +7619,7 @@ async function loadMarketplace() {
     const stat = stats.get(product.id) || { sum: 0, count: 0 };
     return { ...product, average_rating: stat.count ? stat.sum / stat.count : 0, review_count: stat.count };
   });
+  marketplaceUpdateCategoryOptions();
   filterMarketplaceProducts();
 }
 
