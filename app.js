@@ -1511,6 +1511,7 @@ async function updateSession(session) {
     await loadGuardianChildren();
   }
   await loadCurrentProfile();
+  try { await initializeMarketplaceForSession(); } catch (error) { console.warn("Mercado: no se pudo inicializar:", error); }
   applyTheme(readThemePreference());
   if (currentUser) startPresence(); else stopPresence();
   loadTranslationSettings();
@@ -2194,6 +2195,8 @@ function showSection(sectionName) {
     shorts: "#shorts",
     cuenta: "#cuenta",
     configuracion: "#configuracion",
+    marketplace: "#marketplace",
+    "marketplace-inbox": "#marketplace-inbox",
     "aureon-module-page": "#aureon-module-page",
     "parental-child-panel": "#parental-child-panel"
   };
@@ -7480,3 +7483,373 @@ async function initialize() {
 }
 
 initialize();
+
+
+// ============================================================
+// MERCADO SPLASH — publicaciones moderadas y opiniones
+// Administrador único: cuenta identificada por username elfacupro67.
+// La autorización real también está aplicada en RLS de Supabase.
+// ============================================================
+const MARKETPLACE_ADMIN_ID = "71fa7df5-c8e2-47ff-97c3-6dc8380f59fe";
+let marketplaceChannel = null;
+let marketplaceProductsCache = [];
+let marketplaceCurrentProduct = null;
+
+function marketplaceIsAdmin() {
+  return Boolean(currentUser && currentUser.id === MARKETPLACE_ADMIN_ID);
+}
+
+function marketplaceEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+function marketplaceMoney(value) {
+  return "S/ " + Number(value || 0).toFixed(2);
+}
+
+function marketplaceStars(value) {
+  const n = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+  return "★".repeat(n) + "☆".repeat(5 - n);
+}
+
+function marketplaceImageUrl(path) {
+  if (!path) return "";
+  const { data } = supabase.storage.from("marketplace-images").getPublicUrl(path);
+  return data?.publicUrl || "";
+}
+
+function marketplaceSetStatus(selector, message, isError = false) {
+  const node = $(selector);
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("is-error", Boolean(isError));
+}
+
+async function initializeMarketplaceForSession() {
+  const inboxLink = $("#marketplace-inbox-nav-link");
+  if (inboxLink) inboxLink.hidden = !marketplaceIsAdmin();
+
+  if (!currentUser) {
+    if (marketplaceChannel) {
+      await supabase.removeChannel(marketplaceChannel);
+      marketplaceChannel = null;
+    }
+    return;
+  }
+
+  await loadMarketplace();
+  if (marketplaceIsAdmin()) await loadMarketplaceRequests();
+  subscribeToMarketplaceChanges();
+}
+
+function subscribeToMarketplaceChanges() {
+  if (marketplaceChannel) {
+    supabase.removeChannel(marketplaceChannel).catch(() => {});
+    marketplaceChannel = null;
+  }
+  marketplaceChannel = supabase.channel("marketplace-live-" + currentUser.id)
+    .on("postgres_changes", { event: "*", schema: "public", table: "marketplace_products" }, () => {
+      void loadMarketplace();
+      if (marketplaceIsAdmin()) void loadMarketplaceRequests();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "marketplace_reviews" }, () => {
+      void loadMarketplace();
+    })
+    .subscribe();
+}
+
+function renderMarketplaceProducts(products) {
+  const grid = $("#marketplace-products");
+  if (!grid) return;
+  if (!products.length) {
+    grid.innerHTML = '<p class="muted marketplace-empty">Todavía no hay productos publicados. ¡Sé el primero en enviar uno!</p>';
+    return;
+  }
+  grid.innerHTML = products.map(product => {
+    const image = marketplaceImageUrl(product.image_path);
+    const rating = Number(product.average_rating || 0);
+    const reviews = Number(product.review_count || 0);
+    return `
+      <article class="marketplace-card">
+        <button class="marketplace-card-open" type="button" data-marketplace-open="${marketplaceEscape(product.id)}" aria-label="Ver ${marketplaceEscape(product.title)}">
+          <div class="marketplace-card-image">
+            ${image ? `<img src="${marketplaceEscape(image)}" alt="${marketplaceEscape(product.title)}" loading="lazy">` : '<span class="marketplace-image-placeholder">▧</span>'}
+            <span class="marketplace-condition">${marketplaceEscape(product.condition)}</span>
+          </div>
+          <div class="marketplace-card-copy">
+            <span class="marketplace-category">${marketplaceEscape(product.category)}</span>
+            <h3>${marketplaceEscape(product.title)}</h3>
+            <p class="marketplace-card-price">${marketplaceMoney(product.price)}</p>
+            <p class="marketplace-card-stock">${Number(product.stock) > 0 ? "Stock: " + Number(product.stock) + " unidades" : "Agotado"}</p>
+            <div class="marketplace-card-rating"><span>${marketplaceStars(rating)}</span><small>${reviews ? rating.toFixed(1) + " · " + reviews + " opiniones" : "Sin opiniones"}</small></div>
+          </div>
+        </button>
+      </article>`;
+  }).join("");
+}
+
+async function loadMarketplace() {
+  const grid = $("#marketplace-products");
+  if (!grid) return;
+  const { data, error } = await supabase.from("marketplace_products")
+    .select("*").eq("status", "approved").order("created_at", { ascending: false });
+  if (error) {
+    console.error("Mercado: error al cargar productos:", error);
+    grid.innerHTML = '<p class="muted">No se pudo cargar el Mercado. Inténtalo de nuevo.</p>';
+    return;
+  }
+  const products = data || [];
+  const ids = products.map(item => item.id);
+  let reviewRows = [];
+  if (ids.length) {
+    const { data: reviews, error: reviewError } = await supabase.from("marketplace_reviews")
+      .select("product_id,rating").in("product_id", ids);
+    if (!reviewError) reviewRows = reviews || [];
+  }
+  const stats = new Map();
+  for (const review of reviewRows) {
+    const current = stats.get(review.product_id) || { sum: 0, count: 0 };
+    current.sum += Number(review.rating);
+    current.count += 1;
+    stats.set(review.product_id, current);
+  }
+  marketplaceProductsCache = products.map(product => {
+    const stat = stats.get(product.id) || { sum: 0, count: 0 };
+    return { ...product, average_rating: stat.count ? stat.sum / stat.count : 0, review_count: stat.count };
+  });
+  filterMarketplaceProducts();
+}
+
+function filterMarketplaceProducts() {
+  const search = ($("#marketplace-search")?.value || "").trim().toLocaleLowerCase("es");
+  const category = $("#marketplace-category-filter")?.value || "";
+  const filtered = marketplaceProductsCache.filter(product => {
+    const text = [product.title, product.category, product.brand, product.model, product.description, product.location]
+      .filter(Boolean).join(" ").toLocaleLowerCase("es");
+    return (!search || text.includes(search)) && (!category || product.category === category);
+  });
+  renderMarketplaceProducts(filtered);
+}
+
+function marketplaceUpdateCategoryOptions() {
+  const select = $("#marketplace-category-filter");
+  if (!select) return;
+  const selected = select.value;
+  const categories = [...new Set(marketplaceProductsCache.map(item => item.category).filter(Boolean))].sort();
+  select.innerHTML = '<option value="">Todas las categorías</option>' +
+    categories.map(value => '<option value="' + marketplaceEscape(value) + '">' + marketplaceEscape(value) + '</option>').join("");
+  if (categories.includes(selected)) select.value = selected;
+}
+
+async function loadMarketplaceRequests() {
+  const list = $("#marketplace-pending-list");
+  if (!list || !marketplaceIsAdmin()) return;
+  const { data, error } = await supabase.from("marketplace_products")
+    .select("*").eq("status", "pending").order("created_at", { ascending: true });
+  if (error) {
+    console.error("Mercado: no se pudieron cargar las solicitudes:", error);
+    list.innerHTML = '<p class="muted">No se pudieron cargar las solicitudes.</p>';
+    return;
+  }
+  const requests = data || [];
+  const count = $("#marketplace-pending-count");
+  if (count) count.textContent = String(requests.length);
+  if (!requests.length) {
+    list.innerHTML = '<p class="muted">No hay solicitudes pendientes de revisión.</p>';
+    return;
+  }
+  list.innerHTML = requests.map(product => {
+    const image = marketplaceImageUrl(product.image_path);
+    return `
+      <article class="marketplace-request-card">
+        <div class="marketplace-request-image">${image ? '<img src="' + marketplaceEscape(image) + '" alt="">' : "▧"}</div>
+        <div class="marketplace-request-info">
+          <span class="marketplace-category">${marketplaceEscape(product.category)} · ${marketplaceEscape(product.condition)}</span>
+          <h3>${marketplaceEscape(product.title)}</h3>
+          <p>${marketplaceMoney(product.price)} · Stock: ${Number(product.stock)}</p>
+          <p class="muted">${marketplaceEscape(product.brand || "Sin marca")} ${marketplaceEscape(product.model || "")} · Vendedor: ${marketplaceEscape(product.seller_id.slice(0, 8))}</p>
+          <p class="muted">${marketplaceEscape(product.description)}</p>
+          <div class="marketplace-request-actions">
+            <button class="button" type="button" data-marketplace-moderate="approved" data-product-id="${marketplaceEscape(product.id)}">✓ Aprobar</button>
+            <button class="button button-outline" type="button" data-marketplace-moderate="rejected" data-product-id="${marketplaceEscape(product.id)}">Rechazar</button>
+          </div>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+async function moderateMarketplaceProduct(productId, status) {
+  if (!marketplaceIsAdmin()) return;
+  const confirmText = status === "approved" ? "¿Aprobar y mostrar este producto en el Mercado?" : "¿Rechazar esta solicitud?";
+  if (!window.confirm(confirmText)) return;
+  const { error } = await supabase.from("marketplace_products")
+    .update({ status }).eq("id", productId).eq("status", "pending");
+  if (error) {
+    console.error("Mercado: no se pudo moderar el producto:", error);
+    alert("No se pudo actualizar la solicitud. Comprueba tu conexión.");
+    return;
+  }
+  await Promise.all([loadMarketplaceRequests(), loadMarketplace()]);
+}
+
+function openMarketplacePublishDialog() {
+  if (!currentUser) { openAuth(); return; }
+  $("#marketplace-publish-form")?.reset();
+  marketplaceSetStatus("#marketplace-publish-status", "");
+  const dialog = $("#marketplace-publish-dialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+async function submitMarketplaceProduct(event) {
+  event.preventDefault();
+  if (!currentUser) { openAuth(); return; }
+  const form = event.currentTarget;
+  const button = $("#marketplace-publish-submit");
+  if (button) { button.disabled = true; button.textContent = "Enviando solicitud…"; }
+  let uploadedPath = null;
+  try {
+    const values = new FormData(form);
+    const file = values.get("product-image");
+    if (file instanceof File && file.size) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("La foto debe ser JPG, PNG o WEBP.");
+      if (file.size > 6 * 1024 * 1024) throw new Error("La foto no puede superar 6 MB.");
+      const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+      uploadedPath = currentUser.id + "/" + crypto.randomUUID() + "." + extension;
+      const { error: uploadError } = await supabase.storage.from("marketplace-images")
+        .upload(uploadedPath, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+    }
+    const product = {
+      seller_id: currentUser.id,
+      title: String(values.get("title") || "").trim(),
+      category: String(values.get("category") || "").trim(),
+      brand: String(values.get("brand") || "").trim() || null,
+      model: String(values.get("model") || "").trim() || null,
+      condition: String(values.get("condition") || "Nuevo"),
+      price: Number(values.get("price")),
+      stock: Number(values.get("stock")),
+      location: String(values.get("location") || "").trim() || null,
+      description: String(values.get("description") || "").trim(),
+      image_path: uploadedPath,
+      status: "pending"
+    };
+    const { error } = await supabase.from("marketplace_products").insert(product);
+    if (error) throw error;
+    marketplaceSetStatus("#marketplace-publish-status", "¡Solicitud enviada! El producto aparecerá en el Mercado cuando ElFacupro la apruebe.");
+    form.reset();
+    setTimeout(() => $("#marketplace-publish-dialog")?.close(), 1600);
+  } catch (error) {
+    console.error("Mercado: no se pudo enviar la publicación:", error);
+    if (uploadedPath) await supabase.storage.from("marketplace-images").remove([uploadedPath]).catch(() => {});
+    marketplaceSetStatus("#marketplace-publish-status", error?.message || "No se pudo enviar la solicitud.", true);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Enviar a revisión"; }
+  }
+}
+
+async function openMarketplaceProduct(productId) {
+  const product = marketplaceProductsCache.find(item => item.id === productId);
+  if (!product) return;
+  marketplaceCurrentProduct = product;
+  const content = $("#marketplace-product-content");
+  const dialog = $("#marketplace-product-dialog");
+  if (!content || !dialog) return;
+  const image = marketplaceImageUrl(product.image_path);
+  content.innerHTML = `
+    <div class="marketplace-detail-grid">
+      <div class="marketplace-detail-image">${image ? '<img src="' + marketplaceEscape(image) + '" alt="' + marketplaceEscape(product.title) + '">' : '<span>▧</span>'}</div>
+      <div class="marketplace-detail-copy">
+        <span class="marketplace-category">${marketplaceEscape(product.category)} · ${marketplaceEscape(product.condition)}</span>
+        <h2>${marketplaceEscape(product.title)}</h2>
+        <p class="marketplace-detail-price">${marketplaceMoney(product.price)}</p>
+        <p class="marketplace-card-stock">${Number(product.stock) > 0 ? "Disponibles: " + Number(product.stock) : "Agotado"}</p>
+        <p><strong>Marca:</strong> ${marketplaceEscape(product.brand || "No especificada")}</p>
+        <p><strong>Modelo:</strong> ${marketplaceEscape(product.model || "No especificado")}</p>
+        <p><strong>Ubicación:</strong> ${marketplaceEscape(product.location || "No especificada")}</p>
+        <p class="marketplace-detail-description">${marketplaceEscape(product.description)}</p>
+      </div>
+    </div>
+    <section class="marketplace-reviews-section">
+      <h3>Opiniones de compradores</h3>
+      <div id="marketplace-reviews-list"><p class="muted">Cargando opiniones…</p></div>
+      <form id="marketplace-review-form" class="marketplace-review-form" ${!currentUser || currentUser.id === product.seller_id ? "hidden" : ""}>
+        <h4>Deja tu opinión</h4>
+        <label for="marketplace-review-rating">Tu calificación (0 a 5 estrellas)</label>
+        <select id="marketplace-review-rating" name="rating" required>
+          <option value="5">5 estrellas</option><option value="4">4 estrellas</option><option value="3">3 estrellas</option>
+          <option value="2">2 estrellas</option><option value="1">1 estrella</option><option value="0">0 estrellas</option>
+        </select>
+        <label for="marketplace-review-comment">Comentario</label>
+        <textarea id="marketplace-review-comment" name="comment" maxlength="1000" rows="3" minlength="2" placeholder="Comparte tu opinión sobre este producto…" required></textarea>
+        <button class="button" type="submit">Publicar opinión</button>
+        <p id="marketplace-review-status" class="notice" aria-live="polite"></p>
+      </form>
+      ${!currentUser ? '<p class="muted">Inicia sesión para dejar una opinión.</p>' : ""}
+    </section>`;
+  if (!dialog.open) dialog.showModal();
+  await loadMarketplaceReviews(productId);
+}
+
+async function loadMarketplaceReviews(productId) {
+  const list = $("#marketplace-reviews-list");
+  if (!list) return;
+  const { data, error } = await supabase.from("marketplace_reviews")
+    .select("id,user_id,rating,comment,created_at").eq("product_id", productId).order("created_at", { ascending: false });
+  if (error) {
+    list.innerHTML = '<p class="muted">No se pudieron cargar las opiniones.</p>';
+    return;
+  }
+  const reviews = data || [];
+  if (!reviews.length) {
+    list.innerHTML = '<p class="muted">Todavía no hay opiniones para este producto.</p>';
+    return;
+  }
+  list.innerHTML = reviews.map(review => `
+    <article class="marketplace-review">
+      <div class="marketplace-review-head"><span>${marketplaceStars(review.rating)}</span><small>${new Date(review.created_at).toLocaleDateString("es-PE")}</small></div>
+      <p>${marketplaceEscape(review.comment)}</p>
+    </article>`).join("");
+}
+
+async function submitMarketplaceReview(event) {
+  event.preventDefault();
+  if (!currentUser || !marketplaceCurrentProduct) return;
+  const form = event.currentTarget;
+  const values = new FormData(form);
+  const payload = {
+    product_id: marketplaceCurrentProduct.id,
+    user_id: currentUser.id,
+    rating: Number(values.get("rating")),
+    comment: String(values.get("comment") || "").trim()
+  };
+  const { error } = await supabase.from("marketplace_reviews")
+    .upsert(payload, { onConflict: "product_id,user_id" });
+  if (error) {
+    console.error("Mercado: no se pudo guardar la opinión:", error);
+    marketplaceSetStatus("#marketplace-review-status", "No se pudo guardar tu opinión. Inténtalo de nuevo.", true);
+    return;
+  }
+  form.reset();
+  marketplaceSetStatus("#marketplace-review-status", "Tu opinión se publicó correctamente.");
+  await Promise.all([loadMarketplaceReviews(marketplaceCurrentProduct.id), loadMarketplace()]);
+}
+
+$("#marketplace-publish-open")?.addEventListener("click", openMarketplacePublishDialog);
+$("#marketplace-publish-form")?.addEventListener("submit", submitMarketplaceProduct);
+$("#marketplace-refresh")?.addEventListener("click", loadMarketplace);
+$("#marketplace-inbox-refresh")?.addEventListener("click", loadMarketplaceRequests);
+$("#marketplace-search")?.addEventListener("input", filterMarketplaceProducts);
+$("#marketplace-category-filter")?.addEventListener("change", filterMarketplaceProducts);
+$("#marketplace-products")?.addEventListener("click", event => {
+  const button = event.target.closest("[data-marketplace-open]");
+  if (button) void openMarketplaceProduct(button.dataset.marketplaceOpen);
+});
+$("#marketplace-pending-list")?.addEventListener("click", event => {
+  const button = event.target.closest("[data-marketplace-moderate]");
+  if (button) void moderateMarketplaceProduct(button.dataset.productId, button.dataset.marketplaceModerate);
+});
+$("#marketplace-product-content")?.addEventListener("submit", event => {
+  if (event.target?.id === "marketplace-review-form") void submitMarketplaceReview(event);
+});
