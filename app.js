@@ -7674,7 +7674,7 @@ async function loadMarketplaceRequests() {
           <p class="muted">${marketplaceEscape(product.description)}</p>
           <div class="marketplace-request-actions">
             <button class="button" type="button" data-marketplace-moderate="approved" data-product-id="${marketplaceEscape(product.id)}">✓ Aprobar</button>
-            <button class="button button-outline" type="button" data-marketplace-moderate="rejected" data-product-id="${marketplaceEscape(product.id)}">Rechazar</button>
+            <button class="button button-outline" type="button" data-marketplace-moderate="rejected" data-product-id="${marketplaceEscape(product.id)}">Cancelar solicitud</button>
           </div>
         </div>
       </article>`;
@@ -7683,7 +7683,7 @@ async function loadMarketplaceRequests() {
 
 async function moderateMarketplaceProduct(productId, status) {
   if (!marketplaceIsAdmin()) return;
-  const confirmText = status === "approved" ? "¿Aprobar y mostrar este producto en el Mercado?" : "¿Rechazar esta solicitud?";
+  const confirmText = status === "approved" ? "¿Aceptar esta solicitud y publicar el producto en el Mercado?" : "¿Cancelar esta solicitud de publicación?";
   if (!window.confirm(confirmText)) return;
   const { error } = await supabase.from("marketplace_products")
     .update({ status }).eq("id", productId).eq("status", "pending");
